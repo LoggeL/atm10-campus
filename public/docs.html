@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Campus API-Doku</title><link rel="stylesheet" href="/assets/app.css"></head>
+<body>
+<header class="top"><div><h1>ATM10 Campus · API für Agents</h1><div class="sub">Maschinenlesbar: <a href="/api/openapi.json">/api/openapi.json</a></div></div><span class="spacer"></span><a class="btn" href="/app">Zur Übersicht</a></header>
+<main style="max-width:900px">
+<div class="panel">
+<h2>Zugang</h2>
+<p>Token in der App unter <strong>Agent-Zugang</strong> erzeugen und als <span class="mono">Authorization: Bearer atc_…</span> mitschicken. Ein Token handelt im Namen seines Accounts, jede Änderung landet mit Namen im Protokoll. „Nur lesen“-Tokens dürfen ausschließlich GET-Anfragen.</p>
+<h2>Begriffe</h2>
+<dl class="kv">
+<dt>Live / Bestand</dt><dd>Snapshot der echten ATM10-Welt im Campus-Ausschnitt (x −64…223, y 48…319, z −96…223). Wird automatisch alle paar Minuten aus den Region-Files gelesen, wenn der Server gespeichert hat.</dd>
+<dt>Edition</dt><dd>Die jeweils aktuelle Version aller nicht archivierten Baupläne, also das, was gebaut werden soll.</dd>
+<dt>Bauplan</dt><dd>Vanilla-/Create-Structure-NBT plus <span class="mono">origin</span> (Weltkoordinate der Ecke mit den kleinsten x/y/z). <span class="mono">minecraft:air</span> = abreißen, <span class="mono">minecraft:structure_void</span> = nicht anfassen.</dd>
+<dt>Planungsstand</dt><dd>Der Snapshot, auf dem eine Version geplant wurde (<span class="mono">baseSnapshotId</span>). Daraus ergibt sich „seit Planung geändert“.</dd>
+</dl>
+<h2>Status und Konflikte</h2>
+<dl class="kv">
+<dt><span class="badge conflict">Konflikt</span></dt><dd>Eine Block-Entity (Maschine, Kiste, AE2 …) steht dort, wo der Bauplan etwas anderes setzt oder abreißt, oder zwei Baupläne beanspruchen dieselbe Zelle mit unterschiedlichen Blöcken.</dd>
+<dt><span class="badge warning">Geändert</span></dt><dd>Im Baufeld hat sich der Bestand seit dem Planungsstand verändert. Jemand hat dort gebaut.</dd>
+<dt><span class="badge ok">Offen</span></dt><dd>Keine Konflikte, noch nicht fertig gebaut.</dd>
+<dt><span class="badge built">Gebaut</span></dt><dd>Live entspricht dem Bauplan zu ≥ 99,9 %.</dd>
+<dt>409 Bearbeitungskonflikt</dt><dd>Beim Hochladen <span class="mono">baseVersion</span> mitschicken. Hat inzwischen jemand eine neuere Version hochgeladen, antwortet die API mit 409 samt <span class="mono">currentVersion</span>. Dann neu herunterladen, Änderungen zusammenführen, erneut hochladen.</dd>
+</dl>
+</div>
+<div class="panel">
+<h2>Typischer Ablauf</h2>
+<pre>H="Authorization: Bearer $CAMPUS_TOKEN"
+
+# 1. Überblick: Live-Snapshot, Fortschritt, Konflikte je Bauplan, Überlappungen
+curl -s -H "$H" $CAMPUS_URL/api/status
+
+# 2. Details eines Bauplans inkl. Versionen und Analyse (Beispielkoordinaten)
+curl -s -H "$H" $CAMPUS_URL/api/blueprints/01_Technikhof_P01
+
+# 3. Herunterladen (aktuelle oder ?version=N)
+curl -s -H "$H" -o 01_Technikhof_P01.nbt $CAMPUS_URL/api/blueprints/01_Technikhof_P01/download
+
+# 4. Neue Version hochladen (roh)
+curl -s -X PUT -H "$H" -H "content-type: application/octet-stream" --data-binary @01_Technikhof_P01.nbt \
+  "$CAMPUS_URL/api/blueprints/01_Technikhof_P01/nbt?baseVersion=3&amp;note=Dach+angepasst"
+
+# 4b. … oder als JSON (auch für neue Baupläne, dann origin Pflicht)
+curl -s -X POST -H "$H" -H "content-type: application/json" $CAMPUS_URL/api/blueprints \
+  -d '{"fileName":"40_Pavillon.nbt","origin":[40,63,10],"name":"40 · Pavillon","nbtBase64":"…","note":"Entwurf"}'
+
+# 5. Position verschieben (erzeugt neue Version)
+curl -s -X PATCH -H "$H" -H "content-type: application/json" $CAMPUS_URL/api/blueprints/40_Pavillon \
+  -d '{"origin":[42,63,10],"baseVersion":1}'
+
+# 6. Bestand sofort neu erfassen (statt auf den nächsten Lauf zu warten)
+curl -s -X POST -H "$H" -H "content-type: application/json" $CAMPUS_URL/api/snapshots -d '{"force":true}'
+
+# Alles als ZIP (für den Create-Ordner schematics/)
+curl -s -H "$H" -o campus.zip $CAMPUS_URL/api/blueprints.zip</pre>
+<p class="muted">Die heruntergeladenen .nbt-Dateien kommen im Client in <span class="mono">.minecraft/schematics/</span> und lassen sich dann am Schematic-Table hochladen und mit der Schematicannon bauen.</p>
+</div>
+</main></body></html>

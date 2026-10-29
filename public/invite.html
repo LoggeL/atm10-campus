@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Campus Einladung</title><link rel="stylesheet" href="/assets/app.css"></head>
+<body><div class="center"><form class="authbox" id="f">
+<h1>Einladung annehmen</h1><div class="muted" id="info">Einladung wird geprüft …</div>
+<div id="fields" class="hide">
+<label for="u">Benutzername (gern dein MC-Name)</label><input id="u" autocomplete="username" required minlength="3" maxlength="32" pattern="[A-Za-z0-9_.\-]+">
+<label for="p">Passwort (mind. 10 Zeichen)</label><input id="p" type="password" autocomplete="new-password" required minlength="10">
+<button class="primary" type="submit">Account anlegen</button>
+</div>
+<p id="e" class="err" role="alert"></p>
+</form></div>
+<script>
+const code = location.pathname.split('/').pop();
+fetch('/api/auth/invite/' + encodeURIComponent(code)).then(r => r.json()).then(j => {
+  if (!j.valid) { info.textContent = 'Diese Einladung ist ungültig, abgelaufen oder schon benutzt.'; return; }
+  info.textContent = j.role === 'admin' ? 'Du wirst Admin des Campus.' : 'Leg dir einen Account für den Campus an.';
+  fields.classList.remove('hide');
+});
+document.getElementById('f').addEventListener('submit', async ev => {
+  ev.preventDefault();
+  const r = await fetch('/api/auth/register', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ code, username: u.value, password: p.value }) });
+  if (r.ok) location.href = '/app'; else e.textContent = (await r.json()).error || 'Fehlgeschlagen.';
+});
+</script></body></html>

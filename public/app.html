@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ATM10 Campus</title><link rel="stylesheet" href="/assets/app.css"></head>
+<body>
+<header class="top">
+  <div><h1>ATM10 Campus</h1><div class="sub" id="liveLine">Live-Bestand wird geladen …</div></div>
+  <span class="spacer"></span>
+  <a class="btn primary" href="/viewer">3D-Viewer öffnen</a>
+  <a class="btn" href="/api/blueprints.zip">Alle Baupläne (.zip)</a>
+  <span class="muted" id="who"></span>
+  <button class="small" id="logout">Abmelden</button>
+</header>
+<nav class="tabs" role="tablist">
+  <button role="tab" data-tab="overview" aria-selected="true">Übersicht</button>
+  <button role="tab" data-tab="snapshots">Live-Bestand</button>
+  <button role="tab" data-tab="agent">Agent-Zugang</button>
+  <button role="tab" data-tab="activity">Aktivität</button>
+  <button role="tab" data-tab="admin" class="hide" id="adminTab">Admin</button>
+</nav>
+<main>
+  <section data-pane="overview">
+    <div class="cards" id="cards"></div>
+    <div class="panel">
+      <div class="toolbar">
+        <input class="grow" id="search" placeholder="Bauplan suchen …" aria-label="Bauplan suchen">
+        <select id="filter" aria-label="Status filtern"><option value="">Alle Status</option><option value="conflict">Konflikt</option><option value="warning">Geändert seit Planung</option><option value="ok">Offen</option><option value="built">Gebaut</option></select>
+        <button id="newBp">Neuer Bauplan</button>
+      </div>
+      <div style="overflow:auto"><table>
+        <thead><tr><th>Bauplan</th><th>Status</th><th class="num">Ver.</th><th>Fortschritt</th><th class="num hide-sm">Zu setzen</th><th class="num hide-sm">Zu ersetzen</th><th class="num">Konflikte</th><th class="hide-sm">Zuletzt</th></tr></thead>
+        <tbody id="bpRows"></tbody>
+      </table></div>
+    </div>
+    <div class="panel" id="overlapPanel"><h2>Überlappungen zwischen Bauplänen</h2><div id="overlaps" class="muted">–</div></div>
+  </section>
+
+  <section data-pane="snapshots" class="hide">
+    <div class="panel">
+      <h2>Live-Bestand</h2>
+      <p class="muted">Die App liest alle paar Minuten die Region-Files der ATM10-Welt (nur lesend). Ein neuer Snapshot entsteht nur, wenn der Server seit dem letzten etwas gespeichert hat.</p>
+      <div class="row"><select id="snapSource" aria-label="Weltquelle"></select><input id="snapLabel" placeholder="Bezeichnung (optional)"><button class="primary" id="snapNow">Jetzt erfassen</button></div>
+    </div>
+    <div class="panel"><table><thead><tr><th>#</th><th>Quelle</th><th>Erfasst</th><th>Welt gespeichert</th><th class="num">Flächen</th><th class="num">Block-Entities</th><th></th></tr></thead><tbody id="snapRows"></tbody></table></div>
+  </section>
+
+  <section data-pane="agent" class="hide">
+    <div class="panel">
+      <h2>API-Token für deinen Agent</h2>
+      <p class="muted">Der Token handelt in deinem Namen. Er wird nur einmal angezeigt. „Lesen“ reicht für Status und Downloads, „Schreiben“ erlaubt Uploads, neue Versionen und Snapshots. Accounts und Tokens lassen sich nur hier im Browser verwalten.</p>
+      <div class="row"><input id="tokName" placeholder="Name, z. B. Claude Code Laptop"><select id="tokScope"><option value="write">Lesen + Schreiben</option><option value="read">Nur lesen</option></select><button class="primary" id="tokCreate">Token erzeugen</button></div>
+      <div id="tokNew" class="hide" style="margin-top:12px"></div>
+    </div>
+    <div class="panel"><table><thead><tr><th>Name</th><th>Scope</th><th>Präfix</th><th>Erstellt</th><th>Zuletzt benutzt</th><th></th></tr></thead><tbody id="tokRows"></tbody></table></div>
+    <div class="panel"><h2>So nutzt dein Agent die API</h2><p class="muted">Vollständige Doku: <a href="/docs">/docs</a> · OpenAPI: <a href="/api/openapi.json">/api/openapi.json</a></p><pre id="agentSnippet"></pre></div>
+  </section>
+
+  <section data-pane="activity" class="hide">
+    <div class="panel"><table><thead><tr><th>Zeit</th><th>Wer</th><th>Über</th><th>Aktion</th><th>Ziel</th><th>Details</th></tr></thead><tbody id="actRows"></tbody></table></div>
+  </section>
+
+  <section data-pane="admin" class="hide">
+    <div class="panel">
+      <h2>Campus-HTML importieren</h2>
+      <p class="muted">Jonnys Export (z. B. <span class="mono">ATM10-Campus-zum-Teilen.html</span>). Geänderte Baupläne werden neue Versionen, der 3D-Viewer wird aktualisiert. Baupläne, die seit dem letzten Import hier in der App geändert wurden, werden nicht überschrieben und als Konflikt gemeldet.</p>
+      <div class="row"><input type="file" id="impFile" accept=".html,text/html"><label class="row"><input type="checkbox" id="impForce"> trotzdem überschreiben</label><select id="impBase" aria-label="Planungsstand"></select><button class="primary" id="impGo">Importieren</button></div>
+      <pre id="impOut" class="hide"></pre>
+    </div>
+    <div class="panel">
+      <h2>Einladungen</h2>
+      <div class="row"><input id="invNote" placeholder="Für wen? (z. B. Jonny)"><select id="invRole"><option value="member">Mitglied</option><option value="admin">Admin</option></select><select id="invDays"><option value="7">7 Tage gültig</option><option value="30">30 Tage</option><option value="1">1 Tag</option></select><button class="primary" id="invCreate">Einladung erzeugen</button></div>
+      <div id="invNew" class="hide" style="margin-top:12px"></div>
+      <table style="margin-top:12px"><thead><tr><th>Für</th><th>Rolle</th><th>Erstellt</th><th>Gültig bis</th><th>Benutzt von</th><th></th></tr></thead><tbody id="invRows"></tbody></table>
+    </div>
+    <div class="panel"><h2>Accounts</h2><table><thead><tr><th>Name</th><th>Rolle</th><th>Seit</th><th>Status</th><th></th></tr></thead><tbody id="userRows"></tbody></table></div>
+  </section>
+</main>
+
+<div class="scrim" id="scrim"></div>
+<aside class="drawer" id="drawer" aria-label="Bauplan-Details"></aside>
+<input type="file" id="hiddenFile" accept=".nbt" class="hide">
+<script src="/assets/app.js"></script>
+</body></html>

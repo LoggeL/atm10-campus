@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Campus Login</title><link rel="stylesheet" href="/assets/app.css"></head>
+<body><div class="center"><form class="authbox" id="f">
+<h1>ATM10 Campus</h1><div class="muted">Baupläne · Live-Bestand · Konflikte</div>
+<label for="u">Benutzername</label><input id="u" autocomplete="username" required>
+<label for="p">Passwort</label><input id="p" type="password" autocomplete="current-password" required>
+<button class="primary" type="submit">Anmelden</button>
+<p id="e" class="err" role="alert"></p>
+<p class="muted" style="font-size:12px">Kein Account? Lass dir von Logge eine Einladung schicken.</p>
+</form></div>
+<script>
+document.getElementById('f').addEventListener('submit', async ev => {
+  ev.preventDefault();
+  const r = await fetch('/api/auth/login', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ username: u.value, password: p.value }) });
+  if (r.ok) location.href = '/app'; else e.textContent = (await r.json()).error || 'Anmeldung fehlgeschlagen.';
+});
+</script></body></html>
