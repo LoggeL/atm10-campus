@@ -428,15 +428,17 @@ function renderMaterials() {
   $('#mat-sub').textContent = `${d.blueprints.length === 1 ? '1 Bauplan' : d.blueprints.length + ' Baupläne'} · Bestand: Snapshot #${d.snapshot.id} (${d.snapshot.label}, ${snapDate})`;
   const stat = (n, label, cls = '') => `<div class="stat ${cls}"><b>${fmt(n)}</b><small>${label}</small></div>`;
   $('#mat-summary').innerHTML = stat(t.needed, 'Items fehlen') + stat(t.kinds, 'Sorten') + stat(t.stacks, 'Stacks') + stat(t.shulkers, 'Shulker-Kisten (≈)')
+    + (t.me ? stat(t.me.short, `fehlen auch im ME (${fmt(t.me.shortKinds)} Sorten, ${fmt(t.me.craftableKinds)} craftbar)`, t.me.short ? 'warn' : '') : '')
     + (t.blocked ? stat(t.blocked, 'Zellen mit Maschine im Weg', 'warn') : '') + (t.unknown ? stat(t.unknown, 'Zellen ohne Bestand', 'warn') : '');
+  if (t.me) $('#mat-sub').textContent += ` · ME-Bestand von ${t.me.source}, ${new Date(t.me.at).toLocaleString('de-DE', { dateStyle: 'short', timeStyle: 'short' })}`;
   const q = $('#mat-search').value.trim().toLowerCase(), showBuilt = $('#mat-built').checked;
   const rows = d.items.filter(r => (showBuilt || r.needed > 0) && (!q || r.item.toLowerCase().includes(q) || pretty(r.item).label.toLowerCase().includes(q)));
   const color = item => { const c = state.scene.styles[item]?.color; return c ? `rgb(${c[0]},${c[1]},${c[2]})` : '#5d6b78'; };
   const byTitle = r => (r.by ? Object.entries(r.by).sort((a, b) => b[1] - a[1]).slice(0, 8).map(([id, n]) => `${state.bps.get(id)?.name || id}: ${n}`).join('\n') : '');
-  const table = rows.length ? `<table class="mat-table"><thead><tr><th>Item</th><th class="num">Fehlt</th><th class="num">Stacks</th><th>Gebaut</th></tr></thead><tbody>${rows.map(r => {
+  const table = rows.length ? `<table class="mat-table"><thead><tr><th>Item</th><th class="num">Fehlt</th><th class="num">Stacks</th>${t.me ? '<th class="num">Im ME</th>' : ''}<th>Gebaut</th></tr></thead><tbody>${rows.map(r => {
     const n = pretty(r.item), pct = r.planned ? Math.round(r.built / r.planned * 100) : 100;
     return `<tr class="${r.needed ? '' : 'done'}" title="${esc(byTitle(r))}"><td><span class="it"><i style="--c:${color(r.item)}"></i><span>${esc(n.label)}<small>${esc(r.item)}</small></span></span></td>
-      <td class="num"><b>${fmt(r.needed)}</b></td><td class="num">${esc(stacksText(r))}</td>
+      <td class="num"><b>${fmt(r.needed)}</b></td><td class="num">${esc(stacksText(r))}</td>${t.me ? `<td class="num${r.short ? ' short' : ''}" title="${r.short ? `fehlt im ME: ${fmt(r.short)}${r.craftable ? ' · craftbar' : ''}` : 'ME deckt alles'}">${fmt(r.me)}${r.short && r.craftable ? ' ⚙' : ''}</td>` : ''}
       <td><div class="bar" title="${fmt(r.built)} von ${fmt(r.planned)} gesetzt"><div style="width:${pct}%"></div></div></td></tr>`;
   }).join('')}</tbody></table>` : `<div class="empty">${t.needed ? 'Kein Item passt zur Suche.' : 'Nichts mehr zu bauen – alles steht wie geplant. 🎉'}</div>`;
   const removed = d.removed.length ? `<details><summary>Beim Abreißen/Ersetzen fallen ${fmt(d.removed.reduce((a, r) => a + r.count, 0))} Blöcke an</summary><table class="mat-table"><tbody>${d.removed.slice(0, 60).map(r =>

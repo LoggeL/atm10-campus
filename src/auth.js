@@ -66,14 +66,17 @@ export class HttpError extends Error {
   constructor(status, message, extra) { super(message); this.statusCode = status; this.extra = extra; }
 }
 
-// Guards. level: 'read' | 'write' | 'session' (browser only) | 'admin' (browser session + admin role)
+// Guards. level: 'read' | 'station' (write or station token) | 'write' | 'session' (browser only) | 'admin' (browser session + admin role)
 export function requireActor(req, level) {
   const a = req.actor;
   if (!a || a.invalid) throw new HttpError(401, a?.invalid ? 'Token ungültig oder widerrufen.' : 'Anmeldung erforderlich.');
   if (a.via === 'session' && req.method !== 'GET' && req.method !== 'HEAD' && req.headers['x-campus-csrf'] !== '1') {
     throw new HttpError(403, 'CSRF-Header fehlt.');
   }
-  if (level === 'write' && a.scope !== 'write') throw new HttpError(403, 'Dieser Token darf nur lesen.');
+  if (level === 'write' && a.scope !== 'write') {
+    throw new HttpError(403, a.scope === 'station' ? 'Station-Tokens dürfen nur lesen und ME-Bestand/Kanonen-Status melden.' : 'Dieser Token darf nur lesen.');
+  }
+  if (level === 'station' && a.scope === 'read') throw new HttpError(403, 'Dieser Token darf nur lesen. Für ME-Computer einen Token mit Scope „Station“ anlegen.');
   if ((level === 'session' || level === 'admin') && a.via !== 'session') throw new HttpError(403, 'Nur mit Browser-Login möglich, nicht per API-Token.');
   if (level === 'admin' && a.user.role !== 'admin') throw new HttpError(403, 'Nur für Admins.');
   return a;

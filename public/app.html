@@ -15,6 +15,7 @@
 <nav class="tabs" role="tablist">
   <button role="tab" data-tab="overview" aria-selected="true">Übersicht</button>
   <button role="tab" data-tab="snapshots">Live-Bestand</button>
+  <button role="tab" data-tab="cannons">Kanonen</button>
   <button role="tab" data-tab="agent">Agent-Zugang</button>
   <button role="tab" data-tab="activity">Aktivität</button>
   <button role="tab" data-tab="admin" class="hide" id="adminTab">Admin</button>
@@ -45,11 +46,28 @@
     <div class="panel"><table><thead><tr><th>#</th><th>Quelle</th><th>Erfasst</th><th>Welt gespeichert</th><th class="num">Flächen</th><th class="num">Block-Entities</th><th></th></tr></thead><tbody id="snapRows"></tbody></table></div>
   </section>
 
+  <section data-pane="cannons" class="hide">
+    <div class="panel">
+      <div class="row" style="justify-content:space-between"><h2 style="margin:0">Schematicannons am ME-System</h2><span class="muted" id="meLine">–</span></div>
+      <p class="muted">Ein CC:Tweaked-Computer mit Advanced-Peripherals-ME-Bridge füllt die Kiste an jeder Kanone mit genau dem, was ihr Bauplan noch braucht, unterste Schichten zuerst. Hier legst du fest, welche Kanone was baut. Die Computer melden sich von selbst, sobald das Script läuft.</p>
+      <details id="ccSetup"><summary>Einrichtung (einmal pro Kanone)</summary>
+        <ol class="steps">
+          <li>Unter <a href="#agent" data-goto="agent">Agent-Zugang</a> einen Token mit Scope <b>Station (ME-Computer)</b> anlegen. Der darf nur lesen und Bestand/Status melden, keine Baupläne ändern.</li>
+          <li>Aufbau: <span class="mono">ME-Kabel → ME Bridge → Computer → Kiste → Schematicannon</span>. ME Bridge und Kiste hängen beide direkt am Computer oder beide am selben Wired-Modem-Netz. Eine einfache Kiste oder ein Fass nehmen, keine Doppelkiste. Die Kiste berührt die Kanone an einer beliebigen Seite, die Kanone zieht Blöcke und Schießpulver daraus. Die ME Bridge braucht einen ME-Kanal.</li>
+          <li>Am Computer eingeben: <div class="secret" id="ccInstall"></div> Token und Kanonen-Namen eintippen, fertig. Das Script startet bei jedem Neustart und aktualisiert sich selbst.</li>
+          <li>Die Kanone taucht hier auf. Bauplan wählen, dann <b>Rest-NBT</b> laden, in den <span class="mono">schematics</span>-Ordner legen, am Schematic Table hochladen und genau am origin platzieren.</li>
+          <li>In der Kanone <b>„Skip Missing“ ausschalten</b> (ist bei neuen Kanonen an), sonst überspringt sie Blöcke, die gerade noch nicht in der Kiste liegen. Modus „Replace Solid with Any“ (Standard) lassen, nicht „Replace Solid with Empty“. „Protect Block Entities“ an lassen. Dann Play drücken: fehlt etwas, wartet die Kanone und baut weiter, sobald das Script nachgefüllt hat.</li>
+        </ol>
+      </details>
+    </div>
+    <div id="cannonList"></div>
+  </section>
+
   <section data-pane="agent" class="hide">
     <div class="panel">
       <h2>API-Token für deinen Agent</h2>
-      <p class="muted">Der Token handelt in deinem Namen. Er wird nur einmal angezeigt. „Lesen“ reicht für Status und Downloads, „Schreiben“ erlaubt Uploads, neue Versionen und Snapshots. Accounts und Tokens lassen sich nur hier im Browser verwalten.</p>
-      <div class="row"><input id="tokName" placeholder="Name, z. B. Claude Code Laptop"><select id="tokScope"><option value="write">Lesen + Schreiben</option><option value="read">Nur lesen</option></select><button class="primary" id="tokCreate">Token erzeugen</button></div>
+      <p class="muted">Der Token handelt in deinem Namen. Er wird nur einmal angezeigt. „Lesen“ reicht für Status und Downloads, „Schreiben“ erlaubt Uploads, neue Versionen und Snapshots. „Station“ ist für die CC-Computer an den Schematicannons: lesen plus ME-Bestand und Kanonen-Status melden. Accounts und Tokens lassen sich nur hier im Browser verwalten.</p>
+      <div class="row"><input id="tokName" placeholder="Name, z. B. Claude Code Laptop"><select id="tokScope"><option value="write">Lesen + Schreiben</option><option value="read">Nur lesen</option><option value="station">Station (ME-Computer)</option></select><button class="primary" id="tokCreate">Token erzeugen</button></div>
       <div id="tokNew" class="hide" style="margin-top:12px"></div>
     </div>
     <div class="panel"><table><thead><tr><th>Name</th><th>Scope</th><th>Präfix</th><th>Erstellt</th><th>Zuletzt benutzt</th><th></th></tr></thead><tbody id="tokRows"></tbody></table></div>

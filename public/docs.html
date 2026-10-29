@@ -80,6 +80,42 @@ curl -s -H "$H" -o rest.zip "$CAMPUS_URL/api/remaining.zip"   # alle Baupläne, 
 <dt>skipBlocked</dt><dd>Zellen auslassen, in denen eine Block-Entity (Maschine, Kiste …) steht. Standard: ja, damit nichts versehentlich zerstört wird.</dd>
 <dt>skipChanged</dt><dd>Zellen auslassen, die sich seit dem Planungsstand verändert haben. Standard: nein.</dd>
 </dl>
+<p>Liegt ein ME-Bestand vor (siehe unten), steht bei jedem Item zusätzlich <span class="mono">me</span> (im ME-System), <span class="mono">short</span> (fehlt auch dort) und <span class="mono">craftable</span>; mit <span class="mono">?me=0</span> abschaltbar.</p>
+</div>
+<div class="panel">
+<h2>Schematicannons am ME-System (CC:Tweaked)</h2>
+<p>Ein CC:Tweaked-Computer mit Advanced-Peripherals-ME-Bridge füllt die Kiste an einer Schematicannon mit genau den Items, die ihr Bauplan noch braucht, unterste Schichten zuerst und nur ein paar Stacks auf Vorrat. Fehlt etwas im ME, kann er es craften lassen. Wechselt der Auftrag oder ist der Bau fertig, gehen Reste zurück ins ME. Welche Kanone welchen Bauplan baut, wird in der App unter „Kanonen“ festgelegt.</p>
+<pre># am Computer im Spiel (Token mit Scope „Station“ unter /app → Agent-Zugang anlegen)
+wget run <span class="base">https://campus.logge.top</span>/cc/install.lua</pre>
+<ul>
+<li>Aufbau: ME Bridge und Kiste (einfache Kiste oder Fass) beide direkt am Computer oder beide am selben Wired-Modem-Netz; die Kiste berührt die Kanone. Alternativ <span class="mono">set campus.direction up</span> = Richtung von der Bridge zur Kiste.</li>
+<li>In der Kanone „Skip Missing“ ausschalten, Modus „Replace Solid with Any“ lassen. Dann wartet sie auf fehlende Blöcke und baut weiter, sobald nachgefüllt ist.</li>
+<li>Läuft mit Advanced Peripherals 0.8.x (ATM10 ab 8.1) und 0.7.x; bei 0.7.x zusätzlich <span class="mono">set campus.direction &lt;north|…|up|down&gt;</span> setzen, weil 0.7 Seitennamen von der Bridge aus auflöst. Wasser, Lava und Kessel-Füllungen setzt die Kanone nicht; Eimer werden deshalb nicht geliefert.</li>
+<li>Der Fortschritt hängt am Live-Bestand und ist so frisch wie der letzte Weltspeicher (einige Minuten). Damit eine leere Kiste das ME nicht leerzieht, liefert der Computer je Auftrag höchstens etwa 110 % der Menge.</li>
+</ul>
+<pre>H="Authorization: Bearer $CAMPUS_TOKEN"
+
+# Kanonen mit Auftrag, Fortschritt und letztem Status des Computers
+curl -s -H "$H" $CAMPUS_URL/api/cannons
+
+# Bauplan zuweisen (pinnt die aktuelle Version) und Optionen setzen – braucht einen Schreib-Token
+curl -s -X PUT -H "$H" -H "content-type: application/json" $CAMPUS_URL/api/cannons/nord-1 \
+  -d '{"blueprint":"01_Technikhof_P01","options":{"bufferStacks":2,"autoCraft":true}}'
+
+# Was der Computer abholt: Items unterste Schicht zuerst, Optionen, Auftragsnummer
+curl -s -H "$H" $CAMPUS_URL/api/cannons/nord-1/plan
+
+# ME-Bestand (zuletzt gemeldet) und welche Items der Campus noch braucht
+curl -s -H "$H" "$CAMPUS_URL/api/me/stock?items=1"
+curl -s -H "$H" $CAMPUS_URL/api/me/wanted</pre>
+<dl class="kv">
+<dt>bufferStacks</dt><dd>So viele Stacks je Item höchstens in der Kiste (1–16, Standard 2).</dd>
+<dt>gunpowder</dt><dd>Schießpulver, das immer in der Kiste liegen soll (0–64, Standard 16).</dd>
+<dt>autoCraft · craftBatch</dt><dd>Fehlt ein Item im ME und gibt es ein Muster, einen Crafting-Auftrag über höchstens craftBatch Stück starten (Standard aus, 256).</dd>
+<dt>returnLeftovers</dt><dd>Reste nach Auftragswechsel oder Fertigstellung zurück ins ME (Standard an).</dd>
+<dt>skipBlocked</dt><dd>Zellen mit Maschine im Weg nicht beliefern, wie in der Rest-NBT (Standard an).</dd>
+<dt>paused</dt><dd>Computer liefert nichts.</dd>
+</dl>
 </div>
 <div class="panel">
 <h2>Ganze NBT-Dateien und Snapshots</h2>
@@ -113,4 +149,4 @@ curl -s -X POST -H "$H" -H "content-type: application/json" $CAMPUS_URL/api/snap
 curl -s -H "$H" -o campus.zip $CAMPUS_URL/api/blueprints.zip</pre>
 <p class="muted">Die heruntergeladenen .nbt-Dateien kommen im Client in <span class="mono">.minecraft/schematics/</span> und lassen sich dann am Schematic-Table hochladen und mit der Schematicannon bauen.</p>
 </div>
-</main></body></html>
+</main><script>document.querySelectorAll('.base').forEach(e => { e.textContent = location.origin; });</script></body></html>

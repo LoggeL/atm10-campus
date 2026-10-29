@@ -186,6 +186,131 @@ test('agent edits, readable views and viewer data', async t => {
     assert.ok(zip.raw.includes(Buffer.from('40_Mat_rest.nbt')) && zip.raw.includes(Buffer.from('30_Kiosk_rest.nbt')));
   });
 
+  await t.test('ME stock, cannons and CC scripts', async () => {
+    const station = (await req('POST', '/api/tokens', { body: { name: 'cc-nord', scope: 'station' } })).json;
+    assert.equal(station.scope, 'station');
+    const st = station.token;
+    // station tokens report, but never edit blueprints; read tokens cannot report
+    assert.equal((await req('POST', '/api/blueprints/new', { token: st, body: { fileName: 'x.nbt', origin: [0, 64, 0], size: [1, 1, 1] } })).status, 403);
+    assert.equal((await req('POST', '/api/me/stock', { token: read, body: { items: [] } })).status, 403);
+    assert.equal((await req('GET', '/api/cannons/nord-1/plan', { token: read })).status, 403);
+    assert.equal((await req('GET', '/api/cannons/bad%20name/plan', { token: st })).status, 400);
+
+    // first contact registers the cannon, still without blueprint
+    const p0 = (await req('GET', '/api/cannons/nord-1/plan', { token: st })).json;
+    assert.equal(p0.state, 'unassigned');
+    assert.equal(p0.blueprint, null);
+    assert.deepEqual(p0.items, []);
+    assert.match(p0.script, /^\d+\.\d+\.\d+$/);
+    assert.equal((await req('PUT', '/api/cannons/nord-1', { token: st, body: { blueprint: '40_Mat' } })).status, 403);
+
+    const a = await req('PUT', '/api/cannons/nord-1', { token: write, body: { blueprint: '40_Mat' } });
+    assert.equal(a.status, 200, JSON.stringify(a.json));
+    const job1 = a.json.assignment;
+    assert.ok(job1 > p0.assignment, 'assigning starts a new job');
+    const p1 = (await req('GET', '/api/cannons/nord-1/plan', { token: st })).json;
+    assert.equal(p1.state, 'feeding');
+    assert.equal(p1.blueprint.id, '40_Mat');
+    assert.deepEqual(Object.fromEntries(p1.items.map(i => [i.item, i.needed])), { 'minecraft:oak_door': 1, 'minecraft:torch': 1, 'minecraft:stone_slab': 2 });
+    assert.ok(p1.items.every(i => i.minY === 0 && i.stack === 64));
+    assert.equal(p1.totals.needed, 4);
+    assert.equal(p1.totals.start, 4);
+    assert.equal(p1.skipped.blocked, 1);
+    assert.match(p1.restNbt, /remaining\.nbt\?version=\d+&skipBlocked=1$/);
+    assert.equal((await req('GET', p1.restNbt, { token: st })).status, 200);
+    // without skipping machine cells the stone in front of the chest is wanted too
+    const p2 = (await req('PUT', '/api/cannons/nord-1', { token: write, body: { options: { skipBlocked: false, autoCraft: true } } })).json;
+    assert.equal(p2.assignment, job1, 'options alone keep the assignment');
+    assert.equal(p2.options.autoCraft, true);
+    assert.equal(p2.totals.needed, 5);
+    assert.equal(p2.totals.start, 5, 'progress baseline follows the skipBlocked option');
+    assert.equal((await req('PUT', '/api/cannons/nord-1', { token: write, body: { options: { bufferStacks: 99 } } })).status, 400);
+    assert.equal((await req('PUT', '/api/cannons/nord-1', { token: write, body: { blueprint: '40_Mat' } })).json.assignment, job1, 'same blueprint + version is no new job');
+    assert.equal((await req('PUT', '/api/cannons/nord-1', { token: write, body: { blueprint: 'nope' } })).status, 404);
+
+    // status as the Lua script sends it (empty Lua tables arrive as {})
+    const s1 = await req('POST', '/api/cannons/nord-1/status', { token: st, body: { assignment: job1, state: 'waiting', script: '1.0.0', chest: { slots: 27, used: 3, name: 'left' },
+      delivered: { 'minecraft:oak_door': 1 }, shortages: { 1: { item: 'minecraft:stone_slab', missing: 2, inME: 0, craftable: true, crafting: true } } } });
+    assert.equal(s1.status, 200);
+    assert.equal((await req('POST', '/api/cannons/nord-1/status', { token: st, body: { assignment: job1, state: 'feeding', shortages: {}, delivered: {} } })).status, 200);
+    await req('POST', '/api/cannons/nord-1/status', { token: st, body: s1.json && { assignment: job1, state: 'waiting', shortages: [{ item: 'minecraft:stone_slab', missing: 2, crafting: true }] } });
+    const list = (await req('GET', '/api/cannons', { token: read })).json;
+    assert.equal(list.length, 1);
+    assert.equal(list[0].online, true);
+    assert.equal(list[0].status.state, 'waiting');
+    assert.equal(list[0].status.shortages[0].crafting, true);
+    assert.ok(!list[0].status.stale);
+
+    // ME stock: wanted list, report (array or Lua-style object), merged into the material list
+    const wanted = (await req('GET', '/api/me/wanted', { token: st })).json;
+    assert.ok(wanted.items.includes('minecraft:oak_door') && wanted.items.includes('minecraft:gunpowder'));
+    assert.equal((await req('POST', '/api/me/stock', { token: st, body: { items: 'x' } })).status, 400);
+    assert.equal((await req('POST', '/api/me/stock', { token: st, body: { source: 'nord-1', items: {} } })).status, 200);
+    const rep = await req('POST', '/api/me/stock', { token: st, body: { source: 'nord-1', items: [
+      { name: 'minecraft:oak_door', amount: 5 }, { name: 'minecraft:stone_slab', count: 1, isCraftable: true }, { name: 'minecraft:stone_slab', amount: 0 }, { name: 'not an id', amount: 9 }] } });
+    assert.deepEqual({ kinds: rep.json.kinds, total: rep.json.total }, { kinds: 2, total: 6 });
+    const inf = await app.inject({ method: 'POST', url: '/api/me/stock', headers: { authorization: 'Bearer ' + st, 'content-type': 'application/json' }, payload: '{"items":[{"name":"minecraft:gold_block","count":1e400}]}' });
+    assert.equal(inf.json().total, 0, 'non-finite amounts count as 0');
+    await req('POST', '/api/me/stock', { token: st, body: { source: 'nord-1', items: [{ name: 'minecraft:oak_door', amount: 5 }, { name: 'minecraft:stone_slab', count: 1, isCraftable: true }] } });
+    const stock = (await req('GET', '/api/me/stock?items=1', { token: read })).json.stock;
+    assert.equal(stock.source, 'nord-1');
+    assert.deepEqual(stock.items['minecraft:stone_slab'], [1, 1]);
+    const m = (await req('GET', '/api/blueprints/40_Mat/materials', { token: read })).json;
+    const row = item => m.items.find(r => r.item === item);
+    assert.deepEqual([row('minecraft:oak_door').me, row('minecraft:oak_door').short], [5, 0]);
+    assert.deepEqual([row('minecraft:stone_slab').me, row('minecraft:stone_slab').short, row('minecraft:stone_slab').craftable], [1, 1, true]);
+    assert.deepEqual([row('minecraft:torch').me, row('minecraft:torch').short], [0, 1]);
+    assert.equal(m.totals.me.short, 3);
+    assert.equal(m.totals.me.craftableKinds, 1);
+    assert.equal((await req('GET', '/api/blueprints/40_Mat/materials?me=0', { token: read })).json.totals.me, undefined);
+    assert.match((await req('GET', '/api/blueprints/40_Mat/materials?format=text', { token: read })).text, /im ME +fehlt +Item/);
+    assert.match((await req('GET', '/api/materials?ids=40_Mat&format=csv', { token: read })).text, /;Im ME;Fehlt im ME;Craftbar\r\n/);
+
+    // a new blueprint version is a new job only when assigned explicitly
+    const up = await req('POST', '/api/blueprints/40_Mat/edits', { token: write, body: { baseVersion: 1, edits: [{ op: 'set', pos: [1, 1, 1], block: 'minecraft:glass' }] } });
+    assert.equal(up.status, 200, JSON.stringify(up.json));
+    const before = (await req('GET', '/api/cannons/nord-1', { token: read })).json;
+    assert.equal(before.blueprint.version, 1);
+    assert.equal(before.blueprint.currentVersion, 2);
+    const upgraded = (await req('PUT', '/api/cannons/nord-1', { token: write, body: { blueprint: '40_Mat', version: null } })).json;
+    assert.ok(upgraded.assignment > job1);
+    assert.equal(upgraded.blueprint.version, 2);
+    assert.equal(upgraded.status.stale, true, 'status of the old job is marked stale');
+
+    // the cannon never places fluids, so no buckets are delivered (the material list still counts them)
+    const w = await req('POST', '/api/blueprints/new', { token: write, body: { fileName: '42_Wasser.nbt', origin: [8, 64, 8], size: [2, 1, 1], edits: [
+      { op: 'set', pos: [0, 0, 0], block: 'minecraft:water', properties: { level: '0' } }, { op: 'set', pos: [1, 0, 0], block: 'minecraft:stone' }] } });
+    assert.equal(w.status, 200, JSON.stringify(w.json));
+    const wp = (await req('PUT', '/api/cannons/sued-1', { token: write, body: { blueprint: '42_Wasser' } })).json;
+    assert.deepEqual(wp.items.map(i => i.item), ['minecraft:stone']);
+    assert.ok((await req('GET', '/api/blueprints/42_Wasser/materials', { token: read })).json.items.some(r => r.item === 'minecraft:water_bucket'));
+    assert.equal((await req('DELETE', '/api/cannons/sued-1', { token: write })).status, 200);
+    assert.equal((await req('DELETE', '/api/blueprints/42_Wasser', { token: write })).status, 200);
+
+    // scripts for the computers are public and carry the public URL
+    const inst = await req('GET', '/cc/install.lua');
+    assert.equal(inst.status, 200);
+    assert.ok(inst.text.includes('local URL = "http://test"') && !inst.text.includes('{{URL}}'));
+    const lua = await req('GET', '/cc/campus.lua');
+    assert.ok(lua.text.includes(`local VERSION = "${p0.script}"`));
+    assert.ok(!/[^\x00-\x7f]/.test(lua.text.replace(/--[^\n]*/g, '')), 'Lua code outside comments stays ASCII (CC font is Latin-1)');
+
+    // delete + recreate never reuses a job number (the computer would keep the old job's counters)
+    assert.equal((await req('DELETE', '/api/cannons/nord-1', { token: write })).status, 200);
+    assert.equal((await req('GET', '/api/cannons', { token: read })).json.length, 0);
+    const again = (await req('GET', '/api/cannons/nord-1/plan', { token: st })).json;
+    const re = (await req('PUT', '/api/cannons/nord-1', { token: write, body: { blueprint: '40_Mat' } })).json;
+    assert.ok(again.assignment !== upgraded.assignment && re.assignment > again.assignment);
+    // archiving the blueprint ends the job, so the computer returns the leftovers
+    assert.equal((await req('DELETE', '/api/blueprints/40_Mat', { token: write })).status, 200);
+    const ended = (await req('GET', '/api/cannons/nord-1/plan', { token: st })).json;
+    assert.equal(ended.blueprint, null);
+    assert.ok(ended.assignment > re.assignment);
+    assert.equal(ended.state, 'unassigned');
+    assert.equal((await req('POST', '/api/blueprints/40_Mat/revert', { token: write, body: { version: 2 } })).status, 200, 'a new version brings it back');
+    assert.equal((await req('DELETE', '/api/cannons/nord-1', { token: write })).status, 200);
+  });
+
   await t.test('block → item mapping', () => {
     assert.deepEqual(itemsFor('minecraft:oak_door', { half: 'upper' }), []);
     assert.deepEqual(itemsFor('minecraft:soul_wall_torch'), [['minecraft:soul_torch', 1]]);
@@ -240,4 +365,25 @@ test('agent edits, readable views and viewer data', async t => {
     assert.equal((await app.inject({ method: 'GET', url: '/vendor/three/build/three.module.min.js' })).statusCode, 200);
     assert.equal((await app.inject({ method: 'GET', url: '/vendor/three/package.json' })).statusCode, 404);
   });
+});
+
+test('old databases get the station token scope without losing tokens', async () => {
+  const { DatabaseSync } = await import('node:sqlite');
+  const { openDb } = await import('../src/db.js');
+  const dir = mkdtempSync(join(tmpdir(), 'campus-migrate-'));
+  try {
+    const old = new DatabaseSync(join(dir, 'campus.sqlite'));
+    old.exec(`CREATE TABLE users (id INTEGER PRIMARY KEY, username TEXT NOT NULL UNIQUE COLLATE NOCASE, password_hash TEXT NOT NULL, role TEXT NOT NULL, created_at TEXT NOT NULL, disabled_at TEXT);
+      CREATE TABLE api_tokens (id INTEGER PRIMARY KEY, user_id INTEGER NOT NULL REFERENCES users(id), name TEXT NOT NULL, token_hash TEXT NOT NULL UNIQUE, prefix TEXT NOT NULL,
+        scope TEXT NOT NULL CHECK (scope IN ('read','write')), created_at TEXT NOT NULL, last_used_at TEXT, revoked_at TEXT);
+      INSERT INTO users VALUES (1, 'a', 'x', 'admin', 't', NULL);
+      INSERT INTO api_tokens VALUES (7, 1, 'alt', 'h', 'atc_', 'write', 't', NULL, NULL);`);
+    old.close();
+    const db = openDb(dir);
+    assert.deepEqual({ ...db.prepare('SELECT id, name, scope FROM api_tokens').get() }, { id: 7, name: 'alt', scope: 'write' });
+    db.prepare("INSERT INTO api_tokens (user_id, name, token_hash, prefix, scope, created_at) VALUES (1, 'cc', 'h2', 'atc_', 'station', 't')").run();
+    assert.throws(() => db.prepare("INSERT INTO api_tokens (user_id, name, token_hash, prefix, scope, created_at) VALUES (1, 'x', 'h3', 'atc_', 'root', 't')").run());
+    db.close();
+    openDb(dir).close();   // idempotent
+  } finally { rmSync(dir, { recursive: true, force: true }); }
 });

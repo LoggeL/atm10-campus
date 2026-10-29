@@ -37,7 +37,7 @@ document.querySelectorAll('nav.tabs button').forEach(b => b.addEventListener('cl
 function showTab(tab) {
   document.querySelectorAll('nav.tabs button').forEach(b => b.setAttribute('aria-selected', String(b.dataset.tab === tab)));
   document.querySelectorAll('[data-pane]').forEach(p => p.classList.toggle('hide', p.dataset.pane !== tab));
-  ({ overview: loadStatus, snapshots: loadSnapshots, agent: loadTokens, activity: loadActivity, admin: loadAdmin })[tab]?.();
+  ({ overview: loadStatus, snapshots: loadSnapshots, cannons: loadCannons, agent: loadTokens, activity: loadActivity, admin: loadAdmin })[tab]?.();
   history.replaceState(null, '', '#' + tab);
 }
 
@@ -177,10 +177,99 @@ $('snapNow').onclick = guard(async () => {
   } finally { $('snapNow').disabled = false; }
 });
 
+// ---------- cannons ----------
+const CANNON_STATE = { offline: 'Computer offline', nocomputer: 'Kein Computer', feeding: 'Liefert', waiting: 'Wartet auf Material', full: 'Kiste voll', done: 'Fertig', paused: 'Pausiert', unassigned: 'Kein Bauplan', missing: 'Bauplan fehlt', nosnapshot: 'Kein Live-Bestand', error: 'Fehler', start: 'Startet' };
+const shortName = item => String(item).replace(/^minecraft:/, '');
+let cannonTimer = null;
+async function loadCannons() {
+  const [list, stock, bps] = await Promise.all([api('/api/cannons'), api('/api/me/stock'), status ? Promise.resolve(status.blueprints) : api('/api/blueprints')]);
+  $('ccInstall').textContent = `wget run ${location.origin}/cc/install.lua`;
+  const s = stock.stock;
+  $('meLine').innerHTML = s ? `ME-Bestand von <b>${esc(s.source)}</b>, ${esc(ago(s.at))} · ${fmt(s.kinds)} relevante Sorten` : 'Noch kein ME-Bestand gemeldet.';
+  if (!list.length) $('ccSetup').open = true;
+  const options = bps.filter(b => b.current || b.version).map(b => [b.id, b.name]).sort((a, b) => a[1].localeCompare(b[1], 'de'));
+  $('cannonList').innerHTML = list.length ? `<div class="cannons">${list.map(c => cannonCard(c, options)).join('')}</div>`
+    : '<div class="panel muted">Noch keine Kanone gemeldet. Sobald ein Computer das Script startet, erscheint er hier.</div>';
+  scheduleCannons();
+}
+// Re-arms every 15 s; skips the reload while hidden, on another tab or while a card field has focus.
+function scheduleCannons() {
+  clearTimeout(cannonTimer);
+  cannonTimer = setTimeout(() => {
+    if ($('cannonList').closest('.hide')) return;
+    if (document.hidden || document.activeElement?.closest?.('.cannon select, .cannon input')) return scheduleCannons();
+    loadCannons().catch(() => scheduleCannons());
+  }, 15e3);
+}
+function cannonCard(c, bpOptions) {
+  const o = c.options, st = c.status, t = c.totals, bp = c.blueprint;
+  const pct = t && t.start ? Math.max(0, Math.min(100, Math.round((t.start - t.needed) / t.start * 1000) / 10)) : null;
+  const live = st && !st.stale && c.online ? st : null;
+  const offline = !c.online && bp && !['done', 'paused'].includes(c.state);
+  const state = offline ? (c.lastSeenAt ? 'offline' : 'nocomputer') : c.state === 'feeding' && live ? live.state : c.state;
+  const shorts = (live?.shortages || []).map(x => `<li class="${x.crafting ? '' : 'warn'}">${fmt(x.missing)}× ${esc(shortName(x.item))} · im ME ${fmt(x.inME)}${x.crafting ? ' · wird gecraftet' : x.craftable ? ' · craftbar' : ''}${x.error ? ` · <span class="err">${esc(x.error)}</span>` : ''}</li>`).join('');
+  const next = (c.items || []).slice(0, 6).map(i => `${esc(shortName(i.item))} ${fmt(i.needed)}`).join(' · ');
+  return `<div class="panel cannon" data-cannon="${esc(c.name)}">
+    <div class="row" style="justify-content:space-between"><h3><span class="dot ${c.online ? 'on' : ''}" title="${c.online ? 'online' : 'offline'}"></span>${esc(c.name)}</h3>
+      <span class="muted" style="font-size:12px">${c.lastSeenAt ? 'zuletzt ' + esc(ago(c.lastSeenAt)) : 'nie gesehen'}${live?.script ? ' · Script ' + esc(live.script) : ''}</span></div>
+    <div class="row" style="margin-top:10px"><select data-f="blueprint" aria-label="Bauplan"><option value="">– kein Bauplan –</option>${bp && !bpOptions.some(([id]) => id === bp.id) ? `<option value="${esc(bp.id)}" selected>${esc(bp.name)}</option>` : ''}${bpOptions.map(([id, name]) => `<option value="${esc(id)}"${bp?.id === id ? ' selected' : ''}>${esc(name)}</option>`).join('')}</select>
+      ${bp && bp.version !== bp.currentVersion ? `<button class="small" data-act="upgrade" data-bp="${esc(bp.id)}" title="Neuere Version zuweisen (neuer Auftrag, Reste gehen zurück)">v${bp.version} → v${bp.currentVersion}</button>` : ''}
+      ${c.restNbt ? `<a class="btn small primary" href="${esc(c.restNbt)}" download>Rest-NBT</a>` : ''}</div>
+    ${bp ? `<div style="margin-top:10px"><div class="bar"><i style="width:${pct ?? 0}%"></i></div>
+      <div class="muted" style="font-size:12px;margin-top:3px">${pct == null ? '–' : pct.toLocaleString('de-DE') + ' %'} · fehlt ${fmt(t.needed)} Items in ${fmt(t.kinds)} Sorten · origin <span class="mono">${esc(bp.origin.join(' '))}</span></div></div>` : ''}
+    <div class="row" style="margin-top:8px"><span class="badge ${state === 'done' ? 'built' : ['waiting', 'error', 'missing', 'offline', 'nocomputer'].includes(state) ? 'warning' : 'ok'}">${esc(CANNON_STATE[state] || state)}</span>
+      ${live?.chest ? `<span class="muted" style="font-size:12px">Kiste ${fmt(live.chest.used)}/${fmt(live.chest.slots)} Slots</span>` : ''}
+      ${c.message ? `<span class="muted" style="font-size:12px">${esc(c.message)}</span>` : ''}${live?.message ? `<span class="muted" style="font-size:12px">${esc(live.message)}</span>` : ''}</div>
+    ${shorts ? `<ul class="short">${shorts}</ul>` : ''}
+    ${next && state !== 'done' ? `<div class="muted" style="font-size:12px;margin-top:6px">Als Nächstes: ${next}</div>` : ''}
+    <div class="opts">
+      <label><input type="checkbox" data-o="paused"${o.paused ? ' checked' : ''}> Pausiert</label>
+      <label><input type="checkbox" data-o="autoCraft"${o.autoCraft ? ' checked' : ''}> Fehlendes craften</label>
+      <label><input type="checkbox" data-o="returnLeftovers"${o.returnLeftovers ? ' checked' : ''}> Reste zurück ins ME</label>
+      <label title="Zellen mit Maschine im Weg nicht beliefern (wie in der Rest-NBT)"><input type="checkbox" data-o="skipBlocked"${o.skipBlocked ? ' checked' : ''}> Maschinen-Zellen auslassen</label>
+      <label>Puffer <input type="number" min="1" max="16" data-o="bufferStacks" value="${o.bufferStacks}"> Stacks</label>
+      <label>Schießpulver <input type="number" min="0" max="64" data-o="gunpowder" value="${o.gunpowder}"></label>
+      <label>Craft-Menge <input type="number" min="1" max="4096" data-o="craftBatch" value="${o.craftBatch}"></label>
+    </div>
+    <div class="row"><button class="small danger" data-act="delete">Entfernen</button></div>
+  </div>`;
+}
+$('cannonList').addEventListener('change', guard(async e => {
+  const card = e.target.closest('[data-cannon]');
+  if (!card) return;
+  const name = card.dataset.cannon, el = e.target;
+  let body;
+  if (el.dataset.f === 'blueprint') {
+    if (!confirm(el.value ? `${name} baut ab jetzt „${el.selectedOptions[0].textContent}“. Reste des alten Auftrags gehen zurück ins ME. Weiter?` : `${name} keinen Bauplan mehr zuweisen?`)) { loadCannons(); return; }
+    body = { blueprint: el.value || null };
+  } else if (el.dataset.o) {
+    body = { options: { [el.dataset.o]: el.type === 'checkbox' ? el.checked : Number(el.value) } };
+  } else return;
+  try {
+    await api('/api/cannons/' + encodeURIComponent(name), { method: 'PUT', body });
+    toast('Gespeichert. Der Computer holt es sich innerhalb einer Minute.');
+  } finally { el.blur(); loadCannons().catch(() => {}); }
+}));
+$('cannonList').addEventListener('click', guard(async e => {
+  const b = e.target.closest('button[data-act]'), card = e.target.closest('[data-cannon]');
+  if (!b || !card) return;
+  const name = card.dataset.cannon;
+  if (b.dataset.act === 'delete') {
+    if (!confirm(`${name} entfernen? Läuft der Computer noch, meldet er sich gleich wieder an.`)) return;
+    await api('/api/cannons/' + encodeURIComponent(name), { method: 'DELETE' });
+  }
+  if (b.dataset.act === 'upgrade') {
+    await api('/api/cannons/' + encodeURIComponent(name), { method: 'PUT', body: { blueprint: b.dataset.bp, version: null } });
+  }
+  loadCannons();
+}));
+document.querySelectorAll('[data-goto]').forEach(a => a.addEventListener('click', e => { e.preventDefault(); showTab(a.dataset.goto); }));
+
 // ---------- tokens ----------
+const SCOPES = { write: 'Lesen + Schreiben', read: 'Nur lesen', station: 'Station (ME-Computer)' };
 async function loadTokens() {
   const list = await api('/api/tokens');
-  $('tokRows').innerHTML = list.map(t => `<tr><td>${esc(t.name)}</td><td>${t.scope === 'write' ? 'Lesen + Schreiben' : 'Nur lesen'}</td><td class="mono">${esc(t.prefix)}…</td><td>${esc(when(t.createdAt))}</td><td>${esc(ago(t.lastUsedAt))}</td>
+  $('tokRows').innerHTML = list.map(t => `<tr><td>${esc(t.name)}</td><td>${SCOPES[t.scope] || esc(t.scope)}</td><td class="mono">${esc(t.prefix)}…</td><td>${esc(when(t.createdAt))}</td><td>${esc(ago(t.lastUsedAt))}</td>
     <td>${t.revokedAt ? '<span class="muted">widerrufen</span>' : `<button class="small danger" data-revoke="${t.id}">Widerrufen</button>`}</td></tr>`).join('') || '<tr><td colspan="6" class="muted">Noch keine Tokens.</td></tr>';
   $('tokRows').querySelectorAll('[data-revoke]').forEach(b => b.onclick = guard(async () => {
     if (!confirm('Token widerrufen? Agents mit diesem Token verlieren sofort den Zugriff.')) return;
@@ -219,7 +308,7 @@ $('tokCreate').onclick = guard(async () => {
 });
 
 // ---------- activity ----------
-const ACTIONS = { 'blueprint.create': 'Bauplan angelegt', 'blueprint.version': 'Neue Version', 'blueprint.meta': 'Metadaten geändert', 'blueprint.archive': 'Archiviert', 'snapshot.capture': 'Snapshot erfasst', 'package.import': 'HTML importiert', 'token.create': 'Token erzeugt', 'token.revoke': 'Token widerrufen', 'invite.create': 'Einladung erzeugt', 'auth.register': 'Account angelegt', 'auth.login': 'Angemeldet', 'user.update': 'Account geändert' };
+const ACTIONS = { 'blueprint.create': 'Bauplan angelegt', 'blueprint.version': 'Neue Version', 'blueprint.meta': 'Metadaten geändert', 'blueprint.archive': 'Archiviert', 'snapshot.capture': 'Snapshot erfasst', 'package.import': 'HTML importiert', 'token.create': 'Token erzeugt', 'token.revoke': 'Token widerrufen', 'invite.create': 'Einladung erzeugt', 'auth.register': 'Account angelegt', 'auth.login': 'Angemeldet', 'user.update': 'Account geändert', 'cannon.assign': 'Kanone zugewiesen', 'cannon.delete': 'Kanone entfernt' };
 async function loadActivity() {
   const list = await api('/api/activity?limit=200');
   $('actRows').innerHTML = list.filter(a => a.action !== 'auth.login').map(a => `<tr><td>${esc(when(a.at))}</td><td>${esc(a.user || 'System')}</td><td>${esc(a.via)}</td><td>${esc(ACTIONS[a.action] || a.action)}</td><td class="mono">${esc(a.target || '')}</td>
@@ -267,7 +356,7 @@ $('logout').onclick = guard(async () => { await api('/api/auth/logout', { method
     $('who').textContent = me.user.username;
     if (me.user.role === 'admin') $('adminTab').classList.remove('hide');
     const tab = location.hash.slice(1), bpLink = /^bp=(.+)$/.exec(tab);
-    showTab(['overview', 'snapshots', 'agent', 'activity', 'admin'].includes(tab) ? tab : 'overview');
+    showTab(['overview', 'snapshots', 'cannons', 'agent', 'activity', 'admin'].includes(tab) ? tab : 'overview');
     if (bpLink) openBlueprint(decodeURIComponent(bpLink[1]));
     setInterval(() => { if (!document.hidden && !$('drawer').classList.contains('open')) loadStatus().catch(() => {}); }, 60e3);
   } catch (e) { toast(e.message, true); }

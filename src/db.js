@@ -2,6 +2,19 @@ import { DatabaseSync } from 'node:sqlite';
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 
+// read: status + downloads · write: also uploads/edits · station: read + report ME stock and cannon status (CC computers)
+const TOKENS_TABLE = name => `CREATE TABLE IF NOT EXISTS ${name} (
+  id INTEGER PRIMARY KEY,
+  user_id INTEGER NOT NULL REFERENCES users(id),
+  name TEXT NOT NULL,
+  token_hash TEXT NOT NULL UNIQUE,
+  prefix TEXT NOT NULL,
+  scope TEXT NOT NULL CHECK (scope IN ('read','write','station')),
+  created_at TEXT NOT NULL,
+  last_used_at TEXT,
+  revoked_at TEXT
+);`;
+
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS users (
   id INTEGER PRIMARY KEY,
@@ -27,17 +40,6 @@ CREATE TABLE IF NOT EXISTS sessions (
   user_id INTEGER NOT NULL REFERENCES users(id),
   created_at TEXT NOT NULL,
   expires_at TEXT NOT NULL
-);
-CREATE TABLE IF NOT EXISTS api_tokens (
-  id INTEGER PRIMARY KEY,
-  user_id INTEGER NOT NULL REFERENCES users(id),
-  name TEXT NOT NULL,
-  token_hash TEXT NOT NULL UNIQUE,
-  prefix TEXT NOT NULL,
-  scope TEXT NOT NULL CHECK (scope IN ('read','write')),
-  created_at TEXT NOT NULL,
-  last_used_at TEXT,
-  revoked_at TEXT
 );
 CREATE TABLE IF NOT EXISTS blueprints (
   id TEXT PRIMARY KEY,
@@ -103,6 +105,27 @@ CREATE TABLE IF NOT EXISTS activity (
   target TEXT,
   detail_json TEXT
 );
+CREATE TABLE IF NOT EXISTS me_stock (
+  id INTEGER PRIMARY KEY,
+  at TEXT NOT NULL,
+  user_id INTEGER REFERENCES users(id),
+  source TEXT NOT NULL,
+  kinds INTEGER NOT NULL,
+  total INTEGER NOT NULL,
+  items_json TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS cannons (
+  name TEXT PRIMARY KEY COLLATE NOCASE,
+  blueprint_id TEXT REFERENCES blueprints(id),
+  version INTEGER,
+  assignment INTEGER NOT NULL DEFAULT 0,
+  options_json TEXT NOT NULL DEFAULT '{}',
+  start_json TEXT,
+  status_json TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  last_seen_at TEXT
+);
 CREATE INDEX IF NOT EXISTS idx_versions_bp ON blueprint_versions(blueprint_id, version);
 CREATE INDEX IF NOT EXISTS idx_activity_at ON activity(at);
 `;
@@ -112,7 +135,25 @@ export function openDb(dataDir) {
   const db = new DatabaseSync(join(dataDir, 'campus.sqlite'));
   db.exec('PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON; PRAGMA busy_timeout = 5000;');
   db.exec(SCHEMA);
+  db.exec(TOKENS_TABLE('api_tokens'));
+  migrateTokenScopes(db);
   return db;
+}
+
+// Older databases only allowed read/write tokens; SQLite cannot alter a CHECK, so the table is rebuilt once.
+function migrateTokenScopes(db) {
+  const t = db.prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'api_tokens'").get();
+  if (!t || t.sql.includes("'station'")) return;
+  db.exec('PRAGMA foreign_keys = OFF');
+  try {
+    tx(db, () => {
+      db.exec(TOKENS_TABLE('api_tokens_new'));
+      db.exec(`INSERT INTO api_tokens_new (id, user_id, name, token_hash, prefix, scope, created_at, last_used_at, revoked_at)
+        SELECT id, user_id, name, token_hash, prefix, scope, created_at, last_used_at, revoked_at FROM api_tokens`);
+      db.exec('DROP TABLE api_tokens');
+      db.exec('ALTER TABLE api_tokens_new RENAME TO api_tokens');
+    });
+  } finally { db.exec('PRAGMA foreign_keys = ON'); }
 }
 
 export const now = () => new Date().toISOString();

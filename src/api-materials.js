@@ -1,12 +1,14 @@
 // Material lists and "remaining" NBTs (only what is still missing) for one or many blueprints.
 import { loadModel, serializeModel } from './structure-edit.js';
-import { blueprintMaterials, mergeMaterials, materialsReport, materialsText, materialsCsv, remainingModel } from './materials.js';
+import { blueprintMaterials, mergeMaterials, materialsReport, materialsText, materialsCsv, remainingModel, remainingItems, withStock } from './materials.js';
+import { latestStock } from './me-stock.js';
 import { requireActor, HttpError } from './auth.js';
 import { zipStore } from './zip.js';
 import { now } from './db.js';
 
 const flag = (v, dflt) => (v === undefined || v === '' ? dflt : !/^(0|false|no|nein)$/i.test(String(v)));
 
+// Returns helpers the cannon/ME routes reuse (same caches).
 export function registerMaterialRoutes(app, campus) {
   campus.materialsCache ??= new Map();
   campus.remainingCache ??= new Map();
@@ -62,6 +64,15 @@ export function registerMaterialRoutes(app, campus) {
     return skips;
   };
 
+  const aggregate = (bps, snap) => {
+    const skips = bps.length > 1 ? sharedCells(bps) : new Map();
+    const order = new Map(bps.map((b, i) => [b.id, i]));
+    const results = byBase(bps).map(b => ({ id: b.id, result: materialsOf(b, b.current, snap, skips.get(b.id)) }))
+      .sort((a, b) => order.get(a.id) - order.get(b.id));
+    return mergeMaterials(results);
+  };
+  const stockFor = q => (flag(q.me, true) ? latestStock(campus.db) : null);
+
   const send = (reply, q, report, title, fileBase) => {
     if (q.format === 'text') return reply.type('text/plain; charset=utf-8').send(materialsText(report, title));
     if (q.format === 'csv') {
@@ -75,7 +86,7 @@ export function registerMaterialRoutes(app, campus) {
     const bp = campus.getBlueprint(req.params.id);
     const v = req.query.version ? campus.version(bp.id, Number(req.query.version)) : campus.currentVersion(bp.id);
     const snap = snapshotOf(req.query);
-    const report = materialsReport(mergeMaterials([{ id: bp.id, result: materialsOf(bp, v, snap) }]), { includeBuilt: flag(req.query.all, false) });
+    const report = withStock(materialsReport(mergeMaterials([{ id: bp.id, result: materialsOf(bp, v, snap) }]), { includeBuilt: flag(req.query.all, false) }), stockFor(req.query));
     for (const r of report.items) delete r.by;
     const out = { blueprint: bp.id, name: bp.name, version: v.version, snapshot: { id: snap.id, label: snap.label, worldTime: snap.worldTime }, ...report };
     return send(reply, req.query, out, `${bp.name} (${bp.id} v${v.version}) · Snapshot #${snap.id}`, bp.id);
@@ -85,11 +96,7 @@ export function registerMaterialRoutes(app, campus) {
     requireActor(req, 'read');
     const snap = snapshotOf(req.query);
     const bps = selection(req.query);
-    const skips = bps.length > 1 ? sharedCells(bps) : new Map();
-    const order = new Map(bps.map((b, i) => [b.id, i]));
-    const results = byBase(bps).map(b => ({ id: b.id, result: materialsOf(b, b.current, snap, skips.get(b.id)) }))
-      .sort((a, b) => order.get(a.id) - order.get(b.id));
-    const report = materialsReport(mergeMaterials(results), { includeBuilt: flag(req.query.all, false) });
+    const report = withStock(materialsReport(aggregate(bps, snap), { includeBuilt: flag(req.query.all, false) }), stockFor(req.query));
     const out = { blueprints: bps.map(b => b.id), snapshot: { id: snap.id, label: snap.label, worldTime: snap.worldTime }, ...report };
     const title = bps.length === 1 ? bps[0].name : `${bps.length} Baupläne`;
     return send(reply, req.query, out, `${title} · Snapshot #${snap.id}`, bps.length === 1 ? bps[0].id : 'campus');
@@ -100,14 +107,14 @@ export function registerMaterialRoutes(app, campus) {
     const opts = remainingOpts(q);
     return remember(campus.remainingCache, `${v.id}:${snap.id}:${+opts.clear}${+opts.skipBlocked}${+opts.skipChanged}`, 200, () => {
       const r = remainingModel(model(bp, v), v.origin, campus.grid(snap.id), baseGrid(v, snap.id), opts);
-      return { bytes: serializeModel(r.model), stats: r.stats };
+      return { bytes: serializeModel(r.model), stats: r.stats, items: remainingItems(r.model) };
     });
   };
 
   app.get('/api/blueprints/:id/remaining.nbt', async (req, reply) => {
     requireActor(req, 'read');
     const bp = campus.getBlueprint(req.params.id);
-    const v = campus.currentVersion(bp.id);
+    const v = req.query.version ? campus.version(bp.id, Number(req.query.version)) : campus.currentVersion(bp.id);
     const snap = snapshotOf(req.query);
     const { bytes, stats } = remainingOf(bp, v, snap, req.query);
     return reply.type('application/octet-stream')
@@ -134,4 +141,6 @@ export function registerMaterialRoutes(app, campus) {
       modules }, null, 2)) });
     return reply.type('application/zip').header('Content-Disposition', `attachment; filename="campus-rest-${now().slice(0, 10)}.zip"`).send(zipStore(entries));
   });
+
+  return { snapshotOf, selection, aggregate, remainingOf, flag };
 }

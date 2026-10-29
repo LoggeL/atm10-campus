@@ -144,14 +144,35 @@ export function materialsReport({ items, removed, counts }, { includeBuilt = fal
   };
 }
 
+// ME stock (latest report of a CC computer) next to each line: what the network covers and what still has to be crafted/farmed.
+// stock.items: { item: [amount, craftable 0|1] } — items the computer did not report count as 0.
+export function withStock(report, stock) {
+  if (!stock) return report;
+  let covered = 0, short = 0, shortKinds = 0, craftableKinds = 0;
+  for (const r of report.items) {
+    const entry = Object.hasOwn(stock.items, r.item) ? stock.items[r.item] : null;
+    const me = Number(entry?.[0]) || 0, craftable = entry?.[1];
+    r.me = me; r.craftable = !!craftable; r.short = Math.max(0, r.needed - me);
+    covered += r.needed - r.short; short += r.short;
+    if (r.short) { shortKinds++; if (r.craftable) craftableKinds++; }
+  }
+  report.totals.me = { at: stock.at, source: stock.source, covered, short, shortKinds, craftableKinds };
+  return report;
+}
+
 const fmtStacks = r => r.stack === 1 ? `${r.needed}` : r.stacks ? `${r.stacks}×${r.stack}${r.rest ? ' + ' + r.rest : ''}` : `${r.rest}`;
 
 export function materialsText(report, title) {
   const t = report.totals;
   const lines = [`# Materialliste: ${title}`,
     `# fehlt: ${t.needed} Items in ${t.kinds} Sorten ≈ ${t.stacks} Stacks ≈ ${t.shulkers} Shulker-Kisten` + (t.blocked ? ` · ${t.blocked} Zellen mit Maschine im Weg` : '') + (t.unknown ? ` · ${t.unknown} Zellen ohne Bestand` : ''),
-    '# Anzahl  Stacks        Item'];
-  for (const r of report.items) lines.push(`${String(r.needed).padStart(8)}  ${fmtStacks(r).padEnd(12)}  ${r.item}`);
+    ...(t.me ? [`# ME-Bestand (${t.me.source}, ${t.me.at}): deckt ${t.me.covered} · fehlt im ME ${t.me.short} in ${t.me.shortKinds} Sorten (${t.me.craftableKinds} craftbar)`] : []),
+    t.me ? '# Anzahl  Stacks        im ME     fehlt  Item' : '# Anzahl  Stacks        Item'];
+  for (const r of report.items) {
+    const me = t.me ? `${String(r.me).padStart(8)}  ${String(r.short || '').padStart(8)}${r.short && r.craftable ? '*' : ' '} ` : '';
+    lines.push(`${String(r.needed).padStart(8)}  ${fmtStacks(r).padEnd(12)}  ${me}${r.item}`);
+  }
+  if (t.me && t.me.craftableKinds) lines.push('# * = im ME craftbar');
   if (report.removed.length) {
     lines.push('', '# Kommt beim Abreißen/Ersetzen heraus (Blöcke):');
     for (const r of report.removed) lines.push(`${String(r.count).padStart(8)}  ${r.block}`);
@@ -160,8 +181,11 @@ export function materialsText(report, title) {
 }
 
 export function materialsCsv(report) {
-  const rows = [['Item', 'Fehlt', 'Stacks', 'Geplant', 'Gebaut', 'Shulker']];
-  for (const r of report.items) rows.push([r.item, r.needed, fmtStacks(r), r.planned, r.built, String(r.shulkers).replace('.', ',')]);
+  const me = !!report.totals.me;
+  const rows = [['Item', 'Fehlt', 'Stacks', 'Geplant', 'Gebaut', 'Shulker', ...(me ? ['Im ME', 'Fehlt im ME', 'Craftbar'] : [])]];
+  for (const r of report.items) {
+    rows.push([r.item, r.needed, fmtStacks(r), r.planned, r.built, String(r.shulkers).replace('.', ','), ...(me ? [r.me, r.short, r.craftable ? 'ja' : ''] : [])]);
+  }
   return '﻿' + rows.map(r => r.join(';')).join('\r\n') + '\r\n';
 }
 
@@ -189,4 +213,20 @@ export function remainingModel(model, origin, liveSnap, baseSnap, { clear = fals
     if (want === AIR) stats.clear++; else stats.place++;
   }
   return { model: { ...model, rest: { ...model.rest, entities: nbtList(10, []) }, cells }, stats };
+}
+
+// Items for the cells of a remaining model, lowest layer first: the Schematicannon prints bottom-up,
+// so a feeder with a small chest should stock what the next layers need.
+export function remainingItems(model) {
+  const items = new Map();
+  for (const [k, cell] of model.cells) {
+    if (isAir(cell.name) || SKIP.has(cell.name)) continue;
+    const y = Number(k.split(',')[1]);
+    for (const [item, n] of itemsFor(cell.name, cell.props)) {
+      const e = items.get(item);
+      if (e) { e.needed += n; if (y < e.minY) e.minY = y; } else items.set(item, { item, needed: n, minY: y });
+    }
+  }
+  return [...items.values()].map(e => ({ ...e, stack: stackSize(e.item) }))
+    .sort((a, b) => a.minY - b.minY || b.needed - a.needed || a.item.localeCompare(b.item));
 }

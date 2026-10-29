@@ -16,6 +16,7 @@ import { zipStore } from './zip.js';
 import { openapi } from './openapi.js';
 import { registerAgentRoutes } from './api-agent.js';
 import { registerMaterialRoutes } from './api-materials.js';
+import { registerStationRoutes, endCannonJobs } from './api-stations.js';
 import { sceneJson, blueprintsBinary } from './viewer-data.js';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -118,7 +119,7 @@ export async function buildServer(config = defaultConfig) {
   });
   app.post('/api/tokens', async req => {
     const a = requireActor(req, 'session');
-    const name = String(req.body?.name || '').trim().slice(0, 60), scope = req.body?.scope === 'read' ? 'read' : 'write';
+    const name = String(req.body?.name || '').trim().slice(0, 60), scope = ['read', 'station'].includes(req.body?.scope) ? req.body.scope : 'write';
     if (!name) throw new HttpError(400, 'Name für den Token fehlt.');
     const t = createApiToken(db, a.user.id, name, scope);
     logActivity(db, a, 'token.create', name, { scope });
@@ -259,11 +260,12 @@ export async function buildServer(config = defaultConfig) {
   app.delete('/api/blueprints/:id', async req => {
     const a = requireActor(req, 'write');
     campus.archive(req.params.id, a);
+    endCannonJobs(db, req.params.id, a);
     return { ok: true };
   });
 
   registerAgentRoutes(app, campus);
-  registerMaterialRoutes(app, campus);
+  registerStationRoutes(app, campus, registerMaterialRoutes(app, campus));
 
   // ---------- viewer data ----------
   const snapParam = q => (q.snapshot && q.snapshot !== 'none' ? campus.getSnapshot(Number(q.snapshot)).id : q.snapshot === 'none' ? null : campus.latestSnapshot('live')?.id ?? null);

@@ -176,6 +176,7 @@ button { cursor: pointer; }
 .mat-table td { padding: 6px 8px; border-bottom: 1px solid rgba(140,190,210,.07); vertical-align: middle; }
 .mat-table td.num, .mat-table th.num { text-align: right; white-space: nowrap; }
 .mat-table tr.done td { opacity: .5; }
+.mat-table td.short { color: var(--amber); }
 .mat-table .it { display: flex; align-items: center; gap: 9px; min-width: 0; }
 .mat-table .it i { width: 14px; height: 14px; border-radius: 4px; background: var(--c); flex: none; box-shadow: inset 0 0 0 1px rgba(255,255,255,.15); }
 .mat-table .it span { min-width: 0; }
