@@ -3,7 +3,7 @@ import cookie from '@fastify/cookie';
 import fastifyStatic from '@fastify/static';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
-import { readFileSync } from 'node:fs';
+import { readFileSync, existsSync } from 'node:fs';
 import { config as defaultConfig } from './config.js';
 import { openDb, now, logActivity } from './db.js';
 import { Campus, parseOrigin } from './campus.js';
@@ -296,6 +296,21 @@ export async function buildServer(config = defaultConfig) {
   return app;
 }
 
+// One-time seeding on an empty instance; safe to run on every start.
+export async function seed(app, config) {
+  const { campus } = app;
+  let baseId;
+  if (config.seedBaselineSource) {
+    const existing = campus.latestSnapshot(config.seedBaselineSource);
+    baseId = existing?.id ?? (await campus.capture({ source: config.seedBaselineSource, label: config.seedBaselineLabel || config.seedBaselineSource, force: true, pinned: true })).snapshot.id;
+  }
+  const imported = campus.db.prepare('SELECT COUNT(*) AS n FROM packages').get().n > 0;
+  if (config.seedHtml && !imported && existsSync(config.seedHtml)) {
+    const r = importHtml(campus, readFileSync(config.seedHtml, 'utf8'), { baseSnapshotId: baseId, note: 'Erstimport' });
+    app.log.info({ created: r.created.length, errors: r.errors.length, warnings: r.warnings }, 'seed import done');
+  }
+}
+
 // Periodic live capture; only rebuilds when region files changed.
 export function startScheduler(app, config) {
   if (!config.snapshotIntervalMin) return null;
@@ -313,6 +328,7 @@ export function startScheduler(app, config) {
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const app = await buildServer();
   await app.listen({ port: defaultConfig.port, host: defaultConfig.host });
+  await seed(app, defaultConfig).catch(e => app.log.error({ err: e.message }, 'seed failed'));
   startScheduler(app, defaultConfig);
   if (defaultConfig.bootstrapInvite && app.campus.db.prepare('SELECT COUNT(*) AS n FROM users').get().n === 0) {
     app.log.info('Noch kein Account: Admin über die BOOTSTRAP_INVITE-Einladung anlegen (/invite/<code>).');

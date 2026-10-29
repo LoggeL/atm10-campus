@@ -8,7 +8,7 @@ const triple = (s, fallback) => {
 };
 
 // WORLD_SOURCES: "name=/path/to/world;other=/path" — extra read-only worlds (e.g. backups) for baseline snapshots.
-const sources = { live: process.env.WORLD_DIR || '/minecraft/atm10/data/world' };
+const sources = { live: process.env.WORLD_DIR || '/worlds/live' };
 for (const part of (process.env.WORLD_SOURCES || '').split(';').map(s => s.trim()).filter(Boolean)) {
   const i = part.indexOf('=');
   if (i > 0) sources[part.slice(0, i).trim()] = part.slice(i + 1).trim();
@@ -24,6 +24,10 @@ export const config = {
   snapshotIntervalMin: Number(process.env.SNAPSHOT_INTERVAL_MIN || 10),
   snapshotKeepRecent: Number(process.env.SNAPSHOT_KEEP_RECENT || 48),
   bootstrapInvite: process.env.BOOTSTRAP_INVITE || '',
+  // First start: pinned baseline from this world source, then import of this viewer HTML on top of it.
+  seedBaselineSource: process.env.SEED_BASELINE_SOURCE || '',
+  seedBaselineLabel: process.env.SEED_BASELINE_LABEL || '',
+  seedHtml: process.env.SEED_HTML || '',
   publicUrl: (process.env.PUBLIC_URL || 'http://localhost:3000').replace(/\/$/, ''),
   cookieSecure: process.env.COOKIE_SECURE ? process.env.COOKIE_SECURE === 'true' : process.env.NODE_ENV === 'production',
   maxUploadBytes: Number(process.env.MAX_UPLOAD_MB || 64) * 1024 * 1024,

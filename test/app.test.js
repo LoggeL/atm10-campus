@@ -173,3 +173,26 @@ async function loadContext(meta){ $('contextNoticeTitle').textContent='Bestand v
     assert.ok(act.some(a => a.action === 'blueprint.version' && a.via === 'token'));
   });
 });
+
+test('seed: baseline snapshot and first import on an empty instance', async () => {
+  const { seed } = await import('../src/server.js');
+  const { writeFileSync } = await import('node:fs');
+  const dir = mkdtempSync(join(tmpdir(), 'campus-seed-'));
+  const htmlPath = join(dir, 'campus.html');
+  const nbt = structureNbt([1, 1, 1], [{ pos: [0, 0, 0], name: 'minecraft:gold_block' }]);
+  const pkg = { manifest: { source_world_date: '2026-10-18', modules: [{ file: '20_Gold.nbt', name: 'Gold', origin: [1, 64, 1] }] }, files: [{ name: '20_Gold.nbt', base64: nbt.toString('base64') }] };
+  writeFileSync(htmlPath, `<html><body><script>const EMBEDDED_PACKAGE = ${JSON.stringify(pkg)};</script></body></html>`);
+  const cfg = { ...config, dataDir: join(dir, 'data'), worldSources: { live: worldDir, backup: worldDir }, seedBaselineSource: 'backup', seedBaselineLabel: 'Backup', seedHtml: htmlPath };
+  const app2 = await buildServer(cfg);
+  try {
+    await seed(app2, cfg);
+    await seed(app2, cfg); // idempotent
+    const snaps = app2.campus.listSnapshots();
+    assert.equal(snaps.length, 1);
+    assert.equal(snaps[0].pinned, true);
+    const bp = app2.campus.listBlueprints();
+    assert.equal(bp.length, 1);
+    assert.equal(bp[0].current.baseSnapshotId, snaps[0].id);
+    assert.equal(app2.campus.db.prepare('SELECT COUNT(*) AS n FROM packages').get().n, 1);
+  } finally { await app2.close(); rmSync(dir, { recursive: true, force: true }); }
+});
