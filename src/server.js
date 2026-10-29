@@ -21,6 +21,7 @@ import { sceneJson, blueprintsBinary } from './viewer-data.js';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const page = name => readFileSync(join(root, 'public', name), 'utf8');
+const { version } = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'));
 
 export async function buildServer(config = defaultConfig) {
   const db = openDb(config.dataDir);
@@ -61,7 +62,7 @@ export async function buildServer(config = defaultConfig) {
   app.get('/app', async (req, reply) => (req.actor?.via === 'session' ? html(reply, page('app.html')) : reply.redirect('/login')));
   app.get('/docs', async (req, reply) => html(reply, page('docs.html')));
   app.get('/viewer', async (req, reply) => (req.actor?.via === 'session' ? html(reply, page('viewer/index.html')) : reply.redirect('/login')));
-  app.get('/healthz', async () => ({ ok: true, time: now(), live: campus.latestSnapshot('live')?.capturedAt ?? null }));
+  app.get('/healthz', async () => ({ ok: true, version, time: now(), live: campus.latestSnapshot('live')?.capturedAt ?? null }));
   app.get('/api/openapi.json', async () => openapi(config.publicUrl));
 
   // ---------- auth ----------
