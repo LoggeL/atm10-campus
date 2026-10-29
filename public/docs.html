@@ -24,7 +24,45 @@
 </dl>
 </div>
 <div class="panel">
-<h2>Typischer Ablauf</h2>
+<h2>Baupläne blockgenau ändern (empfohlen für Agents)</h2>
+<p>Statt NBT-Dateien zu bauen, schickt ein Agent <strong>Operationen</strong>. Der Server wendet sie auf die aktuelle Version an, prüft Blocknamen, rechnet die Analyse gegen den Live-Bestand und speichert eine neue Version. Mit <span class="mono">"dryRun": true</span> gibt es nur die Vorschau (keine Schreibrechte nötig).</p>
+<pre>H="Authorization: Bearer $CAMPUS_TOKEN"
+
+# Ansehen: als Text-Schichten (Weltkoordinaten), als JSON oder den echten Bestand
+curl -s -H "$H" "$CAMPUS_URL/api/blueprints/40_Pavillon/layers?y=63..66"
+curl -s -H "$H" "$CAMPUS_URL/api/blueprints/40_Pavillon/blocks?coords=world"
+curl -s -H "$H" "$CAMPUS_URL/api/world/blocks?from=38,63,8&amp;to=50,70,20&amp;format=layers"
+
+# Vorschau: was würde sich ändern, was steht im Weg?
+curl -s -X POST -H "$H" -H "content-type: application/json" $CAMPUS_URL/api/blueprints/40_Pavillon/edits -d '{
+  "dryRun": true, "coords": "local",
+  "edits": [
+    {"op": "fill", "from": [0,0,0], "to": [8,0,8], "block": "minecraft:polished_andesite"},
+    {"op": "fill", "from": [0,1,0], "to": [8,4,8], "block": "minecraft:stone_bricks", "mode": "hollow"},
+    {"op": "set",  "pos": [4,1,0], "block": "minecraft:oak_door", "properties": {"facing": "south", "half": "lower"}},
+    {"op": "replace", "match": "minecraft:*_planks", "block": "minecraft:spruce_planks"},
+    {"op": "clear", "from": [3,5,3], "to": [5,5,5]}
+  ]}'
+
+# Speichern: gleiche Anfrage ohne dryRun, mit baseVersion (409 = jemand war schneller)
+curl -s -X POST -H "$H" -H "content-type: application/json" $CAMPUS_URL/api/blueprints/40_Pavillon/edits \
+  -d '{"baseVersion": 3, "note": "Tür + Dach", "edits": [ … ]}'
+
+# Neuer Bauplan aus Operationen
+curl -s -X POST -H "$H" -H "content-type: application/json" $CAMPUS_URL/api/blueprints/new \
+  -d '{"fileName":"41_Kiosk.nbt","origin":[60,63,20],"size":[5,4,5],"name":"41 · Kiosk","edits":[{"op":"fill","from":[0,0,0],"to":[4,3,4],"block":"minecraft:oak_planks","mode":"hollow"}]}'</pre>
+<dl class="kv">
+<dt>set / setMany</dt><dd>Einzelne Blöcke: <span class="mono">{"op":"set","pos":[x,y,z],"block":"ns:name","properties":{…}}</span></dd>
+<dt>fill</dt><dd>Quader <span class="mono">from</span>–<span class="mono">to</span>. <span class="mono">mode</span>: <span class="mono">all</span> (Standard), <span class="mono">hollow</span> (Hülle, innen Luft), <span class="mono">outline</span> (nur Hülle), <span class="mono">keep</span> (nur leere Zellen), <span class="mono">replace</span> (nur Zellen, die <span class="mono">match</span> entsprechen).</dd>
+<dt>replace</dt><dd>Alle Blöcke, die <span class="mono">match</span> (Glob mit <span class="mono">*</span>) entsprechen, durch <span class="mono">block</span> ersetzen; optional nur in <span class="mono">from</span>–<span class="mono">to</span>, mit <span class="mono">keepProperties</span> bleiben Ausrichtungen erhalten.</dd>
+<dt>clear / void</dt><dd><span class="mono">clear</span> setzt Luft (= im Spiel abreißen), <span class="mono">void</span> entfernt Zellen aus dem Plan (= Bestand nicht anfassen).</dd>
+<dt>copy</dt><dd>Bereich <span class="mono">from</span>–<span class="mono">to</span> nach <span class="mono">dest</span> kopieren (z. B. Fensterachsen wiederholen).</dd>
+<dt>coords / grow</dt><dd><span class="mono">"coords":"world"</span> für Weltkoordinaten statt relativ zur Bauplan-Ecke. <span class="mono">"grow":true</span> vergrößert den Bauplan, wenn Operationen darüber hinausgehen.</dd>
+<dt>Antwort</dt><dd><span class="mono">changes</span> (gesetzt / abgerissen / freigegeben), <span class="mono">warnings</span> (z. B. Blockname weder in der Welt noch in einem Bauplan bekannt – Tippfehler?), neue <span class="mono">origin</span>/<span class="mono">size</span>, <span class="mono">analysis</span> gegen Live inkl. Maschinen im Weg, ohne dryRun die neue <span class="mono">version</span>.</dd>
+</dl>
+</div>
+<div class="panel">
+<h2>Ganze NBT-Dateien und Snapshots</h2>
 <pre>H="Authorization: Bearer $CAMPUS_TOKEN"
 
 # 1. Überblick: Live-Snapshot, Fortschritt, Konflikte je Bauplan, Überlappungen

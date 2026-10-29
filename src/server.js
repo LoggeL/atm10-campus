@@ -15,6 +15,8 @@ import { importHtml } from './importer.js';
 import { viewerPackageScript, renderViewerHtml } from './viewer.js';
 import { zipStore } from './zip.js';
 import { openapi } from './openapi.js';
+import { registerAgentRoutes } from './api-agent.js';
+import { sceneJson, blueprintsBinary } from './viewer-data.js';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const page = name => readFileSync(join(root, 'public', name), 'utf8');
@@ -26,6 +28,8 @@ export async function buildServer(config = defaultConfig) {
   app.decorate('campus', campus);
   await app.register(cookie);
   await app.register(fastifyStatic, { root: join(root, 'public', 'assets'), prefix: '/assets/' });
+  await app.register(fastifyStatic, { root: join(root, 'public', 'viewer'), prefix: '/viewer/', decorateReply: false, index: false, maxAge: '10m' });
+  await app.register(fastifyStatic, { root: join(root, 'node_modules', 'three'), prefix: '/vendor/three/', decorateReply: false, index: false, maxAge: '7d', allowedPath: p => /^\/(build|examples\/jsm)\//.test(p) });
   for (const type of ['application/octet-stream', 'text/html']) {
     app.addContentTypeParser(type, { parseAs: 'buffer' }, (req, body, done) => done(null, body));
   }
@@ -55,7 +59,8 @@ export async function buildServer(config = defaultConfig) {
   app.get('/invite/:code', async (req, reply) => html(reply, page('invite.html')));
   app.get('/app', async (req, reply) => (req.actor?.via === 'session' ? html(reply, page('app.html')) : reply.redirect('/login')));
   app.get('/docs', async (req, reply) => html(reply, page('docs.html')));
-  app.get('/viewer', async (req, reply) => {
+  app.get('/viewer', async (req, reply) => (req.actor?.via === 'session' ? html(reply, page('viewer/index.html')) : reply.redirect('/login')));
+  app.get('/viewer/classic', async (req, reply) => {
     if (req.actor?.via !== 'session') return reply.redirect('/login');
     const snap = req.query.snapshot ? campus.getSnapshot(Number(req.query.snapshot)) : campus.latestSnapshot('live');
     const out = renderViewerHtml(campus, snap);
@@ -262,6 +267,20 @@ export async function buildServer(config = defaultConfig) {
     const a = requireActor(req, 'write');
     campus.archive(req.params.id, a);
     return { ok: true };
+  });
+
+  registerAgentRoutes(app, campus);
+
+  // ---------- viewer data ----------
+  const snapParam = q => (q.snapshot && q.snapshot !== 'none' ? campus.getSnapshot(Number(q.snapshot)).id : q.snapshot === 'none' ? null : campus.latestSnapshot('live')?.id ?? null);
+  app.get('/api/viewer/scene', async req => { requireActor(req, 'read'); return sceneJson(campus, snapParam(req.query)); });
+  app.get('/api/viewer/blueprints.bin', async (req, reply) => {
+    requireActor(req, 'read');
+    const bin = blueprintsBinary(campus, snapParam(req.query));
+    reply.header('ETag', bin.etag).header('Cache-Control', 'private, no-cache').type('application/octet-stream');
+    if (req.headers['if-none-match'] === bin.etag) return reply.code(304).send();
+    if (/\bgzip\b/.test(req.headers['accept-encoding'] || '')) return reply.header('Content-Encoding', 'gzip').send(bin.gzip);
+    return reply.send(bin.body);
   });
 
   // ---------- snapshots ----------

@@ -141,7 +141,7 @@ async function loadContext(meta){ $('contextNoticeTitle').textContent='Bestand v
     assert.deepEqual(r.json.created.map(x => x.blueprint), ['20_Gold']);
     assert.equal(r.json.skippedConflicts.length, 1, '10_Test was edited in the app -> not overwritten');
     assert.deepEqual(r.json.warnings, []);
-    const v = await req('GET', '/viewer', { raw: true });
+    const v = await req('GET', '/viewer/classic', { raw: true });
     const page = Buffer.from(v.body).toString();
     assert.match(page, /<script src="\/api\/viewer\/package\.js\?snapshot=\d+"><\/script>\n<script id="nbt-core">/);
     assert.match(page, /const EMBEDDED_PACKAGE = window\.CAMPUS_PACKAGE;/);

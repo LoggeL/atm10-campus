@@ -10,12 +10,32 @@ export function openapi(baseUrl) {
       description: [
         'Baupläne (Create/Vanilla-Structure-NBT) mit Versionen, Live-Bestand aus der ATM10-Welt und Konfliktanalyse.',
         'Auth: `Authorization: Bearer atc_…` (Token unter /app → Agent-Zugang). Lese-Tokens dürfen nur GET.',
-        'Workflow für Agents: 1) GET /api/status lesen, 2) Bauplan herunterladen, 3) mit `baseVersion` hochladen. Antwort 409 = jemand anderes war schneller → neu laden, zusammenführen, erneut hochladen.',
+        'Workflow für Agents: 1) GET /api/status lesen, 2) Bauplan ansehen (GET …/layers als Text, …/blocks als JSON, /api/world/blocks für den echten Bestand), 3) Änderungen als Operationen an POST …/edits schicken – erst mit dryRun:true prüfen, dann mit baseVersion speichern. Alternativ ganze NBT mit baseVersion hochladen. Antwort 409 = jemand anderes war schneller → neu laden, zusammenführen, erneut senden.',
         'Koordinaten sind Weltkoordinaten; `origin` ist die Ecke mit den kleinsten x/y/z des Bauplans. `minecraft:air` im NBT = abreißen, `minecraft:structure_void` = Bestand nicht anfassen.',
       ].join('\n\n'),
     },
     servers: [{ url: baseUrl }],
-    components: { securitySchemes: { bearer: { type: 'http', scheme: 'bearer' } } },
+    components: {
+      securitySchemes: { bearer: { type: 'http', scheme: 'bearer' } },
+      schemas: {
+        EditOp: {
+          type: 'object', required: ['op'],
+          description: [
+            'set {pos, block, properties?} · setMany {blocks:[{pos, block, properties?}]}',
+            'fill {from, to, block, properties?, mode: all|hollow|outline|keep|replace, match? (Glob, z. B. "minecraft:*_planks")}',
+            'replace {match, block, from?, to?, keepProperties?} · clear {from, to} → Luft = abreißen · void {from, to} → Bestand nicht anfassen',
+            'copy {from, to, dest, includeVoid?}. Blöcke als "namespace:name", properties z. B. {"facing":"north"}.',
+          ].join('\n'),
+          properties: {
+            op: { type: 'string', enum: ['set', 'setMany', 'fill', 'replace', 'clear', 'void', 'copy'] },
+            pos: { type: 'array', items: { type: 'integer' } }, from: { type: 'array', items: { type: 'integer' } }, to: { type: 'array', items: { type: 'integer' } }, dest: { type: 'array', items: { type: 'integer' } },
+            block: { type: 'string', example: 'minecraft:stone_bricks' }, properties: { type: 'object', additionalProperties: { type: 'string' } },
+            mode: { type: 'string' }, match: { type: 'string' }, keepProperties: { type: 'boolean' }, includeVoid: { type: 'boolean' },
+            blocks: { type: 'array', items: { type: 'object' } },
+          },
+        },
+      },
+    },
     security: [{ bearer: [] }],
     paths: {
       '/api/me': { get: { summary: 'Wer bin ich (User, Token-Scope)', responses: ok } },
@@ -49,6 +69,38 @@ export function openapi(baseUrl) {
       '/api/blueprints/{id}/download': { get: { summary: 'NBT herunterladen', parameters: [id, { name: 'version', in: 'query', schema: { type: 'integer' } }], responses: ok } },
       '/api/blueprints/{id}/versions/{version}/analysis': { get: { summary: 'Detailanalyse mit Beispielkoordinaten', parameters: [id, { name: 'version', in: 'path', required: true, schema: { type: 'integer' } }, { name: 'snapshot', in: 'query', schema: { type: 'integer' } }], responses: ok } },
       '/api/blueprints/{id}/revert': { post: { summary: 'Alte Version als neue Version wiederherstellen', parameters: [id], requestBody: json({ type: 'object', required: ['version'], properties: { version: { type: 'integer' } } }), responses: ok } },
+      '/api/blueprints/{id}/edits': {
+        post: {
+          summary: 'Bauplan blockgenau ändern (Operationen statt NBT-Upload). dryRun=true zeigt nur die Vorschau mit Analyse.',
+          parameters: [id],
+          requestBody: json({ type: 'object', required: ['edits'], properties: {
+            edits: { type: 'array', items: { $ref: '#/components/schemas/EditOp' }, description: 'Werden der Reihe nach angewendet, max. 10.000 Operationen / 4 Mio. Zellen' },
+            coords: { type: 'string', enum: ['local', 'world'], default: 'local', description: 'local = relativ zur Bauplan-Ecke (0,0,0), world = Weltkoordinaten' },
+            grow: { type: 'boolean', description: 'Bauplan automatisch vergrößern, wenn Zellen außerhalb liegen (origin verschiebt sich ggf.)' },
+            baseVersion: { type: 'integer', description: 'Pflicht ohne dryRun. Bei Abweichung 409.' },
+            dryRun: { type: 'boolean' }, note: { type: 'string' }, name: { type: 'string' }, category: { type: 'string' }, description: { type: 'string' } } }),
+          responses: { 200: { description: 'changes, warnings (z. B. unbekannte Blocknamen), origin, size, analysis gegen Live; ohne dryRun zusätzlich version' }, 400: { description: 'Ungültige Operation (Meldung nennt den Index)' }, 409: { description: 'Bearbeitungskonflikt (currentVersion im Body)' } },
+        },
+      },
+      '/api/blueprints/new': {
+        post: {
+          summary: 'Neuen Bauplan aus Operationen anlegen',
+          requestBody: json({ type: 'object', required: ['fileName', 'origin', 'size', 'edits'], properties: {
+            fileName: { type: 'string', example: '40_Pavillon.nbt' }, origin: { type: 'array', items: { type: 'integer' } }, size: { type: 'array', items: { type: 'integer' } },
+            edits: { type: 'array', items: { $ref: '#/components/schemas/EditOp' } }, coords: { type: 'string', enum: ['local', 'world'] }, grow: { type: 'boolean' },
+            dryRun: { type: 'boolean' }, name: { type: 'string' }, category: { type: 'string' }, description: { type: 'string' }, note: { type: 'string' } } }),
+          responses: { 200: { description: 'Wie /edits' }, 409: { description: 'Bauplan existiert schon' } },
+        },
+      },
+      '/api/blueprints/{id}/blocks': { get: { summary: 'Alle Zellen als JSON: palette + blocks [x,y,z,paletteIndex,hasNbt?]. Nicht gelistete Zellen = structure_void (nicht anfassen).', parameters: [id,
+        { name: 'version', in: 'query', schema: { type: 'integer' } }, { name: 'coords', in: 'query', schema: { type: 'string', enum: ['local', 'world'] } }], responses: ok } },
+      '/api/blueprints/{id}/layers': { get: { summary: 'Bauplan als ASCII-Schichten (eine Y-Ebene pro Block, Legende) – gut lesbar für LLMs', parameters: [id,
+        { name: 'y', in: 'query', schema: { type: 'string' }, description: 'Y oder Bereich "a..b"' }, { name: 'coords', in: 'query', schema: { type: 'string', enum: ['world', 'local'], default: 'world' } }, { name: 'version', in: 'query', schema: { type: 'integer' } }],
+        responses: { 200: { description: 'text/plain' } } } },
+      '/api/world/blocks': { get: { summary: 'Echte Welt (Snapshot) in einem Quader: JSON oder ASCII-Schichten, inkl. Block-Entities. Max. 2 Mio. Zellen.', parameters: [
+        { name: 'from', in: 'query', required: true, schema: { type: 'string' }, example: '100,64,-40' }, { name: 'to', in: 'query', required: true, schema: { type: 'string' }, example: '120,70,-20' },
+        { name: 'format', in: 'query', schema: { type: 'string', enum: ['json', 'layers'] } }, { name: 'snapshot', in: 'query', schema: { type: 'integer' } }], responses: ok } },
+      '/api/viewer/scene': { get: { summary: 'Szene für den 3D-Viewer: Baupläne mit Status, Block-Stile, Orte', parameters: [{ name: 'snapshot', in: 'query', schema: { type: 'string' } }], responses: ok } },
       '/api/snapshots': {
         get: { summary: 'Snapshots der Welt (Live und Baselines)', responses: ok },
         post: { summary: 'Snapshot jetzt erzeugen (Schreib-Token)', requestBody: json({ type: 'object', properties: { source: { type: 'string', default: 'live' }, label: { type: 'string' }, force: { type: 'boolean' } } }), responses: ok },

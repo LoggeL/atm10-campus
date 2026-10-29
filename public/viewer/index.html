@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Campus-Viewer · ATM10</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><rect x='2' y='2' width='12' height='12' rx='2' fill='%2373d8e5'/></svg>">
+<link rel="stylesheet" href="/viewer/viewer.css">
+<script type="importmap">
+{ "imports": { "three": "/vendor/three/build/three.module.min.js", "three/addons/": "/vendor/three/examples/jsm/" } }
+</script>
+</head>
+<body>
+<canvas id="scene" tabindex="0" aria-label="3D-Ansicht des Campus"></canvas>
+
+<div id="loading" class="loading">
+  <div class="loading-hero"></div>
+  <div class="loading-card">
+    <div class="brand"><span class="logo"></span>ATM10 Campus</div>
+    <h1>Campus wird aufgebaut</h1>
+    <p id="loading-step">Lade Szene …</p>
+    <div class="bar"><div id="loading-bar"></div></div>
+  </div>
+</div>
+
+<header class="topbar glass">
+  <a class="brand" href="/app" title="Zur Übersicht"><span class="logo"></span><span class="brand-text">ATM10 Campus</span></a>
+  <div class="snap">
+    <span id="live-badge" class="badge">–</span>
+    <label class="select"><span class="sr">Snapshot</span><select id="snapshot"></select></label>
+  </div>
+  <div id="edition" class="edition"></div>
+  <nav class="links">
+    <a href="/app">Übersicht</a>
+    <a href="/viewer/classic" title="Original-Viewer von Jonny">Klassisch</a>
+    <a href="/docs">API</a>
+  </nav>
+  <button id="panel-toggle" class="icon-btn mobile-only" aria-label="Panel ein/aus">☰</button>
+</header>
+
+<aside id="panel" class="panel glass">
+  <div class="tabs" role="tablist">
+    <button role="tab" data-tab="view" class="active">Ansicht</button>
+    <button role="tab" data-tab="blueprints">Baupläne <span id="bp-count" class="count"></span></button>
+    <button role="tab" data-tab="places">Orte</button>
+  </div>
+  <section data-pane="view" class="pane active">
+    <h3>Ansichten</h3>
+    <div id="presets" class="presets"></div>
+    <h3>Ebenen kombinieren <span class="hint">Modus je Ebene</span></h3>
+    <div id="layers" class="layers"></div>
+    <label class="check"><input type="checkbox" id="overlap"> Überlappungen zwischen Bauplänen hervorheben <span id="overlap-count" class="count"></span></label>
+  </section>
+  <section data-pane="blueprints" class="pane">
+    <div class="bp-tools">
+      <input id="bp-search" type="search" placeholder="Bauplan suchen …" autocomplete="off">
+      <button id="bp-all" class="chip">Alle</button>
+      <button id="bp-none" class="chip">Keine</button>
+    </div>
+    <div class="bp-filter" id="bp-filter"></div>
+    <div id="bp-list" class="bp-list"></div>
+  </section>
+  <section data-pane="places" class="pane">
+    <div id="pois" class="pois"></div>
+  </section>
+</aside>
+
+<div id="detail" class="detail glass hidden"></div>
+
+<div class="toolbar glass">
+  <div class="seg" id="nav-mode" role="group" aria-label="Navigation">
+    <button data-mode="orbit" class="active" title="Orbit: ziehen dreht, rechts/2-Finger verschiebt, Rad zoomt">Orbit</button>
+    <button data-mode="fly" title="Fliegen: WASD, Leertaste/E hoch, Q runter, Shift schnell, ziehen schaut">Fliegen</button>
+    <button data-mode="walk" title="Laufen: WASD, Leertaste springt, Shift sprintet, ziehen schaut">Laufen</button>
+  </div>
+  <label class="slider" title="Schnitt in Y-Höhe: alles darüber ausblenden">
+    <span>Schnitt <b id="clip-val">aus</b></span>
+    <input id="clip" type="range" min="0" max="1" step="1">
+  </label>
+  <label class="slider" title="Tageszeit">
+    <span>Zeit <b id="tod-val">15:30</b></span>
+    <input id="tod" type="range" min="0" max="24" step="0.25" value="15.5">
+  </label>
+  <div class="seg small">
+    <button id="t-shadows" class="active" title="Schatten">Schatten</button>
+    <button id="t-bloom" class="active" title="Leuchten">Glow</button>
+    <button id="t-grid" class="active" title="Raster">Raster</button>
+  </div>
+  <button id="reset-cam" class="icon-btn" title="Kamera zurücksetzen">⌂</button>
+  <button id="shot" class="icon-btn" title="Screenshot speichern">⤓</button>
+</div>
+
+<div id="tooltip" class="tooltip hidden"></div>
+<div id="hud" class="hud"></div>
+<div id="toast" class="toast hidden"></div>
+
+<script type="module" src="/viewer/main.js"></script>
+</body>
+</html>

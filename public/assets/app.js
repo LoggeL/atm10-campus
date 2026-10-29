@@ -94,7 +94,7 @@ const openBlueprint = guard(async id => {
   const sample = (title, list, cols) => list?.length ? `<details><summary>${title} (${fmt(list.length)}${list.length >= 200 ? '+' : ''} Beispiele)</summary><table><thead><tr>${cols.map(c => `<th>${c[0]}</th>`).join('')}</tr></thead><tbody>${list.slice(0, 60).map(s => `<tr>${cols.map(c => `<td class="mono">${esc(c[1](s))}</td>`).join('')}</tr>`).join('')}</tbody></table></details>` : '';
   $('drawer').innerHTML = `
     <div class="row" style="justify-content:space-between"><div><h2>${esc(bp.name)}</h2><div class="muted mono">${esc(bp.fileName)}</div></div><button class="small" id="dClose">Schließen</button></div>
-    <div class="row" style="margin-top:10px">${st ? badge(st.status) : ''}<a class="btn small primary" href="/api/blueprints/${encodeURIComponent(id)}/download">NBT herunterladen (v${bp.currentVersion})</a><button class="small" id="dUpload">Neue Version hochladen</button><a class="btn small" href="/viewer">Im 3D-Viewer</a></div>
+    <div class="row" style="margin-top:10px">${st ? badge(st.status) : ''}<a class="btn small primary" href="/api/blueprints/${encodeURIComponent(id)}/download">NBT herunterladen (v${bp.currentVersion})</a><button class="small" id="dUpload">Neue Version hochladen</button><a class="btn small" href="/viewer#bp=${encodeURIComponent(id)}">Im 3D-Viewer</a></div>
     <dl class="kv">
       <dt>Position (origin)</dt><dd class="mono">${esc(cur?.origin.join(', '))} <button class="small" id="dMove">ändern</button></dd>
       <dt>Größe</dt><dd class="mono">${esc(cur?.size.join(' × '))}</dd>
@@ -197,7 +197,12 @@ export CAMPUS_TOKEN=${token}
 # Was ist live, was ist geplant, wo knallt es?
 curl -s -H "Authorization: Bearer $CAMPUS_TOKEN" $CAMPUS_URL/api/status
 
-# Bauplan holen, bearbeiten, mit baseVersion zurückspielen (409 = jemand war schneller)
+# Bauplan lesen (Text-Schichten) und blockgenau ändern: erst dryRun, dann mit baseVersion speichern
+curl -s -H "Authorization: Bearer $CAMPUS_TOKEN" "$CAMPUS_URL/api/blueprints/01_Technikhof_P01/layers?y=64..66"
+curl -s -X POST -H "Authorization: Bearer $CAMPUS_TOKEN" -H "content-type: application/json" $CAMPUS_URL/api/blueprints/01_Technikhof_P01/edits \\
+  -d '{"dryRun":true,"edits":[{"op":"replace","match":"minecraft:*_planks","block":"minecraft:spruce_planks"}]}'
+
+# Oder ganze NBT holen, extern bearbeiten, mit baseVersion zurückspielen (409 = jemand war schneller)
 curl -s -H "Authorization: Bearer $CAMPUS_TOKEN" -o 01_Technikhof_P01.nbt $CAMPUS_URL/api/blueprints/01_Technikhof_P01/download
 curl -s -X PUT -H "Authorization: Bearer $CAMPUS_TOKEN" -H "content-type: application/octet-stream" \\
   --data-binary @01_Technikhof_P01.nbt "$CAMPUS_URL/api/blueprints/01_Technikhof_P01/nbt?baseVersion=1&note=Dach+angepasst"`;
@@ -261,8 +266,9 @@ $('logout').onclick = guard(async () => { await api('/api/auth/logout', { method
     me = await api('/api/me');
     $('who').textContent = me.user.username;
     if (me.user.role === 'admin') $('adminTab').classList.remove('hide');
-    const tab = location.hash.slice(1);
+    const tab = location.hash.slice(1), bpLink = /^bp=(.+)$/.exec(tab);
     showTab(['overview', 'snapshots', 'agent', 'activity', 'admin'].includes(tab) ? tab : 'overview');
+    if (bpLink) openBlueprint(decodeURIComponent(bpLink[1]));
     setInterval(() => { if (!document.hidden && !$('drawer').classList.contains('open')) loadStatus().catch(() => {}); }, 60e3);
   } catch (e) { toast(e.message, true); }
 })();
