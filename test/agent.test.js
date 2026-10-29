@@ -5,6 +5,9 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { writeWorld, structureNbt } from './helpers.js';
 import { buildServer } from '../src/server.js';
+import { parseStructure } from '../src/nbt.js';
+import { itemsFor, remainingModel } from '../src/materials.js';
+import { nbtList, nbtCompound, nbtString } from '../src/nbt.js';
 
 const tmp = mkdtempSync(join(tmpdir(), 'campus-agent-'));
 const worldDir = join(tmp, 'world');
@@ -128,9 +131,95 @@ test('agent edits, readable views and viewer data', async t => {
     assert.equal((await req('GET', '/api/world/blocks?from=0,0,0&to=999,300,999', { token: read })).status, 400);
   });
 
+  await t.test('materials + remaining NBT', async () => {
+    const c = await req('POST', '/api/blueprints/new', { token: write, body: { fileName: '40_Mat.nbt', origin: [4, 64, 4], size: [3, 2, 3], edits: [
+      { op: 'set', pos: [0, 0, 0], block: 'minecraft:oak_door', properties: { half: 'lower', facing: 'north' } },
+      { op: 'set', pos: [0, 1, 0], block: 'minecraft:oak_door', properties: { half: 'upper', facing: 'north' } },
+      { op: 'set', pos: [1, 0, 1], block: 'minecraft:stone' },                       // chest at 5,64,5 in the way
+      { op: 'set', pos: [2, 0, 0], block: 'minecraft:wall_torch', properties: { facing: 'east' } },
+      { op: 'set', pos: [2, 0, 2], block: 'minecraft:stone_slab', properties: { type: 'double' } },
+      { op: 'clear', from: [0, 0, 2], to: [0, 0, 2] },                                // already air
+    ] } });
+    assert.equal(c.status, 200, JSON.stringify(c.json));
+    const m = (await req('GET', '/api/blueprints/40_Mat/materials', { token: read })).json;
+    const need = Object.fromEntries(m.items.map(r => [r.item, r.needed]));
+    assert.deepEqual(need, { 'minecraft:oak_door': 1, 'minecraft:stone': 1, 'minecraft:torch': 1, 'minecraft:stone_slab': 2 });
+    assert.equal(m.totals.needed, 5);
+    assert.equal(m.totals.kinds, 4);
+    assert.equal(m.totals.blocked, 1);
+    assert.deepEqual(m.removed, [{ block: 'minecraft:chest', count: 1 }]);
+    const text = await req('GET', '/api/blueprints/40_Mat/materials?format=text', { token: read });
+    assert.match(text.text, /fehlt: 5 Items in 4 Sorten/);
+    const csv = await req('GET', '/api/materials?ids=40_Mat&format=csv', { token: read });
+    assert.match(csv.headers['content-type'], /text\/csv/);
+    assert.ok(csv.text.startsWith('\ufeffItem;Fehlt'));
+    assert.match(csv.text, /minecraft:torch;1;/);
+    const multi = (await req('GET', '/api/materials?ids=40_Mat,30_Kiosk', { token: read })).json;
+    assert.deepEqual(multi.blueprints, ['40_Mat', '30_Kiosk']);
+    assert.deepEqual(multi.items.find(r => r.item === 'minecraft:oak_planks').by, { '30_Kiosk': 8 });
+    assert.equal((await req('GET', '/api/materials?ids=nope', { token: read })).status, 404);
+
+    const rest = await req('GET', '/api/blueprints/40_Mat/remaining.nbt', { token: read });
+    assert.equal(rest.status, 200);
+    assert.equal(rest.headers['x-campus-origin'], '4,64,4');
+    const stats = JSON.parse(rest.headers['x-campus-remaining']);
+    assert.equal(stats.kept, 4);
+    assert.equal(stats.skippedBlocked, 1);
+    assert.equal(stats.done, 1, 'the demolition cell is already air');
+    const parsed = parseStructure(rest.raw);
+    assert.deepEqual(parsed.size, [3, 2, 3]);
+    assert.equal(parsed.placed.length, 4);
+    assert.ok(!parsed.placed.some(b => b.name === 'minecraft:stone'), 'blocked cell left out');
+    const all = JSON.parse((await req('GET', '/api/blueprints/40_Mat/remaining.nbt?skipBlocked=0', { token: read })).headers['x-campus-remaining']);
+    assert.equal(all.kept, 5);
+    const withClear = JSON.parse((await req('GET', '/api/blueprints/40_Mat/remaining.nbt?clear=1', { token: read })).headers['x-campus-remaining']);
+    assert.equal(withClear.clear, 0, 'demolition cell is already air either way');
+    // a second blueprint planning the same torch cell: counted once across the selection
+    assert.equal((await req('POST', '/api/blueprints/new', { token: write, body: { fileName: '41_Share.nbt', origin: [6, 64, 4], size: [1, 1, 1],
+      edits: [{ op: 'set', pos: [0, 0, 0], block: 'minecraft:wall_torch', properties: { facing: 'east' } }] } })).status, 200);
+    const shared = (await req('GET', '/api/materials?ids=40_Mat,41_Share', { token: read })).json;
+    assert.deepEqual(shared.items.find(r => r.item === 'minecraft:torch'), { ...shared.items.find(r => r.item === 'minecraft:torch'), needed: 1, by: { '40_Mat': 1 } });
+    assert.equal((await req('GET', '/api/blueprints/41_Share/materials', { token: read })).json.totals.needed, 1, 'alone it still needs its torch');
+    const zip = await req('GET', '/api/remaining.zip?ids=40_Mat,30_Kiosk', { token: read });
+    assert.equal(zip.status, 200);
+    assert.equal(zip.raw.readUInt32LE(0), 0x04034b50);
+    assert.ok(zip.raw.includes(Buffer.from('40_Mat_rest.nbt')) && zip.raw.includes(Buffer.from('30_Kiosk_rest.nbt')));
+  });
+
+  await t.test('block → item mapping', () => {
+    assert.deepEqual(itemsFor('minecraft:oak_door', { half: 'upper' }), []);
+    assert.deepEqual(itemsFor('minecraft:soul_wall_torch'), [['minecraft:soul_torch', 1]]);
+    assert.deepEqual(itemsFor('minecraft:oak_wall_hanging_sign'), [['minecraft:oak_hanging_sign', 1]]);
+    assert.deepEqual(itemsFor('minecraft:red_bed', { part: 'foot' }), [['minecraft:red_bed', 1]]);
+    assert.deepEqual(itemsFor('minecraft:potted_flowering_azalea_bush'), [['minecraft:flower_pot', 1], ['minecraft:flowering_azalea', 1]]);
+    assert.deepEqual(itemsFor('minecraft:water', { level: '0' }), [['minecraft:water_bucket', 1]]);
+    assert.deepEqual(itemsFor('minecraft:water', { level: '4' }), []);
+    assert.deepEqual(itemsFor('minecraft:sea_pickle', { pickles: '3' }), [['minecraft:sea_pickle', 3]]);
+    assert.deepEqual(itemsFor('minecraft:cobblestone_wall'), [['minecraft:cobblestone_wall', 1]]);
+    assert.deepEqual(itemsFor('minecraft:piston_head'), []);
+    assert.deepEqual(itemsFor('minecraft:water_cauldron', { level: '3' }), [['minecraft:cauldron', 1], ['minecraft:water_bucket', 1]]);
+    assert.deepEqual(itemsFor('minecraft:white_candle_cake'), [['minecraft:cake', 1], ['minecraft:white_candle', 1]]);
+    assert.deepEqual(itemsFor('minecraft:candle_cake'), [['minecraft:cake', 1], ['minecraft:candle', 1]]);
+    assert.deepEqual(itemsFor('biomesoplenty:potted_origin_sapling'), [['minecraft:flower_pot', 1], ['biomesoplenty:origin_sapling', 1]]);
+    assert.deepEqual(itemsFor('create:belt', { part: 'start' }), [['create:belt_connector', 1], ['create:shaft', 1]]);
+    assert.deepEqual(itemsFor('create:belt', { part: 'middle' }), []);
+    assert.deepEqual(itemsFor('create:brass_encased_shaft'), [['create:shaft', 1], ['create:brass_casing', 1]]);
+    assert.deepEqual(itemsFor('create:mechanical_piston_head'), []);
+  });
+
+  await t.test('remaining model drops entities and ignores light/void cells', () => {
+    const model = { rootName: '', size: [2, 1, 1], rest: { entities: nbtList(10, [nbtCompound({ id: nbtString('minecraft:item_frame') })]) },
+      cells: new Map([['0,0,0', { name: 'minecraft:light', props: {} }], ['1,0,0', { name: 'minecraft:stone', props: {} }]]) };
+    const r = remainingModel(model, [100, 64, 100], null, null);
+    assert.deepEqual([...r.model.cells.keys()], ['1,0,0']);
+    assert.equal(r.stats.droppedEntities, 1);
+    assert.equal(r.model.rest.entities.v.items.length, 0);
+    assert.equal(model.rest.entities.v.items.length, 1, 'original untouched');
+  });
+
   await t.test('viewer scene + binary', async () => {
     const scene = (await req('GET', '/api/viewer/scene', { token: read })).json;
-    assert.equal(scene.blueprints.length, 2);
+    assert.equal(scene.blueprints.length, 4);
     assert.ok(scene.context.recordCount > 0);
     assert.ok(scene.styles['minecraft:oak_stairs'].material);
     assert.ok(scene.materials.includes('glass'));

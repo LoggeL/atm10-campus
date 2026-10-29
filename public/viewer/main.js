@@ -333,7 +333,7 @@ function renderBlueprints() {
 function setVisible(ids, on) {
   for (const id of ids) on ? state.visible.add(id) : state.visible.delete(id);
   worker.postMessage({ type: 'visibility', visible: [...state.visible] });
-  renderBlueprints(); renderLayers(); saveHash();
+  renderBlueprints(); renderLayers(); updateRestZipLink(); saveHash();
 }
 
 function select(id, { focus = false } = {}) {
@@ -374,11 +374,99 @@ function renderDetail() {
     <div class="actions">
       <button data-act="focus">Fokus</button>
       <button data-act="solo">Nur diesen zeigen</button>
-      <a href="/api/blueprints/${encodeURIComponent(b.id)}/download">.nbt laden</a>
+      <button data-act="materials">Materialliste</button>
+      <a href="/api/blueprints/${encodeURIComponent(b.id)}/remaining.nbt${state.scene.snapshot ? '?snapshot=' + state.scene.snapshot.id : ''}" download title="Nur was noch fehlt – gleicher Ankerpunkt wie der volle Bauplan, Schematicannon im normalen Modus">Rest-NBT</a>
+      <a href="/api/blueprints/${encodeURIComponent(b.id)}/download" download>.nbt laden</a>
       <a href="/api/blueprints/${encodeURIComponent(b.id)}/layers" target="_blank" rel="noopener">Schichten (Text)</a>
       <a href="/app#bp=${encodeURIComponent(b.id)}">Versionen &amp; Upload</a>
     </div>`;
   el.classList.remove('hidden');
+}
+
+// ---------- materials ----------
+const mat = { ids: [], data: null };
+const joinQs = (...parts) => parts.filter(Boolean).join('&');
+const idsQuery = ids => (ids.length === state.bps.size ? '' : 'ids=' + ids.map(encodeURIComponent).join(','));
+const snapQuery = () => (state.scene.snapshot ? 'snapshot=' + state.scene.snapshot.id : '');
+const restQuery = () => joinQs(snapQuery(), $('#mat-clear').checked ? 'clear=1' : '', $('#mat-skip-blocked').checked ? '' : 'skipBlocked=0');
+const visibleIds = () => [...state.bps.keys()].filter(id => state.visible.has(id));
+
+async function openMaterials(ids, title) {
+  if (!state.scene.snapshot) return toast('Für die Materialliste oben einen Snapshot wählen (nicht „Ohne Bestand“).');
+  if (!ids.length) return toast('Keine Baupläne sichtbar.');
+  mat.ids = ids; mat.data = null;
+  $('#mat-title').textContent = 'Materialliste · ' + title;
+  $('#mat-sub').textContent = '';
+  $('#mat-summary').innerHTML = '';
+  $('#mat-body').innerHTML = '<div class="empty">Rechne …</div>';
+  $('#materials').classList.remove('hidden');
+  updateMatLinks();
+  try {
+    const data = await (await api('/api/materials?' + joinQs(idsQuery(ids), snapQuery(), 'all=1'))).json();
+    if (mat.ids !== ids) return;
+    mat.data = data;
+    renderMaterials();
+  } catch (e) {
+    if (mat.ids !== ids) return;
+    $('#mat-body').innerHTML = `<div class="empty">Fehler: ${esc(e.message)}</div>`;
+  }
+}
+function updateRestZipLink() { $('#bp-rest-zip').href = '/api/remaining.zip?' + joinQs(idsQuery(visibleIds()), snapQuery()); }
+function closeMaterials() { $('#materials').classList.add('hidden'); mat.ids = []; }
+
+function updateMatLinks() {
+  const ids = mat.ids, one = ids.length === 1;
+  $('#mat-csv').href = '/api/materials?' + joinQs(idsQuery(ids), snapQuery(), 'format=csv');
+  $('#mat-rest').href = one ? `/api/blueprints/${encodeURIComponent(ids[0])}/remaining.nbt?${restQuery()}` : '/api/remaining.zip?' + joinQs(idsQuery(ids), restQuery());
+  $('#mat-rest').textContent = one ? 'Rest-NBT laden' : `Rest-NBTs laden (ZIP, ${ids.length})`;
+}
+
+const stacksText = r => (r.stack === 1 ? `${r.needed} × 1er` : r.stacks ? `${r.stacks} × ${r.stack}${r.rest ? ' + ' + r.rest : ''}` : String(r.rest));
+function renderMaterials() {
+  const d = mat.data, t = d.totals;
+  const snapDate = new Date(d.snapshot.worldTime || Date.now()).toLocaleString('de-DE', { dateStyle: 'short', timeStyle: 'short' });
+  $('#mat-sub').textContent = `${d.blueprints.length === 1 ? '1 Bauplan' : d.blueprints.length + ' Baupläne'} · Bestand: Snapshot #${d.snapshot.id} (${d.snapshot.label}, ${snapDate})`;
+  const stat = (n, label, cls = '') => `<div class="stat ${cls}"><b>${fmt(n)}</b><small>${label}</small></div>`;
+  $('#mat-summary').innerHTML = stat(t.needed, 'Items fehlen') + stat(t.kinds, 'Sorten') + stat(t.stacks, 'Stacks') + stat(t.shulkers, 'Shulker-Kisten (≈)')
+    + (t.blocked ? stat(t.blocked, 'Zellen mit Maschine im Weg', 'warn') : '') + (t.unknown ? stat(t.unknown, 'Zellen ohne Bestand', 'warn') : '');
+  const q = $('#mat-search').value.trim().toLowerCase(), showBuilt = $('#mat-built').checked;
+  const rows = d.items.filter(r => (showBuilt || r.needed > 0) && (!q || r.item.toLowerCase().includes(q) || pretty(r.item).label.toLowerCase().includes(q)));
+  const color = item => { const c = state.scene.styles[item]?.color; return c ? `rgb(${c[0]},${c[1]},${c[2]})` : '#5d6b78'; };
+  const byTitle = r => (r.by ? Object.entries(r.by).sort((a, b) => b[1] - a[1]).slice(0, 8).map(([id, n]) => `${state.bps.get(id)?.name || id}: ${n}`).join('\n') : '');
+  const table = rows.length ? `<table class="mat-table"><thead><tr><th>Item</th><th class="num">Fehlt</th><th class="num">Stacks</th><th>Gebaut</th></tr></thead><tbody>${rows.map(r => {
+    const n = pretty(r.item), pct = r.planned ? Math.round(r.built / r.planned * 100) : 100;
+    return `<tr class="${r.needed ? '' : 'done'}" title="${esc(byTitle(r))}"><td><span class="it"><i style="--c:${color(r.item)}"></i><span>${esc(n.label)}<small>${esc(r.item)}</small></span></span></td>
+      <td class="num"><b>${fmt(r.needed)}</b></td><td class="num">${esc(stacksText(r))}</td>
+      <td><div class="bar" title="${fmt(r.built)} von ${fmt(r.planned)} gesetzt"><div style="width:${pct}%"></div></div></td></tr>`;
+  }).join('')}</tbody></table>` : `<div class="empty">${t.needed ? 'Kein Item passt zur Suche.' : 'Nichts mehr zu bauen – alles steht wie geplant. 🎉'}</div>`;
+  const removed = d.removed.length ? `<details><summary>Beim Abreißen/Ersetzen fallen ${fmt(d.removed.reduce((a, r) => a + r.count, 0))} Blöcke an</summary><table class="mat-table"><tbody>${d.removed.slice(0, 60).map(r =>
+    `<tr><td><span class="it"><i style="--c:${color(r.block)}"></i><span>${esc(pretty(r.block).label)}<small>${esc(r.block)}</small></span></span></td><td class="num">${fmt(r.count)}</td></tr>`).join('')}</tbody></table></details>` : '';
+  $('#mat-body').innerHTML = table + removed;
+}
+
+function setupMaterials() {
+  const modal = $('#materials');
+  modal.onclick = e => { if (e.target === modal || e.target.closest('[data-close]')) closeMaterials(); };
+  $('#mat-search').oninput = () => mat.data && renderMaterials();
+  $('#mat-built').onchange = () => mat.data && renderMaterials();
+  $('#mat-clear').onchange = updateMatLinks;
+  $('#mat-skip-blocked').onchange = updateMatLinks;
+  // Hand the clipboard a promise synchronously: Safari only allows clipboard writes inside the click itself.
+  $('#mat-copy').onclick = async () => {
+    const text = api('/api/materials?' + joinQs(idsQuery(mat.ids), snapQuery(), 'format=text')).then(r => r.text());
+    try {
+      if (window.ClipboardItem) await navigator.clipboard.write([new ClipboardItem({ 'text/plain': text.then(t => new Blob([t], { type: 'text/plain' })) })]);
+      else await navigator.clipboard.writeText(await text);
+      toast('Materialliste kopiert.');
+    } catch (e) { toast('Kopieren fehlgeschlagen: ' + esc(e.message)); }
+  };
+  $('#bp-materials').onclick = () => { const ids = visibleIds(); openMaterials(ids, ids.length === state.bps.size ? 'ganzer Campus' : `${ids.length} sichtbare Baupläne`); };
+  $('#bp-rest-zip').onclick = e => {
+    if (!state.scene.snapshot) { e.preventDefault(); return toast('Erst einen Snapshot wählen.'); }
+    if (!visibleIds().length) { e.preventDefault(); return toast('Keine Baupläne sichtbar.'); }
+    updateRestZipLink();
+  };
+  updateRestZipLink();
 }
 
 // ---------- places, snapshot, edition ----------
@@ -541,6 +629,7 @@ function buildUi() {
     if (!b) return;
     if (act === 'focus') focusBlueprint(b);
     if (act === 'solo') { state.visible = new Set([b.id]); setVisible([], true); focusBlueprint(b); }
+    if (act === 'materials') openMaterials([b.id], b.name);
   };
   $('#pois').onclick = e => {
     const b = e.target.closest('[data-poi]');
@@ -577,12 +666,14 @@ function buildUi() {
   };
   $('#panel-toggle').onclick = () => $('#panel').classList.toggle('open');
   addEventListener('keydown', e => {
+    if (e.key === 'Escape' && !$('#materials').classList.contains('hidden')) { closeMaterials(); return; }
     if (e.target.closest?.('input, select, textarea')) return;
     if (e.key === 'Escape') select(null);
     if (e.key === '1') { nav.setMode('orbit'); syncNavButtons(); }
     if (e.key === '2') { nav.setMode('fly'); syncNavButtons(); }
     if (e.key === '3') { nav.setMode('walk'); syncNavButtons(); }
   });
+  setupMaterials();
   setupPicking();
   checkLive();
 }

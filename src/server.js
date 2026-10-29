@@ -15,6 +15,7 @@ import { importHtml } from './importer.js';
 import { zipStore } from './zip.js';
 import { openapi } from './openapi.js';
 import { registerAgentRoutes } from './api-agent.js';
+import { registerMaterialRoutes } from './api-materials.js';
 import { sceneJson, blueprintsBinary } from './viewer-data.js';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -262,6 +263,7 @@ export async function buildServer(config = defaultConfig) {
   });
 
   registerAgentRoutes(app, campus);
+  registerMaterialRoutes(app, campus);
 
   // ---------- viewer data ----------
   const snapParam = q => (q.snapshot && q.snapshot !== 'none' ? campus.getSnapshot(Number(q.snapshot)).id : q.snapshot === 'none' ? null : campus.latestSnapshot('live')?.id ?? null);

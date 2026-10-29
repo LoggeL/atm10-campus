@@ -1,7 +1,7 @@
 // Compares blueprint versions with a live snapshot (and the snapshot they were planned on).
 const SAMPLE_LIMIT = 200;
 
-function gridLookup(snap) {
+export function gridLookup(snap) {
   if (!snap) return null;
   const [ox, oy, oz] = snap.origin, [sx, sy, sz] = snap.size, grid = snap.grid, names = snap.names;
   const be = new Map();
@@ -86,6 +86,16 @@ export function statusOf(analysis, overlapCells) {
 // Bit 0x10: Überlappung mit anderem Bauplan.
 export const CELL = { DONE: 0, PLACE: 1, REPLACE: 2, BLOCKED: 3, CHANGED: 4, UNKNOWN: 5, OVERLAP: 0x10 };
 
+// Status of one cell (want = planned block name, air for demolition); live/base from gridLookup.
+export function cellStatus(live, base, x, y, z, want) {
+  if (!live || !live.inside(x, y, z)) return CELL.UNKNOWN;
+  const now = live.name(x, y, z);
+  if (now === want) return CELL.DONE;
+  if (live.blockEntity(x, y, z)) return CELL.BLOCKED;
+  if (base && base.inside(x, y, z) && base.name(x, y, z) !== now) return CELL.CHANGED;
+  return now === AIR ? (want === AIR ? CELL.DONE : CELL.PLACE) : CELL.REPLACE;
+}
+
 export function cellStatuses(structure, origin, liveSnap, baseSnap, overlapKeys) {
   const live = gridLookup(liveSnap), base = gridLookup(baseSnap);
   const [ox, oy, oz] = origin;
@@ -93,15 +103,7 @@ export function cellStatuses(structure, origin, liveSnap, baseSnap, overlapKeys)
   const out = new Uint8Array(n);
   let i = 0;
   const status = (x, y, z, want) => {
-    let s;
-    if (!live || !live.inside(x, y, z)) s = CELL.UNKNOWN;
-    else {
-      const now = live.name(x, y, z);
-      if (now === want) s = CELL.DONE;
-      else if (live.blockEntity(x, y, z)) s = CELL.BLOCKED;
-      else if (base && base.inside(x, y, z) && base.name(x, y, z) !== now) s = CELL.CHANGED;
-      else s = now === AIR ? (want === AIR ? CELL.DONE : CELL.PLACE) : CELL.REPLACE;
-    }
+    let s = cellStatus(live, base, x, y, z, want);
     if (overlapKeys && overlapKeys.has(x + ',' + y + ',' + z)) s |= CELL.OVERLAP;
     out[i++] = s;
   };

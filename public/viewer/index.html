@@ -56,6 +56,10 @@
       <button id="bp-all" class="chip">Alle</button>
       <button id="bp-none" class="chip">Keine</button>
     </div>
+    <div class="bp-actions">
+      <button id="bp-materials" class="chip" title="Was fehlt noch – für alle sichtbaren Baupläne">Materialliste (sichtbare)</button>
+      <a id="bp-rest-zip" class="chip" href="/api/remaining.zip" download title="Nur die fehlenden Blöcke als NBT je Bauplan, für die Schematicannon">Rest-NBTs (ZIP)</a>
+    </div>
     <div class="bp-filter" id="bp-filter"></div>
     <div id="bp-list" class="bp-list"></div>
   </section>
@@ -65,6 +69,32 @@
 </aside>
 
 <div id="detail" class="detail glass hidden"></div>
+
+<div id="materials" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="mat-title">
+  <div class="modal-card glass">
+    <header class="mat-head">
+      <div><h2 id="mat-title">Materialliste</h2><div id="mat-sub" class="sub"></div></div>
+      <button class="close" data-close aria-label="Schließen">✕</button>
+    </header>
+    <div id="mat-summary" class="mat-summary"></div>
+    <div class="mat-tools">
+      <input id="mat-search" type="search" placeholder="Item suchen …" autocomplete="off">
+      <label class="check"><input type="checkbox" id="mat-built"> Gebautes zeigen</label>
+    </div>
+    <div id="mat-body" class="mat-body"></div>
+    <footer class="mat-foot">
+      <div class="mat-opts">
+        <label class="check" title="Nur für den Vanilla-Strukturblock: Luft-Zellen reißen dort ab. Die Schematicannon ignoriert Luft im normalen Modus; im Modus „Replace Solid with Empty“ würde sie alles leer räumen, was nicht in der Datei steht."><input type="checkbox" id="mat-clear"> Abriss mitnehmen (nur Strukturblock)</label>
+        <label class="check" title="Zellen, in denen eine Maschine/Kiste steht, auslassen, damit die Schematicannon sie nicht zerstört"><input type="checkbox" id="mat-skip-blocked" checked> Maschinen-Zellen auslassen</label>
+      </div>
+      <div class="actions">
+        <button id="mat-copy">Als Text kopieren</button>
+        <a id="mat-csv" href="#" download>CSV</a>
+        <a id="mat-rest" href="#" class="primary" download title="Nur fehlende Blöcke, gleicher Ankerpunkt wie der volle Bauplan. Schematicannon im normalen Modus verwenden.">Rest-NBT laden</a>
+      </div>
+    </footer>
+  </div>
+</div>
 
 <div class="toolbar glass">
   <div class="seg" id="nav-mode" role="group" aria-label="Navigation">
