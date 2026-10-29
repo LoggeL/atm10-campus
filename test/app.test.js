@@ -141,21 +141,10 @@ async function loadContext(meta){ $('contextNoticeTitle').textContent='Bestand v
     assert.deepEqual(r.json.created.map(x => x.blueprint), ['20_Gold']);
     assert.equal(r.json.skippedConflicts.length, 1, '10_Test was edited in the app -> not overwritten');
     assert.deepEqual(r.json.warnings, []);
-    const v = await req('GET', '/viewer/classic', { raw: true });
-    const page = Buffer.from(v.body).toString();
-    assert.match(page, /<script src="\/api\/viewer\/package\.js\?snapshot=\d+"><\/script>\n<script id="nbt-core">/);
-    assert.match(page, /const EMBEDDED_PACKAGE = window\.CAMPUS_PACKAGE;/);
-    assert.match(page, /LIVE · /);
-    assert.doesNotMatch(page, /18\.10\.2026/);
-    assert.doesNotMatch(page, /\{\{CAMPUS_/);
-    const sid = page.match(/snapshot=(\d+)/)[1];
-    const js = await req('GET', '/api/viewer/package.js?snapshot=' + sid, { raw: true });
-    const text = Buffer.from(js.body).toString();
-    const parsed = JSON.parse(text.slice('window.CAMPUS_PACKAGE='.length, -2));
-    assert.deepEqual(parsed.files.map(f => f.name).sort(), ['10_Test.nbt', '11_Other.nbt', '20_Gold.nbt']);
-    assert.equal(parsed.context.format, 'minecraft-block-surfaces-v1');
-    assert.ok(parsed.context.base64.length > 10);
-    assert.deepEqual(parsed.manifest.modules.find(m => m.file === '20_Gold.nbt').origin, [8, 64, 8]);
+    const scene = (await req('GET', '/api/viewer/scene')).json;
+    assert.deepEqual(scene.blueprints.map(b => b.id).sort(), ['10_Test', '11_Other', '20_Gold']);
+    assert.deepEqual(scene.blueprints.find(b => b.id === '20_Gold').origin, [8, 64, 8]);
+    assert.equal((await req('GET', '/viewer/classic', { raw: true })).status, 404);
   });
 
   await t.test('zip + invites + activity', async () => {

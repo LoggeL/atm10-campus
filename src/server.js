@@ -12,7 +12,6 @@ import {
   resolveActor, requireActor, HttpError, throttleLogin, clearThrottle,
 } from './auth.js';
 import { importHtml } from './importer.js';
-import { viewerPackageScript, renderViewerHtml } from './viewer.js';
 import { zipStore } from './zip.js';
 import { openapi } from './openapi.js';
 import { registerAgentRoutes } from './api-agent.js';
@@ -60,13 +59,6 @@ export async function buildServer(config = defaultConfig) {
   app.get('/app', async (req, reply) => (req.actor?.via === 'session' ? html(reply, page('app.html')) : reply.redirect('/login')));
   app.get('/docs', async (req, reply) => html(reply, page('docs.html')));
   app.get('/viewer', async (req, reply) => (req.actor?.via === 'session' ? html(reply, page('viewer/index.html')) : reply.redirect('/login')));
-  app.get('/viewer/classic', async (req, reply) => {
-    if (req.actor?.via !== 'session') return reply.redirect('/login');
-    const snap = req.query.snapshot ? campus.getSnapshot(Number(req.query.snapshot)) : campus.latestSnapshot('live');
-    const out = renderViewerHtml(campus, snap);
-    if (!out) return html(reply, '<!doctype html><meta charset="utf-8"><p style="font-family:system-ui">Noch kein Viewer importiert. Bitte in der <a href="/app">Übersicht</a> eine Campus-HTML importieren.</p>');
-    return html(reply, out);
-  });
   app.get('/healthz', async () => ({ ok: true, time: now(), live: campus.latestSnapshot('live')?.capturedAt ?? null }));
   app.get('/api/openapi.json', async () => openapi(config.publicUrl));
 
@@ -301,17 +293,6 @@ export async function buildServer(config = defaultConfig) {
     const s = campus.getSnapshot(Number(req.params.id));
     return reply.type('application/gzip').send(readFileSync(join(campus.snapshotDir(s.id), 'surfaces.bin.gz')));
   });
-  app.get('/api/viewer/package.js', async (req, reply) => {
-    requireActor(req, 'read');
-    const sid = req.query.snapshot && req.query.snapshot !== 'none' ? campus.getSnapshot(Number(req.query.snapshot)).id : null;
-    const pkg = viewerPackageScript(campus, sid);
-    if (!pkg) throw new HttpError(404, 'Kein Viewer importiert.');
-    reply.header('ETag', pkg.etag).header('Cache-Control', 'private, no-cache').type('application/javascript; charset=utf-8');
-    if (req.headers['if-none-match'] === pkg.etag) return reply.code(304).send();
-    if (/\bgzip\b/.test(req.headers['accept-encoding'] || '')) return reply.header('Content-Encoding', 'gzip').send(pkg.gzip);
-    return reply.send(pkg.body);
-  });
-
   return app;
 }
 

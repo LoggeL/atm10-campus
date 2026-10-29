@@ -5,7 +5,7 @@ import { gzipSync } from 'node:zlib';
 import { createHash } from 'node:crypto';
 import { cellStatuses, overlapCellKeys } from './analysis.js';
 import { blockStyle, MATERIALS } from './blockstyle.js';
-import { loadViewerAssets } from './importer.js';
+import { loadViewerExtras } from './importer.js';
 
 export function sceneJson(campus, snapshotId) {
   const status = campus.status();
@@ -27,7 +27,7 @@ export function sceneJson(campus, snapshotId) {
   });
   const styles = {};
   for (const n of names) styles[n] = blockStyle(n);
-  const extras = loadViewerAssets(campus.config.dataDir)?.extras;
+  const extras = loadViewerExtras(campus.config.dataDir);
   const pois = (extras?.walkDestinations?.destinations || []).filter(d => Array.isArray(d.position)).map(d => ({
     id: String(d.id), label: d.label || String(d.id), position: d.position, direction: d.direction || [0, 0, -1],
   }));

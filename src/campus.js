@@ -32,7 +32,7 @@ export class Campus {
     mkdirSync(join(config.dataDir, 'package'), { recursive: true });
   }
 
-  invalidate() { this.statusCache = null; this.viewerCache = null; this.binCache = null; this.knownNamesCache = null; }
+  invalidate() { this.statusCache = null; this.binCache = null; this.knownNamesCache = null; }
 
   // ---------- blueprints ----------
   versionPath(bpId, version) { return join(this.config.dataDir, 'blueprints', bpId, `v${version}.nbt`); }

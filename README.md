@@ -7,7 +7,6 @@ Web-App auf der HomeBox für das Campus-Redesign unseres ATM10-Servers:
 - **Konfliktanalyse** je Bauplan gegen Live: Fortschritt, Maschinen/Block-Entities im Weg, seit Planung geänderte Zellen, Überlappungen zwischen Bauplänen, Bearbeitungskonflikte (409 bei veralteter `baseVersion`).
 - **3D-Viewer** (`/viewer`, three.js): texturierte Voxel-Chunks (Greedy-Meshing + Ambient Occlusion im Web-Worker), Tageszeit mit Sonnenschatten, leuchtende Lampen (Bloom), Orbit/Fliegen/Laufen mit Kollision, Höhenschnitt, Tooltip je Block.
   Kombinierbare Ebenen (Bestand, Abriss, Gebaut, Noch setzen, Ersetzen, Maschine im Weg, Seit Planung geändert, Überlappung) mit Modus je Ebene (Echt / Farbe / Geist / Gedimmt / Aus) und Presets wie „Noch zu bauen“ oder „Konflikte“.
-  Jonnys Original-Viewer bleibt unter `/viewer/classic`.
 - **Agent-Bearbeitung**: Baupläne blockgenau per Operationen ändern (`set`, `fill`, `replace`, `clear`, `void`, `copy`, mit `dryRun`-Vorschau und Analyse), als ASCII-Schichten oder JSON lesen, echten Bestand abfragen.
 - **Login per Einladung**, persönliche **API-Tokens** für Agents (`/docs`, `/api/openapi.json`).
 

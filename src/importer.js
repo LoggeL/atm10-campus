@@ -1,5 +1,4 @@
-// Imports a self-contained viewer HTML (Jonny's export): blueprints become versions, the rest becomes viewer extras,
-// and the HTML minus its embedded data becomes the viewer template.
+// Imports a self-contained viewer HTML (Jonny's export): blueprints become versions, the rest (e.g. places) becomes viewer extras.
 import { writeFileSync, readFileSync, existsSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { createHash } from 'node:crypto';
@@ -34,32 +33,12 @@ export function extractPackage(html) {
   let pkg;
   try { pkg = JSON.parse(html.slice(start, end)); } catch (e) { throw new HttpError(422, 'EMBEDDED_PACKAGE ist kein gültiges JSON: ' + e.message); }
   if (!pkg.manifest || !Array.isArray(pkg.files)) throw new HttpError(422, 'Paket enthält kein manifest/files.');
-  return { pkg, template: html.slice(0, start) + 'window.CAMPUS_PACKAGE' + html.slice(end) };
-}
-
-// Placeholders the server fills per request. Missing optional patches only produce warnings.
-export function patchTemplate(template, sourceWorldDate) {
-  const warnings = [];
-  let t = template;
-  // The export hardcodes its world date ("vom 18.10.2026") in texts; the served Bestand is a live snapshot instead.
-  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(sourceWorldDate || '');
-  if (m) t = t.split(`${m[3]}.${m[2]}.${m[1]}`).join('{{CAMPUS_CONTEXT_DATE}}');
-  const coreTag = t.indexOf('<script id="nbt-core">');
-  const firstScript = coreTag >= 0 ? coreTag : t.indexOf('<script');
-  if (firstScript < 0) throw new HttpError(422, 'Viewer enthält kein <script>.');
-  t = t.slice(0, firstScript) + '{{CAMPUS_PACKAGE_SCRIPT}}\n' + t.slice(firstScript);
-  const badge = /<span class="badge">[^<]*<\/span>/;
-  if (badge.test(t)) t = t.replace(badge, '{{CAMPUS_NAV}}<span class="badge">{{CAMPUS_BADGE}}</span>');
-  else { t = t.replace('</header>', '{{CAMPUS_NAV}}</header>'); warnings.push('Badge im Header nicht gefunden; Navigation ans Header-Ende gesetzt.'); }
-  const notice = /\$\('contextNoticeTitle'\)\.textContent='[^']*';/;
-  if (notice.test(t)) t = t.replace(notice, "$('contextNoticeTitle').textContent='Bestand · '+(meta.label||'')+(meta.capturedAt?' · '+new Date(meta.capturedAt).toLocaleString('de-DE',{dateStyle:'medium',timeStyle:'short'}):'');");
-  else warnings.push('Bestand-Titel nicht gefunden; Datum im Viewer bleibt statisch.');
-  return { template: t, warnings };
+  return pkg;
 }
 
 export function importHtml(campus, html, { actor, baseSnapshotId, force = false, note } = {}) {
-  const { pkg, template: raw } = extractPackage(html);
-  const { template, warnings } = patchTemplate(raw, pkg.manifest?.source_world_date);
+  const pkg = extractPackage(html);
+  const warnings = [];
   const { manifest, files, context, ...rest } = pkg;
   const { modules = [], ...manifestGlobals } = manifest;
   const byFile = new Map(modules.map(m => [m.file, m]));
@@ -97,16 +76,13 @@ export function importHtml(campus, html, { actor, baseSnapshotId, force = false,
       skippedConflicts: results.skippedConflicts.length, errors: results.errors.length, warnings }));
   const pid = Number(info.lastInsertRowid);
   writeFileSync(join(dir, `extras-${pid}.json`), JSON.stringify(extras));
-  writeFileSync(join(dir, `template-${pid}.html`), template);
   writeFileSync(join(dir, 'extras.json'), JSON.stringify(extras));
-  writeFileSync(join(dir, 'template.html'), template);
   logActivity(campus.db, actor, 'package.import', String(pid), { uiVersion, created: results.created.length, updated: results.updated.length, skippedConflicts: results.skippedConflicts.length });
   campus.invalidate();
   return { packageId: pid, uiVersion, ...results };
 }
 
-export function loadViewerAssets(dataDir) {
-  const dir = join(dataDir, 'package');
-  if (!existsSync(join(dir, 'template.html'))) return null;
-  return { template: readFileSync(join(dir, 'template.html'), 'utf8'), extras: JSON.parse(readFileSync(join(dir, 'extras.json'), 'utf8')) };
+export function loadViewerExtras(dataDir) {
+  const file = join(dataDir, 'package', 'extras.json');
+  return existsSync(file) ? JSON.parse(readFileSync(file, 'utf8')) : null;
 }
