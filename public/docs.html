@@ -66,7 +66,7 @@ curl -s -X POST -H "$H" -H "content-type: application/json" $CAMPUS_URL/api/blue
 <p>Die Materialliste vergleicht die Baupläne mit dem Live-Bestand und zählt, was noch fehlt – als <em>Items</em> (Wandfackel → Fackel, Türen und Betten einmal, doppelte Stufen zweimal, Wasser → Eimer, Create-Bänder → Bandverbinder + Wellen, ummantelte Wellen → Welle + Gehäuse). Zellen, die mehrere ausgewählte Baupläne gemeinsam haben, zählen einmal. Die Rest-NBT enthält nur Blöcke, die noch fehlen, hat aber dieselbe Größe und denselben <span class="mono">origin</span> wie der volle Bauplan: an derselben Stelle platzieren, und die Schematicannon setzt im normalen Modus nur noch den Rest. Entities (Rahmen, Rüstungsständer) sind nicht enthalten, damit sie nicht doppelt gesetzt werden.</p>
 <pre>H="Authorization: Bearer $CAMPUS_TOKEN"
 
-# Was fehlt für einen Bauplan? (json | text | csv)
+# Was fehlt für einen Bauplan? (json | text | csv | html mit Blockbildern)
 curl -s -H "$H" "$CAMPUS_URL/api/blueprints/01_Technikhof_P01/materials?format=text"
 
 # … für mehrere oder alle Baupläne (ohne ids = ganzer Campus)

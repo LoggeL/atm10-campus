@@ -1,0 +1,144 @@
+{
+  "rechiseled:quartz_block_small_tiles": {
+    "name": "Small Quartz Block Tiles",
+    "icon": "/assets/material-icons/rechiseled__quartz_block_small_tiles.png",
+    "connecting": false
+  },
+  "minecraft:smooth_quartz": {
+    "name": "Smooth Quartz Block",
+    "icon": "/assets/material-icons/minecraft__smooth_quartz.png"
+  },
+  "create:polished_cut_limestone": {
+    "name": "Polished Cut Limestone",
+    "icon": "/assets/material-icons/create__polished_cut_limestone.png",
+    "connecting": false
+  },
+  "create:industrial_iron_block": {
+    "name": "Block of Industrial Iron",
+    "icon": "/assets/material-icons/create__industrial_iron_block.png"
+  },
+  "create:polished_cut_tuff": {
+    "name": "Polished Cut Tuff",
+    "icon": "/assets/material-icons/create__polished_cut_tuff.png",
+    "connecting": false
+  },
+  "minecraft:gold_block": {
+    "name": "Block of Gold",
+    "icon": "/assets/material-icons/minecraft__gold_block.png"
+  },
+  "create:polished_cut_asurine": {
+    "name": "Polished Cut Asurine",
+    "icon": "/assets/material-icons/create__polished_cut_asurine.png",
+    "connecting": false
+  },
+  "chipped:raster_cyan_stained_glass": {
+    "name": "Raster Cyan Stained Glass",
+    "icon": "/assets/material-icons/chipped__raster_cyan_stained_glass.png"
+  },
+  "rechiseled:quartz_block_stripes": {
+    "name": "Quartz Block Stripes",
+    "icon": "/assets/material-icons/rechiseled__quartz_block_stripes.png",
+    "connecting": false
+  },
+  "minecraft:cyan_stained_glass": {
+    "name": "Cyan Stained Glass",
+    "icon": "/assets/material-icons/minecraft__cyan_stained_glass.png"
+  },
+  "chipped:ornate_purple_stained_glass": {
+    "name": "Ornate Purple Stained Glass",
+    "icon": "/assets/material-icons/chipped__ornate_purple_stained_glass.png"
+  },
+  "rechiseled:obsidian_bordered_connecting": {
+    "name": "Bordered Obsidian",
+    "icon": "/assets/material-icons/rechiseled__obsidian_bordered_connecting.png",
+    "connecting": true
+  },
+  "rechiseled:amethyst_block_tiles": {
+    "name": "Amethyst Tiles",
+    "icon": "/assets/material-icons/rechiseled__amethyst_block_tiles.png",
+    "connecting": false
+  },
+  "rechiseled:quartz_block_tiles": {
+    "name": "Quartz Block Tiles",
+    "icon": "/assets/material-icons/rechiseled__quartz_block_tiles.png",
+    "connecting": false
+  },
+  "chipped:framed_sea_lantern": {
+    "name": "Framed Sea Lantern",
+    "icon": "/assets/material-icons/chipped__framed_sea_lantern.png"
+  },
+  "minecraft:grass_block": {
+    "name": "Grass Block",
+    "icon": "/assets/material-icons/minecraft__grass_block.png"
+  },
+  "rechiseled:basalt_tiles": {
+    "name": "Basalt Tiles",
+    "icon": "/assets/material-icons/rechiseled__basalt_tiles.png",
+    "connecting": false
+  },
+  "chipped:inlayed_glowstone": {
+    "name": "Inlayed Glowstone",
+    "icon": "/assets/material-icons/chipped__inlayed_glowstone.png"
+  },
+  "minecraft:quartz_stairs": {
+    "name": "Quartz Stairs",
+    "icon": "/assets/material-icons/minecraft__quartz_stairs.png"
+  },
+  "minecraft:ladder": {
+    "name": "Ladder",
+    "icon": "/assets/material-icons/minecraft__ladder.png"
+  },
+  "chipped:carved_blackstone": {
+    "name": "Carved Blackstone",
+    "icon": "/assets/material-icons/chipped__carved_blackstone.png"
+  },
+  "chipped:flat_blackstone_tiles": {
+    "name": "Flat Blackstone Tiles",
+    "icon": "/assets/material-icons/chipped__flat_blackstone_tiles.png"
+  },
+  "chipped:ornate_black_stained_glass": {
+    "name": "Ornate Black Stained Glass",
+    "icon": "/assets/material-icons/chipped__ornate_black_stained_glass.png"
+  },
+  "chipped:ornate_blackstone_pillar": {
+    "name": "Ornate Blackstone Pillar",
+    "icon": "/assets/material-icons/chipped__ornate_blackstone_pillar.png"
+  },
+  "connectedglass:clear_glass_black": {
+    "name": "Clear Black Stained Glass",
+    "icon": "/assets/material-icons/connectedglass__clear_glass_black.png",
+    "connecting": true
+  },
+  "create:polished_cut_scoria_stairs": {
+    "name": "Polished Cut Scoria Stairs",
+    "icon": "/assets/material-icons/create__polished_cut_scoria_stairs.png",
+    "connecting": false
+  },
+  "minecraft:black_candle": {
+    "name": "Black Candle",
+    "icon": "/assets/material-icons/minecraft__black_candle.png"
+  },
+  "create:polished_cut_calcite": {
+    "name": "Polished Cut Calcite",
+    "icon": "/assets/material-icons/create__polished_cut_calcite.png",
+    "connecting": false
+  },
+  "rechiseledcreate:calcite_cut_polished_connecting": {
+    "name": "Polished Cut Calcite",
+    "icon": "/assets/material-icons/rechiseledcreate__calcite_cut_polished_connecting.png",
+    "connecting": true
+  },
+  "create:polished_cut_calcite_stairs": {
+    "name": "Polished Cut Calcite Stairs",
+    "icon": "/assets/material-icons/create__polished_cut_calcite_stairs.png",
+    "connecting": false
+  },
+  "chipped:smooth_stone_bricks": {
+    "name": "Smooth Stone Bricks",
+    "icon": "/assets/material-icons/chipped__smooth_stone_bricks.png"
+  },
+  "minecraft:verdant_froglight": {
+    "name": "Verdant Froglight",
+    "icon": "/assets/material-icons/minecraft__verdant_froglight.png"
+  }
+}

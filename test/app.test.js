@@ -36,7 +36,7 @@ const req = async (method, url, { body, headers = {}, token, raw } = {}) => {
   return { status: r.statusCode, json: raw ? null : (r.headers['content-type']?.includes('json') ? r.json() : null), body: r.rawPayload, headers: r.headers, cookies: r.cookies };
 };
 
-test.after(async () => { await app.close(); rmSync(tmp, { recursive: true, force: true }); });
+test.after(async () => { await app.close(); app.campus.db.close(); rmSync(tmp, { recursive: true, force: true }); });
 
 test('bootstrap admin, snapshot, blueprints, tokens, conflicts, import', async t => {
   assert.equal((await req('GET', '/api/status')).status, 401);
@@ -183,5 +183,5 @@ test('seed: baseline snapshot and first import on an empty instance', async () =
     assert.equal(bp.length, 1);
     assert.equal(bp[0].current.baseSnapshotId, snaps[0].id);
     assert.equal(app2.campus.db.prepare('SELECT COUNT(*) AS n FROM packages').get().n, 1);
-  } finally { await app2.close(); rmSync(dir, { recursive: true, force: true }); }
+  } finally { await app2.close(); app2.campus.db.close(); rmSync(dir, { recursive: true, force: true }); }
 });

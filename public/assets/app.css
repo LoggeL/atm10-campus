@@ -77,5 +77,14 @@ pre{background:#10202b;border:1px solid var(--line);border-radius:8px;padding:10
 .cannon select{max-width:100%}
 .short{font-size:12px;margin:6px 0 0;padding:0;list-style:none;display:grid;gap:2px}
 .short .warn{color:var(--amber)}
+.material-table{overflow:auto}
+.material-label{display:flex;align-items:center;gap:12px;min-width:280px}
+.material-icon{display:block;flex:0 0 48px;width:48px;height:48px;object-fit:contain;image-rendering:pixelated;background:#243340;border:1px solid var(--line);border-radius:6px}
+.material-name{font-weight:600;margin-bottom:3px}
+.material-name .badge{font-weight:400;margin:2px 0 2px 6px}
+.material-label .mono{overflow-wrap:anywhere}
+.material-unknown{display:grid;place-items:center;color:var(--muted);font-size:24px}
+.materials-page td.num{white-space:nowrap}
+@media print{.materials-page{background:white;color:black}.materials-page .toolbar,.materials-page header .btn{display:none}.materials-page .panel,.materials-page th{background:white}.materials-page .material-table{overflow:visible;padding:0}.materials-page .muted{color:#555}.materials-page th{position:static}}
 .hide{display:none!important}
 @media (max-width:700px){.cannons{grid-template-columns:1fr}header.top,nav.tabs,main{padding-left:16px;padding-right:16px}.kv{grid-template-columns:1fr}.hide-sm{display:none}}

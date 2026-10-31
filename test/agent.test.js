@@ -34,7 +34,7 @@ const req = async (method, url, { body, token } = {}) => {
   const r = await app.inject({ method, url, payload: body && JSON.stringify(body), headers: body ? { ...h, 'content-type': 'application/json' } : h });
   return { status: r.statusCode, json: r.headers['content-type']?.includes('json') ? r.json() : null, text: r.body, headers: r.headers, raw: r.rawPayload };
 };
-test.after(async () => { await app.close(); rmSync(tmp, { recursive: true, force: true }); });
+test.after(async () => { await app.close(); app.campus.db.close(); rmSync(tmp, { recursive: true, force: true }); });
 
 test('agent edits, readable views and viewer data', async t => {
   const reg = await req('POST', '/api/auth/register', { body: { code: config.bootstrapInvite, username: 'agentadmin', password: 'sehr-geheim-123' } });
@@ -154,6 +154,15 @@ test('agent edits, readable views and viewer data', async t => {
     assert.match(csv.headers['content-type'], /text\/csv/);
     assert.ok(csv.text.startsWith('\ufeffItem;Fehlt'));
     assert.match(csv.text, /minecraft:torch;1;/);
+    const illustrated = await req('GET', '/api/materials?ids=40_Mat&format=html', { token: read });
+    assert.equal(illustrated.status, 200);
+    assert.match(illustrated.headers['content-type'], /text\/html/);
+    assert.equal(illustrated.headers['cache-control'], 'no-store');
+    assert.match(illustrated.text, /Materialliste/);
+    assert.match(illustrated.text, /minecraft:torch/);
+    const singleHtml = await req('GET', '/api/blueprints/40_Mat/materials?format=html', { token: read });
+    assert.match(singleHtml.headers['content-type'], /text\/html/);
+    assert.match(singleHtml.text, /40_Mat/);
     const multi = (await req('GET', '/api/materials?ids=40_Mat,30_Kiosk', { token: read })).json;
     assert.deepEqual(multi.blueprints, ['40_Mat', '30_Kiosk']);
     assert.deepEqual(multi.items.find(r => r.item === 'minecraft:oak_planks').by, { '30_Kiosk': 8 });

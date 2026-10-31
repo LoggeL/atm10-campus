@@ -5,6 +5,7 @@ import { latestStock } from './me-stock.js';
 import { requireActor, HttpError } from './auth.js';
 import { zipStore } from './zip.js';
 import { now } from './db.js';
+import { materialsHtml } from './materials-html.js';
 
 const flag = (v, dflt) => (v === undefined || v === '' ? dflt : !/^(0|false|no|nein)$/i.test(String(v)));
 
@@ -73,7 +74,8 @@ export function registerMaterialRoutes(app, campus) {
   };
   const stockFor = q => (flag(q.me, true) ? latestStock(campus.db) : null);
 
-  const send = (reply, q, report, title, fileBase) => {
+  const send = (reply, q, report, title, fileBase, requestUrl) => {
+    if (q.format === 'html') return reply.type('text/html; charset=utf-8').header('Cache-Control', 'no-store').send(materialsHtml(report, title, requestUrl));
     if (q.format === 'text') return reply.type('text/plain; charset=utf-8').send(materialsText(report, title));
     if (q.format === 'csv') {
       return reply.type('text/csv; charset=utf-8').header('Content-Disposition', `attachment; filename="${fileBase}-material.csv"`).send(materialsCsv(report));
@@ -89,7 +91,7 @@ export function registerMaterialRoutes(app, campus) {
     const report = withStock(materialsReport(mergeMaterials([{ id: bp.id, result: materialsOf(bp, v, snap) }]), { includeBuilt: flag(req.query.all, false) }), stockFor(req.query));
     for (const r of report.items) delete r.by;
     const out = { blueprint: bp.id, name: bp.name, version: v.version, snapshot: { id: snap.id, label: snap.label, worldTime: snap.worldTime }, ...report };
-    return send(reply, req.query, out, `${bp.name} (${bp.id} v${v.version}) · Snapshot #${snap.id}`, bp.id);
+    return send(reply, req.query, out, `${bp.name} (${bp.id} v${v.version}) · Snapshot #${snap.id}`, bp.id, req.url);
   });
 
   app.get('/api/materials', async (req, reply) => {
@@ -99,7 +101,7 @@ export function registerMaterialRoutes(app, campus) {
     const report = withStock(materialsReport(aggregate(bps, snap), { includeBuilt: flag(req.query.all, false) }), stockFor(req.query));
     const out = { blueprints: bps.map(b => b.id), snapshot: { id: snap.id, label: snap.label, worldTime: snap.worldTime }, ...report };
     const title = bps.length === 1 ? bps[0].name : `${bps.length} Baupläne`;
-    return send(reply, req.query, out, `${title} · Snapshot #${snap.id}`, bps.length === 1 ? bps[0].id : 'campus');
+    return send(reply, req.query, out, `${title} · Snapshot #${snap.id}`, bps.length === 1 ? bps[0].id : 'campus', req.url);
   });
 
   const remainingOpts = q => ({ clear: flag(q.clear, false), skipBlocked: flag(q.skipBlocked, true), skipChanged: flag(q.skipChanged, false) });
