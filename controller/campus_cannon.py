@@ -114,6 +114,7 @@ class CannonBridge:
         printer = n.get('Printer')
         return {'state':n.get('State'), 'amountPlaced':n.get('AmountPlaced'),
                 'amountToPlace':n.get('AmountToPlace'), 'printer':printer,
+                'flyingBlocks':len(n['FlyingBlocks']) if isinstance(n.get('FlyingBlocks'),list) else None,
                 'item':item.get('id'), 'components':components, 'options': ({'replace_mode':n['Options'].get('replace_mode'), 'skip_missing':bool(n['Options'].get('skip_missing')), 'replace_block_entities':bool(n['Options'].get('replace_block_entities'))} if isinstance(n.get('Options'),dict) else None), 'at':time.time(),
                 'fileHash':self.file_hash(b['owner'], components.get('create:schematic_file'))}
 

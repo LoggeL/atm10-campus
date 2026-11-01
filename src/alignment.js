@@ -3,6 +3,7 @@ import { createHmac, randomBytes } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
 import { requireActor, HttpError } from './auth.js';
 import { logActivity, now } from './db.js';
+import { cannonRange } from './cannon-range.js';
 
 export function bridgeClient(config) {
   return async (action, obj) => {
@@ -52,7 +53,7 @@ export function registerAlignment(app, campus, schematics) {
     const sc=schematics.view(r.name);
     if(sc.settings.enabled) {
       const job=sc.job;
-      if(!job || job.state==='empty')return null;
+      if(!job || ['empty','outofrange'].includes(job.state))return null;
       return {file:job.fileName,sha256:job.sha256,owner:binding.owner,anchor:job.origin,rotation:'none',mirror:'none',blueprint:job.blueprint,version:job.version,assignment:r.assignment,
         options:{replace_mode:sc.settings.replaceMode,skip_missing:sc.settings.skipMissing,replace_block_entities:!sc.settings.protectBlockEntities}};
     }
@@ -67,7 +68,8 @@ export function registerAlignment(app, campus, schematics) {
       const result=await request('inspect',{station:r.name});
       if(!same(binding,result.binding))throw new HttpError(409,'Host-Registry weicht von bestätigter Campus-Bindung ab.');
       if(row(name)?.assignment!==r.assignment || record(name)?.binding_json!==rec.binding_json)throw new HttpError(409,'Auftrag während Live-Probe geändert.');
-      const message=desired?(rec.last_error || verifyAlignment(desired,result.observed,JSON.parse(rec.applied_json||'null'))):'Kein Bauplan gewählt.';
+      const rangeJob=schematics.view(name).job;
+      const message=rangeJob?.state==='outofrange' && schematics.settingsFor(name).enabled ? rangeJob.message : desired?(rec.last_error || verifyAlignment(desired,result.observed,JSON.parse(rec.applied_json||'null'))):'Kein Bauplan gewählt.';
       return {enabled:true,state:message?'pending':'aligned',binding,desired,observed:result.observed,message:message||'Live geprüft: exakte Revision, Owner und Ausrichtung stimmen.'};
     }catch(e){return {enabled:true,state:e.statusCode===409?'mismatch':'offline',binding,desired,observed:null,message:e.message};}
   };
@@ -82,7 +84,7 @@ export function registerAlignment(app, campus, schematics) {
       const rec=record(name),r=check(name);
       if(!rec)throw new HttpError(409,'Zuerst den Kanonen-Block bestätigen.');
       const sc=schematics.sync(r,campus.latestSnapshot('live'),bindingFor(name));job=sc.job;
-      if(!sc.settings.enabled || !job || ['empty','ready'].includes(job.state))return view(name);
+      if(!sc.settings.enabled || !job || ['empty','ready','outofrange'].includes(job.state))return view(name);
       const desired=desiredFor(r,rec),{assignment,options,...target}=desired;
       db.prepare('UPDATE cannon_alignment SET applied_json=NULL,last_error=NULL WHERE name=?').run(name);
       const result=await request('prepare',{station:r.name,desired:target,options,size:job.size,nbtBase64:schematics.bytes(job).toString('base64')});
@@ -104,6 +106,8 @@ export function registerAlignment(app, campus, schematics) {
     try{
       const rec=record(name),r=check(name);if(!rec)throw new HttpError(409,'Admin muss zuerst den Block binden.');
       const desired=desiredFor(r,rec);if(!desired)throw new HttpError(409,'Zuerst Bauplan auswählen.');
+      const range=cannonRange(JSON.parse(rec.binding_json),desired.anchor);
+      if(range.state!=='inrange')throw new HttpError(409,range.message);
       // Revoke prior receipt before issuing any write. Failures remain fail-closed.
       db.prepare('UPDATE cannon_alignment SET applied_json=NULL,last_error=NULL WHERE name=?').run(name);
       const {assignment,...target}=desired;
@@ -118,10 +122,11 @@ export function registerAlignment(app, campus, schematics) {
   };
   const gate=async(name,plan)=>{
     const alignment=await view(name);
+    if(plan.state==='outofrange'){alignment.state='outofrange';alignment.message=plan.message;}
     if(alignment.enabled && (row(name)?.assignment!==plan.assignment || applying.has(name.toLowerCase()))) {alignment.state='pending';alignment.message='Auftrag geändert oder Apply läuft; Plan erneut abrufen.';}
     if(alignment.enabled){alignment.leaseSeconds=10;plan={...plan,intervals:{...plan.intervals,plan:5}};}
-    if(!alignment.enabled || alignment.state==='aligned')return {...plan,alignment};
-    return {...plan,state:'alignment',message:alignment.message,items:[],done:false,alignment,options:{...plan.options,paused:true,gunpowder:0,autoCraft:false}};
+    if(plan.state!=='outofrange' && (!alignment.enabled || alignment.state==='aligned'))return {...plan,alignment};
+    return {...plan,state:plan.state==='outofrange'?'outofrange':'alignment',message:alignment.message,items:[],done:false,alignment,options:{...plan.options,paused:true,gunpowder:0,autoCraft:false}};
   };
   app.get('/api/cannons/:name/alignment',async req=>{requireActor(req,'read');check(req.params.name);return view(req.params.name);});
   app.post('/api/cannons/:name/alignment/probe',async req=>{
@@ -157,5 +162,20 @@ export function registerAlignment(app, campus, schematics) {
     }
   },10000);timer.unref();});
   app.addHook('onClose',async()=>{clearInterval(timer);});
-  return {view,gate,apply,prepare,admin,binding:bindingFor,busy:name=>applying.has(name.toLowerCase()),enabled:name=>!!record(name)};
+  const withStationsLocked=async(names,fn)=>{
+    const keys=[...new Set(names.map(n=>check(n).name.toLowerCase()))];
+    if(keys.some(n=>applying.has(n)))throw new HttpError(409,'Eine Kanone wird gerade vorbereitet. Bitte kurz warten.');
+    keys.forEach(n=>applying.add(n));
+    try{return await fn();}finally{keys.forEach(n=>applying.delete(n));}
+  };
+  const inspect=async name=>{
+    const binding=bindingFor(name);
+    if(!binding)throw new HttpError(409,'Zuerst den Kanonen-Block bestätigen.');
+    const result=await request('inspect',{station:check(name).name});
+    if(!same(binding,result.binding) || !same(binding,bindingFor(name)))throw new HttpError(409,'Blockbindung wurde geändert. Bitte erneut prüfen.');
+    if(!Number.isFinite(result.observed?.at) || Math.abs(Date.now()/1000-result.observed.at)>15)throw new HttpError(409,'Live-Prüfung fehlt oder ist veraltet.');
+    return result.observed;
+  };
+  const revoke=name=>db.prepare('UPDATE cannon_alignment SET applied_json=NULL,last_error=NULL,updated_at=? WHERE name=?').run(now(),name);
+  return {view,gate,apply,prepare,admin,inspect,revoke,withStationsLocked,binding:bindingFor,busy:name=>applying.has(name.toLowerCase()),enabled:name=>!!record(name)};
 }

@@ -4,6 +4,7 @@ import { mkdirSync, writeFileSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { HttpError } from './auth.js';
 import { now, logActivity } from './db.js';
+import { cannonRange } from './cannon-range.js';
 
 const DEFAULTS = { enabled: false, autoUpdate: true, replaceMode: 2, skipMissing: false, protectBlockEntities: true };
 const hash = bytes => createHash('sha256').update(bytes).digest('hex');
@@ -55,7 +56,12 @@ export function createSchematics(campus, mat) {
     const signature = hash(JSON.stringify({ blueprint: bp.id, version: v.version, settings, skipBlocked, binding }));
     const old = jobFor(row.name);
     if (!force && old?.signature === signature) return view(row.name);
-    if (Math.hypot(...v.origin.map((n, i) => n - [binding.x, binding.y, binding.z][i])) >= 256) throw new HttpError(400, 'Bauplan-Ursprung muss weniger als 256 Blöcke von der Kanone entfernt sein.');
+    const range = cannonRange(binding, v.origin);
+    if (range.state === 'outofrange') {
+      saveJob(row.name, { id: randomUUID(), signature, state: 'outofrange', message: range.message, cannon: row.name,
+        blueprint: bp.id, version: v.version, origin: v.origin, size: v.size, owner: binding.owner, createdAt: now() });
+      return view(row.name);
+    }
     const rest = mat.remainingOf(bp, v, snap, { skipBlocked });
     const id = randomUUID(), fileName = `campus_${id}.nbt`;
     if (rest.bytes.length > 16 * 1024 * 1024) throw new HttpError(400, 'Rest-Schematic ist größer als 16 MB.');
@@ -80,5 +86,5 @@ export function createSchematics(campus, mat) {
     const job = jobFor(name);
     if (job?.id === id) saveJob(name, { ...job, state: 'waiting', message: String(message).slice(0, 400), updatedAt: now() });
   };
-  return { view, configure, sync, ready, waiting, settingsFor, bytes: job => readFileSync(join(dir, job.fileName)) };
+  return { view, configure, sync, ready, waiting, settingsFor, clear: name => saveJob(name, null), bytes: job => readFileSync(join(dir, job.fileName)) };
 }

@@ -1,4 +1,5 @@
 'use strict';
+import { cannonRangeCard } from './cannon-range.js?v=20261101-range-1';
 import { coordinateFields, placementCard, placementValues, coordinateListText } from './placement.js?v=20261101-coordinates-1';
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -207,7 +208,7 @@ $('snapNow').onclick = guard(async () => {
 });
 
 // ---------- cannons ----------
-const CANNON_STATE = { alignment: 'Ausrichtung gesperrt', offline: 'Computer offline', nocomputer: 'Kein Computer', feeding: 'Liefert', preparing: 'Schematic vorbereiten', waiting: 'Wartet auf Material', full: 'Kiste voll', done: 'Fertig', paused: 'Pausiert', unassigned: 'Kein Bauplan', missing: 'Bauplan fehlt', nosnapshot: 'Kein Live-Bestand', error: 'Fehler', start: 'Startet' };
+const CANNON_STATE = { outofrange: 'Außer Reichweite', alignment: 'Ausrichtung gesperrt', offline: 'Computer offline', nocomputer: 'Kein Computer', feeding: 'Liefert', preparing: 'Schematic vorbereiten', waiting: 'Wartet auf Material', full: 'Kiste voll', done: 'Fertig', paused: 'Pausiert', unassigned: 'Kein Bauplan', missing: 'Bauplan fehlt', nosnapshot: 'Kein Live-Bestand', error: 'Fehler', start: 'Startet' };
 const shortName = item => String(item).replace(/^minecraft:/, '');
 let cannonTimer = null;
 async function loadCannons() {
@@ -226,7 +227,7 @@ function scheduleCannons() {
   clearTimeout(cannonTimer);
   cannonTimer = setTimeout(() => {
     if ($('cannonList').closest('.hide')) return;
-    if (document.hidden || document.activeElement?.closest?.('.cannon select, .cannon input') || document.querySelector('.schematic-form[data-dirty]')) return scheduleCannons();
+    if (document.hidden || document.activeElement?.closest?.('.cannon select, .cannon input') || document.querySelector('.schematic-form[data-dirty], button[data-act="transfer"]:disabled')) return scheduleCannons();
     loadCannons().catch(() => scheduleCannons());
   }, 15e3);
 }
@@ -249,10 +250,10 @@ function alignmentCard(c) {
 function cannonCard(c, bpOptions) {
   const o = c.options, st = c.status, t = c.totals, bp = c.blueprint;
   const sc = c.schematic?.settings || {}, job = c.schematic?.job;
-  const jobState = { queued: 'Wartet auf Vorbereitung', applying: 'Wird eingesetzt', waiting: 'Wartet auf Kanone', ready: 'Schematic eingesetzt', empty: 'Kein Rest zu bauen', error: 'Vorbereitung fehlgeschlagen' };
+  const jobState = { outofrange: 'Außer Reichweite', queued: 'Wartet auf Vorbereitung', applying: 'Wird eingesetzt', waiting: 'Wartet auf Kanone', ready: 'Schematic eingesetzt', empty: 'Kein Rest zu bauen', error: 'Vorbereitung fehlgeschlagen' };
   const pct = t && t.start ? Math.max(0, Math.min(100, Math.round((t.start - t.needed) / t.start * 1000) / 10)) : null;
   const live = st && !st.stale && c.online ? st : null;
-  const offline = !c.online && bp && !['done', 'paused'].includes(c.state);
+  const offline = !c.online && bp && !['done', 'paused', 'outofrange'].includes(c.state);
   const state = offline ? (c.lastSeenAt ? 'offline' : 'nocomputer') : c.state === 'feeding' && live ? live.state : c.state;
   const shorts = (live?.shortages || []).map(x => `<li class="${x.crafting ? '' : 'warn'}">${fmt(x.missing)}× ${esc(shortName(x.item))} · im ME ${fmt(x.inME)}${x.crafting ? ' · wird gecraftet' : x.craftable ? ' · craftbar' : ''}${x.error ? ` · <span class="err">${esc(x.error)}</span>` : ''}</li>`).join('');
   const next = (c.items || []).slice(0, 6).map(i => `${esc(shortName(i.item))} ${fmt(i.needed)}`).join(' · ');
@@ -264,7 +265,8 @@ function cannonCard(c, bpOptions) {
       ${c.restNbt ? `<a class="btn small primary" href="${esc(c.restNbt)}" download>Rest-NBT</a>` : ''}</div>
     ${bp ? `${placementCard(bp, 'Einsetzkoordinaten · zugewiesene Schematic')}<div style="margin-top:10px"><div class="bar"><i style="width:${pct ?? 0}%"></i></div>
       <div class="muted" style="font-size:12px;margin-top:3px">${pct == null ? '–' : pct.toLocaleString('de-DE') + ' %'} · fehlt ${fmt(t.needed)} Items in ${fmt(t.kinds)} Sorten</div></div>` : ''}
-    <div class="row" style="margin-top:8px"><span class="badge ${state === 'done' ? 'built' : ['waiting', 'error', 'missing', 'offline', 'nocomputer'].includes(state) ? 'warning' : 'ok'}">${esc(CANNON_STATE[state] || state)}</span>
+    ${cannonRangeCard(c, me?.user?.role === 'admin')}
+    <div class="row" style="margin-top:8px"><span class="badge ${state === 'done' ? 'built' : ['waiting', 'error', 'missing', 'offline', 'nocomputer', 'outofrange'].includes(state) ? 'warning' : 'ok'}">${esc(CANNON_STATE[state] || state)}</span>
       ${live?.chest ? `<span class="muted" style="font-size:12px">Kiste ${fmt(live.chest.used)}/${fmt(live.chest.slots)} Slots</span>` : ''}
       ${c.message ? `<span class="muted" style="font-size:12px">${esc(c.message)}</span>` : ''}${live?.message ? `<span class="muted" style="font-size:12px">${esc(live.message)}</span>` : ''}</div>
     ${shorts ? `<ul class="short">${shorts}</ul>` : ''}
@@ -335,6 +337,19 @@ $('cannonList').addEventListener('click', guard(async e => {
   if (!b || !card) return;
   const name = card.dataset.cannon;
   const alignmentUrl='/api/cannons/'+encodeURIComponent(name)+'/alignment';
+  if (b.dataset.act === 'transfer') {
+    if (!confirm(`Auftrag von ${name} an ${b.dataset.target} verschieben? Beide Kanonen müssen vollständig gestoppt und zurückgesetzt sein. Einstellungen und Bauplan-Ziel werden übernommen. Danach an der Zielkanone Play drücken.`)) return;
+    b.disabled = true;
+    try {
+      const result = await api('/api/cannons/' + encodeURIComponent(name) + '/transfer', { method: 'POST', body: {
+        target: b.dataset.target, sourceAssignment: Number(b.dataset.sourceAssignment), targetAssignment: Number(b.dataset.targetAssignment), baseVersion: Number(b.dataset.version)
+      } });
+      const job = result.target.schematic?.job;
+      toast(job?.state === 'ready' ? `Auftrag an ${result.target.name} verschoben und Schematic eingesetzt.` : `Auftrag an ${result.target.name} verschoben. ${job?.message || 'Vorbereitung wartet.'}`);
+      await loadCannons();
+    } finally { b.disabled = false; }
+    return;
+  }
   if(b.dataset.act==='alignment-probe') {
     const binding={};
     for(const k of ['dimension','x','y','z','owner']) {
@@ -415,7 +430,7 @@ $('tokCreate').onclick = guard(async () => {
 });
 
 // ---------- activity ----------
-const ACTIONS = { 'blueprint.create': 'Bauplan angelegt', 'blueprint.version': 'Neue Version', 'blueprint.meta': 'Metadaten geändert', 'blueprint.archive': 'Archiviert', 'snapshot.capture': 'Snapshot erfasst', 'package.import': 'HTML importiert', 'token.create': 'Token erzeugt', 'token.revoke': 'Token widerrufen', 'invite.create': 'Einladung erzeugt', 'auth.register': 'Account angelegt', 'auth.login': 'Angemeldet', 'user.update': 'Account geändert', 'cannon.assign': 'Kanone zugewiesen', 'cannon.delete': 'Kanone entfernt' };
+const ACTIONS = { 'blueprint.create': 'Bauplan angelegt', 'blueprint.version': 'Neue Version', 'blueprint.meta': 'Metadaten geändert', 'blueprint.archive': 'Archiviert', 'snapshot.capture': 'Snapshot erfasst', 'package.import': 'HTML importiert', 'token.create': 'Token erzeugt', 'token.revoke': 'Token widerrufen', 'invite.create': 'Einladung erzeugt', 'auth.register': 'Account angelegt', 'auth.login': 'Angemeldet', 'user.update': 'Account geändert', 'cannon.assign': 'Kanone zugewiesen', 'cannon.transfer': 'Auftrag verschoben', 'cannon.delete': 'Kanone entfernt' };
 async function loadActivity() {
   const list = await api('/api/activity?limit=200');
   $('actRows').innerHTML = list.filter(a => a.action !== 'auth.login').map(a => `<tr><td>${esc(when(a.at))}</td><td>${esc(a.user || 'System')}</td><td>${esc(a.via)}</td><td>${esc(ACTIONS[a.action] || a.action)}</td><td class="mono">${esc(a.target || '')}</td>

@@ -6,6 +6,7 @@ import { dirname, join } from 'node:path';
 import { requireActor, HttpError } from './auth.js';
 import { now, logActivity, tx } from './db.js';
 import { normalizeStockItems, saveStock, latestStock } from './me-stock.js';
+import { cannonRange, cannonTarget, reachableCannons } from './cannon-range.js';
 
 const ccDir = join(dirname(fileURLToPath(import.meta.url)), '..', 'public', 'cc');
 const NAME = /^[A-Za-z0-9_-]{1,40}$/;
@@ -80,6 +81,12 @@ export function registerStationRoutes(app, campus, mat, alignment, schematics) {
     return r;
   };
   const seen = name => db.prepare('UPDATE cannons SET last_seen_at = ? WHERE name = ?').run(now(), name);
+  const rangeFor = row => {
+    const target = cannonTarget(campus, row, schematics.settingsFor(row.name));
+    const range = cannonRange(alignment.binding(row.name), target?.origin);
+    return { ...range, blueprint: target?.id ?? null, version: target?.version ?? null,
+      candidates: target ? reachableCannons(db.prepare('SELECT * FROM cannons ORDER BY name').all(), row.name, target.origin, alignment.binding, alignment.busy) : [] };
+  };
 
   // Progress baseline: what was missing when the job started (with the skipBlocked option in force).
   const startFor = (bpId, version, options, snap) => {
@@ -89,9 +96,10 @@ export function registerStationRoutes(app, campus, mat, alignment, schematics) {
 
   const planFor = (row, snap) => {
     const schematic = schematics.sync(row, snap, alignment.binding(row.name));
+    const range = rangeFor(row);
     const options = normalizeOptions(JSON.parse(row.options_json || '{}'));
     const base = {
-      cannon: row.name, assignment: row.assignment, options, schematic, script: scriptVersion(), intervals: INTERVALS,
+      cannon: row.name, assignment: row.assignment, options, schematic, range, script: scriptVersion(), intervals: INTERVALS,
       snapshot: snap ? { id: snap.id, capturedAt: snap.capturedAt, worldTime: snap.worldTime } : null,
     };
     const idle = (state, message) => ({ ...base, state, message, blueprint: null, items: [], totals: { needed: 0, kinds: 0, start: 0 }, done: false });
@@ -111,12 +119,12 @@ export function registerStationRoutes(app, campus, mat, alignment, schematics) {
       start = JSON.parse(json);
     }
     return {
-      ...base, state: options.paused ? 'paused' : schematic.settings.enabled && schematic.job?.state !== 'ready' && needed ? 'preparing' : needed ? 'feeding' : 'done', message: null,
+      ...base, state: ['outofrange','dimension'].includes(range.state) ? 'outofrange' : options.paused ? 'paused' : schematic.settings.enabled && schematic.job?.state !== 'ready' && needed ? 'preparing' : needed ? 'feeding' : 'done', message: ['outofrange','dimension'].includes(range.state) ? range.message : null,
       blueprint: { id: bp.id, name: bp.name, version: v.version, currentVersion: bp.currentVersion, origin: v.origin, size: v.size },
       items,
       totals: { needed, kinds: items.length, start: Math.max(start.needed, needed) },
       skipped: { blocked: r.stats.skippedBlocked, changed: r.stats.skippedChanged, unknown: r.stats.unknown },
-      done: needed === 0,
+      done: needed === 0 && !['outofrange','dimension'].includes(range.state),
       restNbt: `/api/blueprints/${encodeURIComponent(bp.id)}/remaining.nbt?version=${v.version}&skipBlocked=${options.skipBlocked ? 1 : 0}`,
     };
   };
@@ -131,9 +139,10 @@ export function registerStationRoutes(app, campus, mat, alignment, schematics) {
       name: row.name, assignment: row.assignment, alignment: alignmentView, createdAt: row.created_at, updatedAt: row.updated_at, lastSeenAt: row.last_seen_at,
       online: !!row.last_seen_at && Date.now() - new Date(row.last_seen_at) < ONLINE_MS,
       options: normalizeOptions(JSON.parse(row.options_json || '{}')),
-      blueprint: plan.blueprint ?? null, state: blocked ? 'alignment' : plan.state, message: blocked ? alignmentView.message : plan.message ?? null, totals: plan.totals ?? null, done: !blocked && !!plan.done,
+      blueprint: plan.blueprint ?? null, state: plan.state === 'outofrange' ? 'outofrange' : blocked ? 'alignment' : plan.state, message: plan.state === 'outofrange' ? plan.message : blocked ? alignmentView.message : plan.message ?? null, totals: plan.totals ?? null, done: !blocked && !!plan.done,
       restNbt: plan.restNbt ?? null, items: plan.items ?? [],
       schematic: plan.schematic ?? schematics.view(row.name),
+      range: plan.range ?? rangeFor(row),
       status: status && status.assignment === row.assignment ? status : status && { ...status, stale: true },
     };
   };
@@ -151,6 +160,55 @@ export function registerStationRoutes(app, campus, mat, alignment, schematics) {
     const r = getRow(req.params.name);
     if (!r) throw new HttpError(404, 'Kanone nicht gefunden: ' + req.params.name);
     return cannonView(r, liveSnap());
+  });
+
+  app.post('/api/cannons/:name/transfer', async req => {
+    const actor = alignment.admin(req), b = req.body || {};
+    const source = getRow(checkName(req.params.name)), target = getRow(checkName(b.target));
+    if (!source || !target) throw new HttpError(404, 'Kanone nicht gefunden.');
+    if (source.name === target.name) throw new HttpError(400, 'Eine andere Kanone wählen.');
+    if (![b.sourceAssignment, b.targetAssignment, b.baseVersion].every(Number.isSafeInteger)) throw new HttpError(400, 'Auftragsnummern und Bauplanversion fehlen. Bitte neu laden.');
+    const fingerprint = r => JSON.stringify([r.blueprint_id, r.version, r.assignment, r.options_json, alignment.binding(r.name)]);
+    const sourceBefore = fingerprint(source), targetBefore = fingerprint(target);
+    const selection = () => {
+      const s = getRow(source.name), t = getRow(target.name);
+      if (fingerprint(s) !== sourceBefore || fingerprint(t) !== targetBefore || s.assignment !== b.sourceAssignment || t.assignment !== b.targetAssignment) throw new HttpError(409, 'Auftrag oder Blockbindung wurde geändert. Bitte neu laden.');
+      const bp = cannonTarget(campus, s, schematics.settingsFor(s.name));
+      if (!bp || bp.version !== b.baseVersion) throw new HttpError(409, 'Bauplanversion wurde geändert. Bitte neu laden.');
+      if (t.blueprint_id) throw new HttpError(409, 'Die Zielkanone hat bereits einen Auftrag.');
+      const status = JSON.parse(t.status_json || 'null');
+      if (!Number.isFinite(Date.parse(t.last_seen_at)) || Date.now() - Date.parse(t.last_seen_at) >= ONLINE_MS || !['1.1.0','1.2.0'].includes(status?.script) || !Number.isFinite(Date.parse(status?.at)) || Date.now() - Date.parse(status.at) >= ONLINE_MS) throw new HttpError(409, 'Ziel-Computer ist offline oder sein Status ist veraltet.');
+      if (!alignment.binding(s.name) || cannonRange(alignment.binding(t.name), bp.origin).state !== 'inrange') throw new HttpError(409, 'Bestätigte Kanonen in der Oberwelt und ein Ziel in Reichweite sind erforderlich.');
+      return { s, t, bp };
+    };
+    const idle = (observed, name) => {
+      const p = observed?.printer;
+      if (observed?.state !== 'STOPPED' || observed.amountPlaced !== 0 || observed.amountToPlace !== 0 || observed.flyingBlocks !== 0 || !p || p.Anchor || p.CurrentPos || !Array.isArray(p.DeferredBlocks) || p.DeferredBlocks.length || p.EntityProgress !== -1 || p.PrintStage !== 'BLOCKS') {
+        throw new HttpError(409, `${name} vollständig stoppen und den Bau zurücksetzen. Eine pausierte oder noch aktive Kanone kann keinen Auftrag übergeben oder übernehmen.`);
+      }
+    };
+    await alignment.withStationsLocked([source.name, target.name], async () => {
+      selection();
+      const snap = liveSnap();
+      if (!snap) throw new HttpError(503, 'Noch kein Live-Snapshot.');
+      const [from, to] = await Promise.all([alignment.inspect(source.name), alignment.inspect(target.name)]);
+      idle(from, source.name); idle(to, target.name);
+      const binding = alignment.binding(target.name), components = to.components || {};
+      if (to.item && !(to.item === 'create:schematic' && components['create:schematic_owner'] === binding.owner && /^campus_[0-9a-f-]{36}\.nbt$/.test(components['create:schematic_file'] || ''))) throw new HttpError(409, 'Das manuelle Schematic zuerst aus der Zielkanone nehmen.');
+      const { s, t, bp } = selection();
+      tx(db, () => {
+        const settings = schematics.settingsFor(s.name);
+        schematics.configure(t.name, { ...settings, enabled: true, autoUpdate: settings.enabled && settings.autoUpdate });
+        db.prepare('UPDATE cannons SET blueprint_id=NULL,version=NULL,assignment=?,start_json=NULL,updated_at=? WHERE name=?').run(nextAssignment(s.assignment), now(), s.name);
+        db.prepare('UPDATE cannons SET blueprint_id=?,version=?,assignment=?,options_json=?,start_json=NULL,updated_at=? WHERE name=?').run(bp.id, bp.version, nextAssignment(t.assignment), s.options_json, now(), t.name);
+        schematics.clear(s.name);
+        alignment.revoke(s.name); alignment.revoke(t.name);
+        schematics.sync(getRow(t.name), snap, alignment.binding(t.name));
+        logActivity(db, actor, 'cannon.transfer', s.name, { target: t.name, blueprint: bp.id, version: bp.version, origin: bp.origin });
+      });
+    });
+    try { await alignment.prepare(target.name, actor); } catch { /* Assignment is queued; a stopped target is retried by the scheduler. */ }
+    return { source: await cannonView(getRow(source.name), liveSnap()), target: await cannonView(getRow(target.name), liveSnap()) };
   });
 
   // Assign a blueprint (pinned to a version) and/or change options. A new blueprint or version starts a new assignment,
