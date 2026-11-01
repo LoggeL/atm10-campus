@@ -14,6 +14,7 @@
 </header>
 <nav class="tabs" role="tablist">
   <button role="tab" data-tab="overview" aria-selected="true">Übersicht</button>
+  <button role="tab" data-tab="coordinates">Koordinaten</button>
   <button role="tab" data-tab="snapshots">Live-Bestand</button>
   <button role="tab" data-tab="cannons">Kanonen</button>
   <button role="tab" data-tab="agent">Agent-Zugang</button>
@@ -35,6 +36,17 @@
       </table></div>
     </div>
     <div class="panel" id="overlapPanel"><h2>Überlappungen zwischen Bauplänen</h2><div id="overlaps" class="muted">–</div></div>
+  </section>
+
+  <section data-pane="coordinates" class="hide">
+    <div class="panel">
+      <h2>Koordinaten zum Einsetzen der Schematics</h2>
+      <p>Diese Werte im <b>Positionsmenü der Schematic</b> eingeben: <b>Drehung 0°</b>, <b>Spiegelung keine</b>. Y ist der unterste Bauplan-Anker, nicht deine Standhöhe. Die Kanone kann woanders stehen.</p>
+      <p class="muted">Hier stehen die aktuellen API-Versionen. Bereits zugewiesene ältere Versionen findest du mit ihren eigenen Koordinaten unter „Kanonen“. Für eine neue Version auch eine neue Schematic im Spiel drucken.</p>
+      <div class="toolbar"><input class="grow" id="coordinateSearch" placeholder="Nummer oder Gebäude suchen …" aria-label="Koordinaten suchen"><button id="coordinateDownload">Liste als TXT herunterladen</button></div>
+      <p class="muted" id="coordinateCount"></p>
+      <div style="overflow:auto"><table class="coordinate-table"><thead><tr><th>Bauplan / Datei</th><th>Version</th><th>Einsetzkoordinaten · Zahl anklicken zum Kopieren</th><th></th></tr></thead><tbody id="coordinateRows"></tbody></table></div>
+    </div>
   </section>
 
   <section data-pane="snapshots" class="hide">
@@ -98,5 +110,5 @@
 <div class="scrim" id="scrim"></div>
 <aside class="drawer" id="drawer" aria-label="Bauplan-Details"></aside>
 <input type="file" id="hiddenFile" accept=".nbt" class="hide">
-<script src="/assets/app.js"></script>
+<script type="module" src="/assets/app.js"></script>
 </body></html>

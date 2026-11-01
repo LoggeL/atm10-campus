@@ -20,7 +20,9 @@ Die **Materialliste** hat zusätzlich eine bebilderte HTML-Ansicht (`/api/materi
 Sie zeigt die exakte Item-ID, Connecting-Variante, Mengen und den Zeitstand von Weltaufnahme/ME-Bestand.
 JSON (Standard), Text und CSV bleiben unverändert verfügbar. Unbekannte Materialien bleiben lesbar und erhalten ein neutrales Platzhalterbild.
 
-Die 33 Materialbilder unter `public/assets/material-icons/` sind aus den tatsächlichen Item-Modellen und Texturen von Minecraft 1.21.1, Rechiseled 1.2.6, Rechiseled Create 1.1.1, Create 6.0.10, Chipped 4.0.2 und Connected Glass 1.1.14 gerendert.
+Die 34 Materialbilder unter `public/assets/material-icons/` sind aus den tatsächlichen Item-Modellen und Texturen von Minecraft 1.21.1, Rechiseled 1.2.6, Rechiseled Create 1.1.1, Create 6.0.10, Chipped 4.0.2 und Connected Glass 1.1.14 gerendert.
+
+Unter `/app#coordinates` stehen die Einsetzkoordinaten aller aktuellen Baupläne mit einzeln kopierbaren X-/Y-/Z-Werten und TXT-Export. Die Bauplan-Details zeigen denselben Anker; Kanonen zeigen ausdrücklich den Anker ihrer zugewiesenen Version, auch wenn eine neuere existiert. Drehung 0°, keine Spiegelung.
 Connecting zeigt jeweils einen einzelnen, noch nicht mit Nachbarblöcken verbundenen Block. Die Texturen stammen von Mojang und den jeweiligen Mod-Autoren; es sind keine generierten Ersatztexturen.
 Zum Aktualisieren `tools/material-items.json` ergänzen und mit Pillow ausführen:
 

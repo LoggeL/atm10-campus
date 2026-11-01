@@ -144,5 +144,9 @@
   "minecraft:quartz_slab": {
     "name": "Quartz Slab",
     "icon": "/assets/material-icons/minecraft__quartz_slab.png"
+  },
+  "minecraft:oxidized_copper": {
+    "name": "Oxidized Copper",
+    "icon": "/assets/material-icons/minecraft__oxidized_copper.png"
   }
 }

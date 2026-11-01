@@ -1,4 +1,5 @@
 'use strict';
+import { coordinateFields, placementCard, placementValues, coordinateListText } from './placement.js';
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const fmt = n => n == null ? '–' : Number(n).toLocaleString('de-DE');
@@ -37,7 +38,7 @@ document.querySelectorAll('nav.tabs button').forEach(b => b.addEventListener('cl
 function showTab(tab) {
   document.querySelectorAll('nav.tabs button').forEach(b => b.setAttribute('aria-selected', String(b.dataset.tab === tab)));
   document.querySelectorAll('[data-pane]').forEach(p => p.classList.toggle('hide', p.dataset.pane !== tab));
-  ({ overview: loadStatus, snapshots: loadSnapshots, cannons: loadCannons, agent: loadTokens, activity: loadActivity, admin: loadAdmin })[tab]?.();
+  ({ overview: loadStatus, coordinates: loadStatus, snapshots: loadSnapshots, cannons: loadCannons, agent: loadTokens, activity: loadActivity, admin: loadAdmin })[tab]?.();
   history.replaceState(null, '', '#' + tab);
 }
 
@@ -58,6 +59,7 @@ async function loadStatus() {
     ['Gesamtfortschritt', placed ? (Math.round(done / placed * 1000) / 10).toLocaleString('de-DE') + ' %' : '–', 'Blöcke wie geplant'],
   ].map(([k, v, d]) => `<div class="card"><div class="k">${k}</div><div class="v">${v}</div><div class="d">${d}</div></div>`).join('');
   renderRows();
+  renderCoordinates();
   $('overlaps').innerHTML = status.overlaps.length
     ? '<table><thead><tr><th>Baupläne</th><th class="num">Zellen</th><th>Beispiel</th></tr></thead><tbody>' + status.overlaps.map(o =>
       `<tr><td>${o.blueprints.map(esc).join(' ↔ ')}</td><td class="num">${fmt(o.cells)}</td><td class="mono">${esc(o.samples[0]?.pos.join(' '))}</td></tr>`).join('') + '</tbody></table>'
@@ -82,6 +84,32 @@ $('search').addEventListener('input', renderRows);
 $('filter').addEventListener('change', renderRows);
 $('bpRows').addEventListener('click', e => { const tr = e.target.closest('tr[data-id]'); if (tr) openBlueprint(tr.dataset.id); });
 
+// ---------- placement coordinates ----------
+function renderCoordinates() {
+  if (!status) return;
+  const q = $('coordinateSearch').value.trim().toLowerCase();
+  const rows = status.blueprints.filter(b => !q || `${b.name} ${b.id} ${b.fileName}`.toLowerCase().includes(q))
+    .sort((a,b) => a.fileName.localeCompare(b.fileName, 'de', {numeric:true}));
+  $('coordinateCount').textContent = `${rows.length} von ${status.blueprints.length} Bauplänen · Stand ${when(status.generatedAt)}`;
+  $('coordinateRows').innerHTML = rows.map(b => `<tr><td><button class="small" data-open-blueprint="${esc(b.id)}">${esc(b.name)}</button><div class="muted mono">${esc(b.fileName)}</div></td><td>v${b.version}</td><td>${coordinateFields(b)}</td><td>${placementValues(b) ? `<button class="small" data-copy-coordinate="${b.origin.join(' ')}">X Y Z kopieren</button>` : ''}<a class="btn small" href="/api/blueprints/${encodeURIComponent(b.id)}/download?version=${b.version}">NBT v${b.version}</a></td></tr>`).join('') || '<tr><td colspan="4">Keine passenden Baupläne.</td></tr>';
+}
+$('coordinateSearch').addEventListener('input', renderCoordinates);
+$('coordinateRows').addEventListener('click', e => { const b = e.target.closest('[data-open-blueprint]'); if (b) openBlueprint(b.dataset.openBlueprint); });
+$('coordinateDownload').onclick = () => {
+  if (!status) return;
+  const rows = [...status.blueprints].sort((a,b) => a.fileName.localeCompare(b.fileName, 'de', {numeric:true}));
+  const url = URL.createObjectURL(new Blob([coordinateListText(rows)], {type:'text/plain;charset=utf-8'}));
+  const a = document.createElement('a'); a.href=url; a.download='CAMPUS_KOORDINATEN_AKTUELL.txt'; a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+};
+document.addEventListener('click', guard(async e => {
+  const button = e.target.closest('[data-copy-coordinate]');
+  if (!button) return;
+  const value = button.dataset.copyCoordinate;
+  try { await navigator.clipboard.writeText(value); toast(`Kopiert: ${value}`); }
+  catch { prompt('Zum Kopieren markieren:', value); }
+}));
+
 // ---------- drawer ----------
 function closeDrawer() { $('drawer').classList.remove('open'); $('scrim').classList.remove('open'); }
 $('scrim').addEventListener('click', closeDrawer);
@@ -95,8 +123,9 @@ const openBlueprint = guard(async id => {
   $('drawer').innerHTML = `
     <div class="row" style="justify-content:space-between"><div><h2>${esc(bp.name)}</h2><div class="muted mono">${esc(bp.fileName)}</div></div><button class="small" id="dClose">Schließen</button></div>
     <div class="row" style="margin-top:10px">${st ? badge(st.status) : ''}<a class="btn small primary" href="/api/blueprints/${encodeURIComponent(id)}/download">NBT herunterladen (v${bp.currentVersion})</a><button class="small" id="dUpload">Neue Version hochladen</button><a class="btn small" href="/viewer#bp=${encodeURIComponent(id)}">Im 3D-Viewer</a><a class="btn small" href="/api/blueprints/${encodeURIComponent(id)}/materials?format=html" target="_blank" rel="noopener">Materialliste</a><a class="btn small" href="/api/blueprints/${encodeURIComponent(id)}/remaining.nbt" download title="Nur fehlende Blöcke, gleicher origin – für die Schematicannon (normaler Modus)">Rest-NBT</a></div>
+    ${placementCard({origin:cur?.origin, version:bp.currentVersion})}
     <dl class="kv">
-      <dt>Position (origin)</dt><dd class="mono">${esc(cur?.origin.join(', '))} <button class="small" id="dMove">ändern</button></dd>
+      <dt>Bauplan verschieben</dt><dd><button class="small" id="dMove">Position im Campus ändern</button></dd>
       <dt>Größe</dt><dd class="mono">${esc(cur?.size.join(' × '))}</dd>
       <dt>Blöcke</dt><dd>${fmt(cur?.stats.placed)} setzen · ${fmt(cur?.stats.clear)} abreißen</dd>
       <dt>Kategorie</dt><dd>${esc(bp.category || '–')}</dd>
@@ -231,8 +260,8 @@ function cannonCard(c, bpOptions) {
     <div class="row" style="margin-top:10px"><select data-f="blueprint" aria-label="Bauplan"><option value="">– kein Bauplan –</option>${bp && !bpOptions.some(([id]) => id === bp.id) ? `<option value="${esc(bp.id)}" selected>${esc(bp.name)}</option>` : ''}${bpOptions.map(([id, name]) => `<option value="${esc(id)}"${bp?.id === id ? ' selected' : ''}>${esc(name)}</option>`).join('')}</select>
       ${bp && bp.version !== bp.currentVersion ? `<button class="small" data-act="upgrade" data-bp="${esc(bp.id)}" title="Neuere Version zuweisen (neuer Auftrag, Reste gehen zurück)">v${bp.version} → v${bp.currentVersion}</button>` : ''}
       ${c.restNbt ? `<a class="btn small primary" href="${esc(c.restNbt)}" download>Rest-NBT</a>` : ''}</div>
-    ${bp ? `<div style="margin-top:10px"><div class="bar"><i style="width:${pct ?? 0}%"></i></div>
-      <div class="muted" style="font-size:12px;margin-top:3px">${pct == null ? '–' : pct.toLocaleString('de-DE') + ' %'} · fehlt ${fmt(t.needed)} Items in ${fmt(t.kinds)} Sorten · origin <span class="mono">${esc(bp.origin.join(' '))}</span></div></div>` : ''}
+    ${bp ? `${placementCard(bp, 'Einsetzkoordinaten · zugewiesene Schematic')}<div style="margin-top:10px"><div class="bar"><i style="width:${pct ?? 0}%"></i></div>
+      <div class="muted" style="font-size:12px;margin-top:3px">${pct == null ? '–' : pct.toLocaleString('de-DE') + ' %'} · fehlt ${fmt(t.needed)} Items in ${fmt(t.kinds)} Sorten</div></div>` : ''}
     <div class="row" style="margin-top:8px"><span class="badge ${state === 'done' ? 'built' : ['waiting', 'error', 'missing', 'offline', 'nocomputer'].includes(state) ? 'warning' : 'ok'}">${esc(CANNON_STATE[state] || state)}</span>
       ${live?.chest ? `<span class="muted" style="font-size:12px">Kiste ${fmt(live.chest.used)}/${fmt(live.chest.slots)} Slots</span>` : ''}
       ${c.message ? `<span class="muted" style="font-size:12px">${esc(c.message)}</span>` : ''}${live?.message ? `<span class="muted" style="font-size:12px">${esc(live.message)}</span>` : ''}</div>
@@ -392,7 +421,7 @@ $('logout').onclick = guard(async () => { await api('/api/auth/logout', { method
     $('who').textContent = me.user.username;
     if (me.user.role === 'admin') $('adminTab').classList.remove('hide');
     const tab = location.hash.slice(1), bpLink = /^bp=(.+)$/.exec(tab);
-    showTab(['overview', 'snapshots', 'cannons', 'agent', 'activity', 'admin'].includes(tab) ? tab : 'overview');
+    showTab(['overview', 'coordinates', 'snapshots', 'cannons', 'agent', 'activity', 'admin'].includes(tab) ? tab : 'overview');
     if (bpLink) openBlueprint(decodeURIComponent(bpLink[1]));
     setInterval(() => { if (!document.hidden && !$('drawer').classList.contains('open')) loadStatus().catch(() => {}); }, 60e3);
   } catch (e) { toast(e.message, true); }
