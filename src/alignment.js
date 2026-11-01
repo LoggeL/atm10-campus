@@ -23,14 +23,23 @@ export function bridgeClient(config) {
 }
 
 const same=isDeepStrictEqual;
+// Stopped (not paused) with no printer state: the only native state in which
+// the controller may swap the schematic. The controller re-checks this itself.
+export function cannonReset(o) {
+  const p=o?.printer;
+  return o?.state==='STOPPED'&&o.amountPlaced===0&&o.amountToPlace===0&&o.flyingBlocks===0&&!!p&&typeof p==='object'&&!('Anchor' in p)&&!('CurrentPos' in p)&&
+    Array.isArray(p.DeferredBlocks)&&p.DeferredBlocks.length===0&&p.EntityProgress===-1&&p.PrintStage==='BLOCKS';
+}
+// A player's own schematic in the input is never replaced.
+export function foreignInput(o,binding) {
+  const c=o?.components||{};
+  return !!o?.item&&!(o.item==='create:schematic'&&c['create:schematic_owner']===binding.owner&&/^campus_[0-9a-f-]{36}\.nbt$/.test(c['create:schematic_file']||''));
+}
 // Create clears slot 0 on finish/expiry, and players may take the schematic out.
 // A fully stopped, reset cannon without input cannot print anything: the old
 // receipt is void, but nothing about the build result is inferred from it.
 export function emptyStopped(o) {
-  const p=o?.printer;
-  return !!o&&Number.isFinite(o.at)&&Math.abs(Date.now()/1000-o.at)<=15&&o.state==='STOPPED'&&o.inputEmpty===true&&!o.item&&
-    o.amountPlaced===0&&o.amountToPlace===0&&o.flyingBlocks===0&&!!p&&typeof p==='object'&&!('Anchor' in p)&&!('CurrentPos' in p)&&
-    Array.isArray(p.DeferredBlocks)&&p.DeferredBlocks.length===0&&p.EntityProgress===-1&&p.PrintStage==='BLOCKS';
+  return !!o&&Number.isFinite(o.at)&&Math.abs(Date.now()/1000-o.at)<=15&&o.inputEmpty===true&&!o.item&&cannonReset(o);
 }
 export function verifyAlignment(desired,o,receipt) {
   if(!receipt || !same(desired,receipt))return 'Gewählte Bauplanversion noch nicht sicher angewendet. Stoppen/zurücksetzen und Anwenden wiederholen.';
@@ -135,10 +144,9 @@ export function registerAlignment(app, campus, schematics) {
     }
   };
   const bindingFor=name=>{const rec=record(name);return rec?JSON.parse(rec.binding_json):null;};
-  const prepare=async(name,actor,{force=false}={})=>{
+  // Callers hold the station lock.
+  const prepareLocked=async(name,actor,{force=false}={})=>{
     name=check(name).name.toLowerCase();
-    if(applying.has(name))throw new HttpError(409,'Schematic-Vorbereitung läuft bereits.');
-    applying.add(name);
     let job;
     try {
       const proof=await discovery?.ensure(name,{locked:true,actor});
@@ -159,7 +167,13 @@ export function registerAlignment(app, campus, schematics) {
       logActivity(db,actor,'schematic.ready',name,{job:job.id,version:job.version,origin:job.origin});
       return view(name,{notify:true});
     }catch(e){const previous=record(name)?.last_error;if(job)schematics.waiting(name,job.id,e.message);db.prepare('UPDATE cannon_alignment SET last_error=? WHERE name=?').run(e.message,name);if(previous!==e.message)app.updates?.publish('cannons',name);throw e;}
-    finally{applying.delete(name);}
+  };
+  const prepare=async(name,actor,options)=>{
+    const key=check(name).name.toLowerCase();
+    if(applying.has(key))throw new HttpError(409,'Schematic-Vorbereitung läuft bereits.');
+    applying.add(key);
+    try{return await prepareLocked(key,actor,options);}
+    finally{applying.delete(key);}
   };
   const apply=async(name,actor)=>{
     if(schematics.settingsFor(name).enabled)return prepare(name,actor);
@@ -225,45 +239,50 @@ export function registerAlignment(app, campus, schematics) {
     try{await prepare(r.name,actor,{force:true});}catch{/* Exact refusal is stored in the job and alignment view. */}
     return schematics.view(r.name);
   });
+  const assertStartable=r=>{
+    if(!r.last_seen_at||!Number.isFinite(Date.parse(r.last_seen_at))||Date.now()-Date.parse(r.last_seen_at)>=180000)throw new HttpError(409,'Kanonen-Computer ist offline. Start abgelehnt.');
+    if(JSON.parse(r.options_json||'{}').paused)throw new HttpError(409,'Materialzufuhr ist pausiert. Vor dem Start wieder aktivieren.');
+  };
+  // Callers hold the station lock and pass the exact job they mean to start.
+  const startLocked=async(name,input,actor)=>{
+    try{
+      const proof=await discovery?.ensure(name,{locked:true,actor});
+      const r=check(name),rec=record(name);
+      if(!rec)throw new HttpError(409,'Zuerst den Kanonen-Block bestätigen.');
+      if(r.assignment!==input.assignment||r.version!==input.version)throw new HttpError(409,'Auftrag oder Version geändert. Bitte neu laden.');
+      assertStartable(r);
+      const sc=schematics.sync(r,campus.latestSnapshot('live'),JSON.parse(rec.binding_json));
+      if(!sc.settings.enabled||sc.job?.state!=='ready'||sc.job.version!==input.version)throw new HttpError(409,'Zuerst das Schematic automatisch vorbereiten lassen.');
+      const completed=progress.forVersion(sc.job.blueprint,sc.job.version);
+      if(completed?.job===sc.job.id&&completed.state==='completed')throw new HttpError(409,'Dieser Auftrag ist abgeschlossen. Für einen erneuten Bau zuerst einen neuen Rest-Plan vorbereiten.');
+      const desired=desiredFor(r,rec),range=cannonRange(JSON.parse(rec.binding_json),desired.anchor);
+      if(range.state!=='inrange')throw new HttpError(409,range.message);
+      if(!same(desired,JSON.parse(rec.applied_json||'null')))throw new HttpError(409,'Vorbereitete Revision ist noch nicht bestätigt.');
+      const inspected=await request('inspect',{station:name});
+      discovery?.assertCurrent(name,proof);
+      if(!same(JSON.parse(rec.binding_json),inspected.binding))throw new HttpError(409,'Host-Registry weicht von bestätigter Bindung ab.');
+      const error=verifyAlignment(desired,inspected.observed,desired);if(error)throw new HttpError(409,error);
+      progress.observe({name,job:sc.job,desired,receipt:desired,binding:inspected.binding,observed:inspected.observed,aligned:true});
+      const unchanged=()=>row(name)?.assignment===r.assignment&&record(name)?.binding_json===rec.binding_json&&schematics.view(name).job?.id===sc.job.id&&same(desiredFor(check(name),record(name)),desired);
+      if(!unchanged())throw new HttpError(409,'Auftrag während Startprüfung geändert.');
+      const {assignment,options,...target}=desired;
+      const result=await request('start',{station:name,desired:target,options});
+      discovery?.assertCurrent(name,proof);
+      if(!unchanged()||!same(result.binding,JSON.parse(rec.binding_json)))throw new HttpError(409,'Auftrag während Start geändert. Nativen Zustand prüfen.');
+      const mismatch=verifyAlignment(desired,result.observed,desired);
+      if(mismatch||!result.started||!['RUNNING','PAUSED'].includes(result.observed?.state))throw new HttpError(409,mismatch||'Start nicht bestätigt. Nativen Zustand prüfen.');
+      logActivity(db,actor,'cannon.start',name,{version:input.version,assignment:input.assignment,alreadyRunning:!!result.alreadyRunning,state:result.observed.state});
+      app.updates?.publish('cannons',name);
+      return notifyView(name,{enabled:true,state:'aligned',binding:result.binding,desired,observed:result.observed,started:true,alreadyRunning:!!result.alreadyRunning,
+        message:result.alreadyRunning?'Kanone läuft bereits mit diesem Bauplan.':result.observed.state==='PAUSED'?'Start übernommen. Kanone ist aktuell pausiert.':'Bau gestartet.'});
+    }catch(e){
+      logActivity(db,actor,'cannon.start.blocked',name,{message:e.message});app.updates?.publish('cannons',name);throw e;
+    }
+  };
   app.post('/api/cannons/:name/start',async req=>{
     const actor=admin(req),name=check(req.params.name).name,input=req.body||{};
     if(!Number.isSafeInteger(input.assignment)||!Number.isSafeInteger(input.version)||input.version<1||Object.keys(input).some(k=>!['assignment','version'].includes(k)))throw new HttpError(400,'Auftragsnummer und Bauplanversion erforderlich.');
-    return withStationsLocked([name],async()=>{
-      try{
-        const proof=await discovery?.ensure(name,{locked:true,actor});
-        const r=check(name),rec=record(name);
-        if(!rec)throw new HttpError(409,'Zuerst den Kanonen-Block bestätigen.');
-        if(r.assignment!==input.assignment||r.version!==input.version)throw new HttpError(409,'Auftrag oder Version geändert. Bitte neu laden.');
-        if(!r.last_seen_at||!Number.isFinite(Date.parse(r.last_seen_at))||Date.now()-Date.parse(r.last_seen_at)>=180000)throw new HttpError(409,'Kanonen-Computer ist offline. Start abgelehnt.');
-        if(JSON.parse(r.options_json||'{}').paused)throw new HttpError(409,'Materialzufuhr ist pausiert. Vor dem Start wieder aktivieren.');
-        const sc=schematics.sync(r,campus.latestSnapshot('live'),JSON.parse(rec.binding_json));
-        if(!sc.settings.enabled||sc.job?.state!=='ready'||sc.job.version!==input.version)throw new HttpError(409,'Zuerst das Schematic automatisch vorbereiten lassen.');
-        const completed=progress.forVersion(sc.job.blueprint,sc.job.version);
-        if(completed?.job===sc.job.id&&completed.state==='completed')throw new HttpError(409,'Dieser Auftrag ist abgeschlossen. Für einen erneuten Bau zuerst einen neuen Rest-Plan vorbereiten.');
-        const desired=desiredFor(r,rec),range=cannonRange(JSON.parse(rec.binding_json),desired.anchor);
-        if(range.state!=='inrange')throw new HttpError(409,range.message);
-        if(!same(desired,JSON.parse(rec.applied_json||'null')))throw new HttpError(409,'Vorbereitete Revision ist noch nicht bestätigt.');
-        const inspected=await request('inspect',{station:name});
-        discovery?.assertCurrent(name,proof);
-        if(!same(JSON.parse(rec.binding_json),inspected.binding))throw new HttpError(409,'Host-Registry weicht von bestätigter Bindung ab.');
-        const error=verifyAlignment(desired,inspected.observed,desired);if(error)throw new HttpError(409,error);
-        progress.observe({name,job:sc.job,desired,receipt:desired,binding:inspected.binding,observed:inspected.observed,aligned:true});
-        const unchanged=()=>row(name)?.assignment===r.assignment&&record(name)?.binding_json===rec.binding_json&&schematics.view(name).job?.id===sc.job.id&&same(desiredFor(check(name),record(name)),desired);
-        if(!unchanged())throw new HttpError(409,'Auftrag während Startprüfung geändert.');
-        const {assignment,options,...target}=desired;
-        const result=await request('start',{station:name,desired:target,options});
-        discovery?.assertCurrent(name,proof);
-        if(!unchanged()||!same(result.binding,JSON.parse(rec.binding_json)))throw new HttpError(409,'Auftrag während Start geändert. Nativen Zustand prüfen.');
-        const mismatch=verifyAlignment(desired,result.observed,desired);
-        if(mismatch||!result.started||!['RUNNING','PAUSED'].includes(result.observed?.state))throw new HttpError(409,mismatch||'Start nicht bestätigt. Nativen Zustand prüfen.');
-        logActivity(db,actor,'cannon.start',name,{version:input.version,assignment:input.assignment,alreadyRunning:!!result.alreadyRunning,state:result.observed.state});
-        app.updates?.publish('cannons',name);
-        return notifyView(name,{enabled:true,state:'aligned',binding:result.binding,desired,observed:result.observed,started:true,alreadyRunning:!!result.alreadyRunning,
-          message:result.alreadyRunning?'Kanone läuft bereits mit diesem Bauplan.':result.observed.state==='PAUSED'?'Start übernommen. Kanone ist aktuell pausiert.':'Bau gestartet.'});
-      }catch(e){
-        logActivity(db,actor,'cannon.start.blocked',name,{message:e.message});app.updates?.publish('cannons',name);throw e;
-      }
-    });
+    return withStationsLocked([name],()=>startLocked(name,input,actor));
   });
   let timer,preparing=null,closing=false;
   const prepareQueued=async()=>{
@@ -312,5 +331,5 @@ export function registerAlignment(app, campus, schematics) {
     try{await discovery.discover(name,actor,true);}catch{/* The persisted diagnosis is returned below. */}
     return view(name,{notify:true});
   });
-  return {view,gate,apply,prepare,admin,inspect,revoke,withStationsLocked,progress,binding:bindingFor,busy:name=>applying.has(name.toLowerCase()),enabled:name=>!!record(name),managed:discovery.managed,locationReady:name=>!!record(name)&&(!discovery.managed(name)||discovery.view(name)?.state==='bound')};
+  return {view,gate,apply,prepare,prepareLocked,startLocked,assertStartable,admin,inspect,revoke,withStationsLocked,progress,binding:bindingFor,busy:name=>applying.has(name.toLowerCase()),enabled:name=>!!record(name),managed:discovery.managed,locationReady:name=>!!record(name)&&(!discovery.managed(name)||discovery.view(name)?.state==='bound')};
 }

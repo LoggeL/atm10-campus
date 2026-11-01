@@ -8,6 +8,7 @@ import { now, logActivity, tx } from './db.js';
 import { normalizeStockItems, saveStock, latestStock } from './me-stock.js';
 import { cannonRange, cannonTarget, reachableCannons } from './cannon-range.js';
 import { createCannonBlueprints } from './cannon-blueprints.js';
+import { cannonReset, foreignInput } from './alignment.js';
 
 const ccDir = join(dirname(fileURLToPath(import.meta.url)), '..', 'public', 'cc');
 const NAME = /^[A-Za-z0-9_-]{1,40}$/;
@@ -162,6 +163,24 @@ export function registerStationRoutes(app, campus, mat, alignment, schematics) {
     };
   };
   const liveSnap = () => campus.latestSnapshot('live');
+  // Resolves to the final synchronous check, so a caller can run it and commit in
+  // one tick: nothing can claim the plan or change the job between the two.
+  const selectionGuard = async (row, blueprint, version, { locked = false } = {}) => {
+    const name = row.name, snap = liveSnap(), originalBinding = JSON.stringify(alignment.binding(name)), originalSettings = JSON.stringify(schematics.settingsFor(name));
+    const catalog = await blueprintChoices(row, snap);
+    return () => {
+      const current = getRow(name), bp = campus.getBlueprint(blueprint);
+      if ((!locked && alignment.busy(name)) || !current || current.assignment !== row.assignment || current.options_json !== row.options_json || JSON.stringify(alignment.binding(name)) !== originalBinding || JSON.stringify(schematics.settingsFor(name)) !== originalSettings || !alignment.locationReady(name) || liveSnap()?.id !== snap?.id || bp.archived || bp.currentVersion !== version)
+        throw new HttpError(409, 'Auftrag, Position oder Baustand wurde geändert. Auswahl verwerfen und neu wählen.');
+      if (!catalog.items.some(item => item.id === blueprint && item.version === version))
+        throw new HttpError(409, 'Dieser Bauplan ist inzwischen fertig, vergeben, geändert oder nicht baubar. Auswahl verwerfen und neu wählen.');
+      if (alignment.progress.forVersion(blueprint, version)?.state === 'completed')
+        throw new HttpError(409, 'Dieser Kanonen-Auftrag ist inzwischen abgeschlossen. Einen anderen Bauplan wählen.');
+      if (db.prepare('SELECT 1 FROM cannons WHERE name<>? COLLATE NOCASE AND blueprint_id=?').get(name, blueprint))
+        throw new HttpError(409, 'Dieser Bauplan wurde gerade einer anderen Kanone zugewiesen. Auswahl verwerfen und neu wählen.');
+      return snap;
+    };
+  };
 
   // ---------- cannons ----------
   app.get('/api/cannons', async req => {
@@ -197,10 +216,7 @@ export function registerStationRoutes(app, campus, mat, alignment, schematics) {
       return { s, t, bp };
     };
     const idle = (observed, name) => {
-      const p = observed?.printer;
-      if (observed?.state !== 'STOPPED' || observed.amountPlaced !== 0 || observed.amountToPlace !== 0 || observed.flyingBlocks !== 0 || !p || p.Anchor || p.CurrentPos || !Array.isArray(p.DeferredBlocks) || p.DeferredBlocks.length || p.EntityProgress !== -1 || p.PrintStage !== 'BLOCKS') {
-        throw new HttpError(409, `${name} vollständig stoppen und den Bau zurücksetzen. Eine pausierte oder noch aktive Kanone kann keinen Auftrag übergeben oder übernehmen.`);
-      }
+      if (!cannonReset(observed)) throw new HttpError(409, `${name} vollständig stoppen und den Bau zurücksetzen. Eine pausierte oder noch aktive Kanone kann keinen Auftrag übergeben oder übernehmen.`);
     };
     await alignment.withStationsLocked([source.name, target.name], async () => {
       selection();
@@ -208,8 +224,7 @@ export function registerStationRoutes(app, campus, mat, alignment, schematics) {
       if (!snap) throw new HttpError(503, 'Noch kein Live-Snapshot.');
       const [from, to] = await Promise.all([alignment.inspect(source.name), alignment.inspect(target.name)]);
       idle(from, source.name); idle(to, target.name);
-      const binding = alignment.binding(target.name), components = to.components || {};
-      if (to.item && !(to.item === 'create:schematic' && components['create:schematic_owner'] === binding.owner && /^campus_[0-9a-f-]{36}\.nbt$/.test(components['create:schematic_file'] || ''))) throw new HttpError(409, 'Das manuelle Schematic zuerst aus der Zielkanone nehmen.');
+      if (foreignInput(to, alignment.binding(target.name))) throw new HttpError(409, 'Das manuelle Schematic zuerst aus der Zielkanone nehmen.');
       const { s, t, bp } = selection();
       tx(db, () => {
         const settings = schematics.settingsFor(s.name);
@@ -224,6 +239,62 @@ export function registerStationRoutes(app, campus, mat, alignment, schematics) {
     });
     try { await alignment.prepare(target.name, actor); } catch { /* Assignment is queued; a stopped target is retried by the scheduler. */ }
     return { source: await cannonView(getRow(source.name), liveSnap()), target: await cannonView(getRow(target.name), liveSnap()) };
+  });
+
+  // One deliberate selection: pin the plan, prepare it and start this cannon. No intent
+  // is stored, so a refused step ends here and only the user can try again.
+  app.post('/api/cannons/:name/build', async req => {
+    const actor = alignment.admin(req), input = req.body || {};
+    const station = getRow(checkName(req.params.name));
+    if (!station) throw new HttpError(404, 'Kanone nicht gefunden: ' + req.params.name);
+    const { blueprint, version, assignment } = input, name = station.name;
+    if (typeof blueprint !== 'string' || !blueprint || !Number.isSafeInteger(version) || version < 1 || !Number.isSafeInteger(assignment) || Object.keys(input).some(k => !['blueprint', 'version', 'assignment'].includes(k)))
+      throw new HttpError(400, 'Bauplan, Version und aktuelle Auftragsnummer erforderlich.');
+    let stage = 'check';
+    try {
+      const started = await alignment.withStationsLocked([name], async () => {
+        const row = getRow(name);
+        if (row.assignment !== assignment) throw new HttpError(409, 'Der Auftrag wurde geändert. Auswahl neu laden.');
+        if (!alignment.locationReady(name)) throw new HttpError(409, 'Die Kanonen-Position muss zuerst eindeutig erkannt sein.');
+        if (!schematics.settingsFor(name).enabled) throw new HttpError(409, 'Automatische Vorbereitung ist für diese Kanone ausgeschaltet. Zuerst in den Einstellungen aktivieren.');
+        if (!liveSnap()) throw new HttpError(503, 'Noch kein Live-Snapshot.');
+        alignment.assertStartable(row);
+        const verify = await selectionGuard(row, blueprint, version, { locked: true });
+        const unchanged = row.blueprint_id === blueprint && row.version === version, before = schematics.view(name).job;
+        const prepared = unchanged && before?.state === 'ready' && before.blueprint === blueprint && before.version === version;
+        if (!prepared) {
+          // Last read before the commit: a busy cannon keeps its job and its supply.
+          const observed = await alignment.inspect(name);
+          if (!cannonReset(observed)) throw new HttpError(409, 'Die Kanone baut noch oder ist nicht zurückgesetzt. Bau im Spiel beenden und zurücksetzen. Der aktuelle Auftrag bleibt unverändert.');
+          if (foreignInput(observed, alignment.binding(name))) throw new HttpError(409, 'In der Kanone liegt ein manuell eingesetztes Schematic. Zuerst aus dem Eingang nehmen. Der aktuelle Auftrag bleibt unverändert.');
+        }
+        const snap = verify();
+        if (!prepared) {
+          if (!unchanged) {
+            const start = startFor(blueprint, version, normalizeOptions(JSON.parse(row.options_json || '{}')), snap);
+            tx(db, () => {
+              db.prepare('UPDATE cannons SET blueprint_id = ?, version = ?, assignment = ?, start_json = ?, updated_at = ? WHERE name = ?').run(blueprint, version, nextAssignment(row.assignment), start, now(), name);
+              alignment.revoke(name);
+            });
+            logActivity(db, actor, 'cannon.assign', name, { blueprint, version });
+          }
+          stage = 'prepare';
+          // A consumed job waits for a newer world, so re-selecting never replans placed blocks.
+          await alignment.prepareLocked(name, actor, { force: !unchanged && before?.state !== 'consumed' });
+          const job = schematics.view(name).job;
+          if (job?.state !== 'ready' || job.blueprint !== blueprint || job.version !== version) throw new HttpError(409, job?.message || 'Der Bauplan konnte nicht vorbereitet werden.');
+        }
+        stage = 'start';
+        const current = getRow(name);
+        return alignment.startLocked(name, { assignment: current.assignment, version: current.version }, actor);
+      });
+      return { started: true, alreadyRunning: started.alreadyRunning, blueprint, version, assignment: getRow(name).assignment, state: started.observed.state, message: started.message };
+    } catch (error) {
+      error.extra = { ...error.extra, stage };
+      if (stage !== 'start') logActivity(db, actor, 'cannon.build.blocked', name, { blueprint, version, stage, message: error.message });
+      app.updates?.publish('cannons', name);
+      throw error;
+    }
   });
 
   // Assign a blueprint (pinned to a version) and/or change options. A new blueprint or version starts a new assignment,
@@ -244,17 +315,7 @@ export function registerStationRoutes(app, campus, mat, alignment, schematics) {
         throw new HttpError(400, 'Bauplanversion und aktueller Auftrag für die Auswahl fehlen.');
       if (selected.assignment !== row.assignment) throw new HttpError(409, 'Der Auftrag wurde geändert. Auswahl verwerfen und neu wählen.');
       if (b.options !== undefined || b.schematic !== undefined) throw new HttpError(400, 'Einstellungen vor der Bauplanauswahl separat speichern.');
-      const snap = liveSnap(), originalBinding = JSON.stringify(alignment.binding(name)), originalSettings = JSON.stringify(schematics.settingsFor(name));
-      const catalog = await blueprintChoices(row, snap);
-      const current = getRow(name);
-      if (alignment.busy(name) || !current || current.assignment !== row.assignment || current.options_json !== row.options_json || JSON.stringify(alignment.binding(name)) !== originalBinding || JSON.stringify(schematics.settingsFor(name)) !== originalSettings || !alignment.locationReady(name) || liveSnap()?.id !== snap?.id || campus.getBlueprint(b.blueprint).currentVersion !== selected.version)
-        throw new HttpError(409, 'Auftrag, Position oder Baustand wurde geändert. Auswahl verwerfen und neu wählen.');
-      const choice = catalog.items.find(item => item.id === b.blueprint && item.version === selected.version);
-      if (!choice) throw new HttpError(409, 'Dieser Bauplan ist inzwischen fertig, vergeben, geändert oder nicht baubar. Auswahl verwerfen und neu wählen.');
-      if(alignment.progress.forVersion(b.blueprint,selected.version)?.state==='completed')
-        throw new HttpError(409,'Dieser Kanonen-Auftrag ist inzwischen abgeschlossen. Einen anderen Bauplan wählen.');
-      if (db.prepare('SELECT 1 FROM cannons WHERE name<>? COLLATE NOCASE AND blueprint_id=?').get(name, b.blueprint))
-        throw new HttpError(409, 'Dieser Bauplan wurde gerade einer anderen Kanone zugewiesen. Auswahl verwerfen und neu wählen.');
+      (await selectionGuard(row, b.blueprint, selected.version))();
     }
     const options = normalizeOptions(b.options, JSON.parse(row.options_json || '{}'));
     let { blueprint_id: bpId, version, assignment, start_json: start } = row;

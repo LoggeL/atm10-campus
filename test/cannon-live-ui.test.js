@@ -8,25 +8,25 @@ const source=readFileSync(new URL('../public/assets/app.js',import.meta.url),'ut
 const coordination=source.slice(source.indexOf('// ---------- cannons ----------'),source.indexOf("window.addEventListener('beforeunload'"));
 function appFixture() {
   let protectedCard=true,replacements=0;
-  const updates=[],requests=[],reads=[];
+  const updates=[],requests=[],reads=[],modal=[];
   const old={dataset:{cannon:'test'},querySelector:()=>protectedCard?{}:null,contains:()=>false,querySelectorAll:()=>[],replaceWith:()=>{replacements++;}};
   const list={querySelectorAll:()=>[old]};
   const context=vm.createContext({me:{user:{role:'admin'}},document:{activeElement:{},createElement:()=>({content:{firstElementChild:{querySelectorAll:()=>[]}}})},
     $:id=>{assert.equal(id,'cannonList');return list;},
     api:url=>new Promise(resolve=>reads.push({url,resolve})),
-    updateCannonPicker:(card,c)=>updates.push(['picker',c]),updateCannonLive:(card,c)=>updates.push(['progress',c]),
+    cannonPicker:{update:c=>modal.push(c)},updateCannonPicker:(card,c)=>updates.push(['picker',c]),updateCannonLive:(card,c)=>updates.push(['progress',c]),
     renderCannon:()=>'<article></article>',alignmentCard:()=>'',ago:()=>'',refreshQueue:{request:key=>requests.push(key)}});
   vm.runInContext(coordination,context);
   const app=vm.runInContext('({read:refreshOneCannon,flush:flushPendingCannons,baseline:cannonBaseline,latest:cannonLatest,pending:cannonPending})',context);
   const baseline={name:'test',assignment:4,options:{gunpowder:12}};app.baseline.set('test',baseline);
-  return {app,baseline,updates,requests,reads,unprotect:()=>{protectedCard=false;},replacements:()=>replacements};
+  return {app,baseline,updates,modal,requests,reads,unprotect:()=>{protectedCard=false;},replacements:()=>replacements};
 }
 
 test('refresh fetches and paints progress on a dirty card, preserving baseline and deferring full render locally',async()=>{
   const f=appFixture(),fresh={name:'test',assignment:5,nativeProgress:{state:'completed',percent:100},blueprintChoices:{items:[]}};
   const reading=f.app.read('test');assert.equal(f.reads.length,1);assert.equal(f.reads[0].url,'/api/cannons/test');
   f.reads[0].resolve(fresh);assert.equal(await reading,true,'protected card consumes the event without retrying GET');
-  assert.equal(f.updates.length,2);assert.equal(f.updates[0][1],fresh);
+  assert.equal(f.updates.length,2);assert.equal(f.updates[0][1],fresh);assert.deepEqual(f.modal,[fresh],'an open picker follows polling even on a protected card');
   assert.equal(f.app.baseline.get('test'),f.baseline);assert.equal(f.app.baseline.get('test').assignment,4);
   assert.equal(f.app.latest.get('test'),fresh);assert.equal(f.app.pending.size,1);
   assert.equal(f.replacements(),0);assert.deepEqual(f.requests,[]);
@@ -41,5 +41,5 @@ test('an older overlapping read cannot resurrect a completed choice in an open p
   f.reads[1].resolve(completed);await newer;
   f.reads[0].resolve({name:'test',assignment:4,done:false,blueprintChoices:{items:[{id:'finished'}]}});await older;
   assert.equal(f.app.latest.get('test'),completed);assert.equal(f.app.pending.get('test').c,completed);
-  assert.equal(f.updates.length,2);assert.deepEqual(f.requests,[]);
+  assert.equal(f.updates.length,2);assert.deepEqual(f.requests,[]);assert.deepEqual(f.modal,[completed],'an older read never reaches the open picker');
 });

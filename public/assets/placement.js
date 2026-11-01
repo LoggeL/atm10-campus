@@ -1,4 +1,4 @@
-import { esc } from './format.js?v=20261101-polish-2';
+import { esc } from './format.js?v=20261101-select-1';
 
 // Always use the origin of the version being displayed, including pinned cannon jobs.
 export function placementValues(bp) {

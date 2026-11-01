@@ -159,3 +159,15 @@ test('partial live rendering touches status slots only, including during an in-f
   assert.match(progress.innerHTML,/100 % · Kanone/);assert.equal(supply.textContent,'Fertig');assert.equal(schematic.textContent,'Auftrag abgeschlossen · v2');assert.equal(start.innerHTML,'in-flight button');
   updateCannonLive(card,c,{isAdmin:true});assert.match(start.innerHTML,/data-act="start" disabled/);
 });
+
+test('blueprint selection opens from a button for admins, and deliberate unassignment moves to diagnostics', () => {
+  const c = {...station(),blueprintChoices:{items:[{id:'next',name:'Nächster',version:1,progress:5,built:1,total:20,remaining:19,distance:10}]}};
+  const admin = render(c);
+  assert.match(admin,/data-act="choose-blueprint"[^>]*>Bauplan ändern · 1 baubar</);
+  assert.doesNotMatch(admin,/assignment-form|name="blueprint"/);
+  assert.ok(admin.indexOf('data-act="unassign"')>admin.indexOf('data-section="diagnostics"'));
+  const reader = render(c,false);
+  assert.doesNotMatch(reader,/choose-blueprint|data-act="unassign"/);
+  assert.match(render({...c,blueprint:null,range:null}),/data-act="choose-blueprint"/);
+  assert.doesNotMatch(render({...c,blueprint:null,range:null}),/data-act="unassign"/);
+});

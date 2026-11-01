@@ -1,4 +1,4 @@
-import { esc } from './format.js?v=20261101-polish-2';
+import { esc } from './format.js?v=20261101-select-1';
 export const distanceText = value => Number(value).toLocaleString('de-DE', { maximumFractionDigits: Math.abs(value - 256) < 1 ? 3 : 1 });
 
 export function cannonRangeCard(c, canTransfer = false) {

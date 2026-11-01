@@ -101,7 +101,8 @@ export function createCannonBlueprints(campus, alignment, schematics, app) {
       if(!progress.remaining){result.excluded.blocked++;continue;}
       result.items.push({id:bp.id,name:bp.name,version:v.version,origin:v.origin,distance:range.distance,...progress,...(nativeProgress?{nativeProgress}:{})});
     }
-    result.items.sort((a,b)=>b.progress-a.progress || a.distance-b.distance || a.name.localeCompare(b.name,'de'));
+    // Decided on block counts: a huge plan with a few blocks rounds to 0 % but is started.
+    result.items.sort((a,b)=>(b.built>0)-(a.built>0) || b.built/b.total-a.built/a.total || a.distance-b.distance || a.name.localeCompare(b.name,'de') || a.id.localeCompare(b.id));
     if(!result.items.length)result.message='Kein freier Bauplan mit baubaren Restblöcken in Reichweite.';
     return result;
   };

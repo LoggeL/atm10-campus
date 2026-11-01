@@ -1,7 +1,7 @@
-import { esc } from './format.js?v=20261101-polish-2';
-import { blueprintPreview } from './blueprint-preview.js?v=20261101-polish-2';
+import { esc } from './format.js?v=20261101-select-1';
+import { blueprintPreview } from './blueprint-preview.js?v=20261101-select-1';
 const fmt=n=>Number(n).toLocaleString('de-DE',{maximumFractionDigits:1});
-const choices=c=>(c.blueprintChoices?.items||[]).filter(b=>b.nativeProgress?.state!=='completed'&&Number.isFinite(b.progress)&&b.progress<100&&b.remaining>0&&Number.isFinite(b.distance)&&b.distance<256);
+export const pickerChoices=c=>(c.blueprintChoices?.items||[]).filter(b=>b.nativeProgress?.state!=='completed'&&Number.isFinite(b.progress)&&b.progress<100&&b.remaining>0&&Number.isFinite(b.distance)&&b.distance<256);
 export function nativeProgressLabel(progress) {
   if(!progress)return '';
   const percent=Number.isFinite(progress.percent)?Math.max(0,Math.min(progress.state==='completed'?100:99.9,progress.percent)):null;
@@ -13,53 +13,54 @@ export function renderNativeProgress(progress) {
   const sent=Number.isFinite(progress.sent)?fmt(progress.sent):'?', total=Number.isFinite(progress.total)?fmt(progress.total):'?';
   return `<div class="bar" role="progressbar" aria-label="Auftragsfortschritt" aria-valuemin="0" aria-valuemax="100"${percent===null?'':` aria-valuenow="${percent}"`}><i style="width:${percent??0}%"></i></div><p>${esc(nativeProgressLabel(progress))}${progress.state==='completed'?' · Abgeschlossen':` · ${sent} / ${total} Schüsse gesendet${progress.state==='finishing'?' · Letzte Blöcke noch unterwegs':''}`}</p>`;
 }
-const choiceLabel=b=>`${b.name} · ${b.nativeProgress?.fresh?nativeProgressLabel(b.nativeProgress):fmt(b.progress)+' % gebaut'} · ${fmt(b.remaining)} offen · ${fmt(b.distance)} Blöcke`;
 const pickerMeta=(catalog,ago)=>{
   const hidden=Object.entries(catalog?.excluded||{}).filter(([,n])=>n>0).map(([key,n])=>`${fmt(n)} ${{finished:'fertig',range:'außer Reichweite',assigned:'bereits zugewiesen',blocked:'ohne baubaren Rest',unknown:'ohne sicheren Baustand'}[key]||'nicht verfügbar'}`).join(' · ');
-  return `${catalog?.message?`<p class="muted">${esc(catalog.message)}</p>`:''}${hidden?`<p class="footnote">Ausgeblendet: ${esc(hidden)}.</p>`:''}<p class="footnote">${catalog?.snapshot?`Baustand aus Weltabgleich ${esc(ago(catalog.snapshot.capturedAt))}.`:'Baustand noch nicht verfügbar.'} Noch fehlendes Material kann anschließend geliefert oder gecraftet werden.</p>`;
+  return `${hidden?`Ausgeblendet: ${esc(hidden)}. `:''}${catalog?.snapshot?`Baustand aus Weltabgleich ${esc(ago(catalog.snapshot.capturedAt))}.`:'Baustand noch nicht verfügbar.'} Fehlendes Material wird danach geliefert oder gecraftet.`;
 };
-export function renderChoicePreview(choice) {
-  if(!choice)return '<p class="muted">Einen baubaren Plan auswählen, um seinen Baustand zu sehen.</p>';
-  const native=choice.nativeProgress;
-  return `<div class="cannon-choice">${blueprintPreview(choice,{size:'small'})}<div><strong>${esc(choice.name)} · v${esc(choice.version)}</strong>${native?.fresh?renderNativeProgress(native):`<div class="bar" role="progressbar" aria-label="Baufortschritt aus Weltabgleich" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${choice.progress}"><i style="width:${choice.progress}%"></i></div>`}<p>Weltabgleich: ${fmt(choice.progress)} % gebaut · ${fmt(choice.built)} / ${fmt(choice.total)} Blöcke</p>${native&&!native.fresh?`<p class="muted">${esc(nativeProgressLabel(native))}, nicht live.</p>`:''}<p>${fmt(choice.remaining)} noch baubar · ${fmt(choice.distance)} Blöcke entfernt</p>${choice.blocked||choice.unsupported?`<p class="muted">${fmt(choice.blocked+choice.unsupported)} weitere Blöcke werden übersprungen.</p>`:''}</div></div>`;
+export const renderPickerMeta=pickerMeta;
+const pickerTitle=c=>c.done?'Nächsten Bauplan wählen':c.blueprint?'Bauplan ändern':'Bauplan wählen';
+const pickerSummary=c=>`${pickerTitle(c)} · ${pickerChoices(c).length} baubar`;
+export const renderPickerHeading=pickerTitle;
+export const renderPickerButton=c=>`<button class="small" data-act="choose-blueprint" data-picker-button>${pickerSummary(c)}</button>`;
+// Live refresh of a protected card: only the count changes, focus and drafts stay.
+export function updateCannonPicker(card,c) {
+  const button=card.querySelector('[data-picker-button]');
+  if(button)button.textContent=pickerSummary(c);
 }
-const pickerSummary=(c,count)=>`${c.done?'Nächsten Bauplan wählen':c.blueprint?'Bauplan ändern':'Bauplan wählen'} · ${count} baubar`;
-export function renderCannonPicker(c,ago) {
-  const catalog=c.blueprintChoices, items=choices(c);
-  const current=items.find(b=>b.id===c.blueprint?.id&&b.version===c.blueprint?.version);
-  return `<details data-section="assignment" class="assignment"><summary>${pickerSummary(c,items.length)}</summary><form class="assignment-form"><label class="setting">Baubare Baupläne<select name="blueprint"><option value="__current__" disabled hidden${!current?' selected':''}>${c.blueprint?'Aktueller Auftrag unverändert':'Bauplan auswählen'}</option>${c.blueprint?'<option value="">Auftrag aufheben</option>':''}${items.map(b=>`<option value="${esc(b.id)}" data-version="${esc(b.version)}"${current?.id===b.id?' selected':''}>${esc(choiceLabel(b))}</option>`).join('')}</select></label><div data-choice-preview aria-live="polite">${renderChoicePreview(current)}</div><p data-choice-warning class="warn" role="status"></p><div data-choice-meta>${pickerMeta(catalog,ago)}</div><div class="form-actions"><button class="small" type="submit">Zuweisen</button><button class="small" type="reset">Verwerfen</button><span class="draft-note" role="status"></span></div><p class="form-error" role="alert"></p></form></details>`;
+// What stops a selection before it is tried. The server decides again on the click.
+export function buildBlocker(c) {
+  const native=c.alignment?.observed?.state;
+  if(!c.alignment?.enabled||!c.alignment.binding)return 'Die Kanonen-Position muss zuerst eindeutig erkannt sein.';
+  if(!c.schematic?.settings?.enabled)return 'Die automatische Vorbereitung ist ausgeschaltet. Zuerst in den Einstellungen der Kanone aktivieren.';
+  if(!c.online)return 'Der Minecraft-Computer ist offline.';
+  if(c.options?.paused)return 'Die Materialzufuhr ist pausiert. Vor dem Start wieder aktivieren.';
+  if(native==='RUNNING')return 'Die Kanone baut gerade. Ein neuer Bauplan ist erst möglich, wenn sie im Spiel beendet und zurückgesetzt ist.';
+  if(native==='PAUSED')return 'Die Kanone ist pausiert. Den Bau fortsetzen oder im Spiel zurücksetzen, bevor ein neuer Bauplan startet.';
+  return null;
 }
-// Refresh only the picker contents. Keep the select, form and other settings nodes alive.
-export function updateCannonPicker(card,c,ago) {
-  const form=card.querySelector('.assignment-form');
-  if(!form)return;
-  const select=form.querySelector('select[name="blueprint"]'), value=select.value;
-  const version=select.selectedOptions[0]?.dataset.version, items=choices(c);
-  const selected=items.find(b=>b.id===value&&String(b.version)===version);
-  const invalid=value!==''&&value!=='__current__'&&!selected;
-  for(const option of [...select.options]) {
-    if(option.value===''||option.value==='__current__')continue;
-    const choice=items.find(b=>b.id===option.value&&String(b.version)===option.dataset.version);
-    if(!choice)option.remove();else option.textContent=choiceLabel(choice);
-  }
-  for(const choice of items) {
-    if([...select.options].some(o=>o.value===choice.id&&o.dataset.version===String(choice.version)))continue;
-    const option=select.ownerDocument.createElement('option');option.value=choice.id;option.dataset.version=String(choice.version);option.textContent=choiceLabel(choice);select.append(option);
-  }
-  select.value=invalid?'__current__':value;
-  if(invalid)form.dataset.choiceInvalid='1';
-  const warning=form.querySelector('[data-choice-warning]');
-  warning.textContent=form.dataset.choiceInvalid?'Der ausgewählte Bauplan ist inzwischen fertig oder nicht mehr baubar. Bitte neu wählen oder verwerfen.':'';
-  form.querySelector('[data-choice-preview]').innerHTML=renderChoicePreview(selected);
-  form.querySelector('[data-choice-meta]').innerHTML=pickerMeta(c.blueprintChoices,ago);
-  card.querySelector('[data-section="assignment"] > summary').textContent=pickerSummary(c,items.length);
+export const isStarted=b=>b.built>0;
+export function filterChoices(items,query) {
+  const needle=query.trim().toLocaleLowerCase('de');
+  return needle?items.filter(b=>`${b.name} ${b.id}`.toLocaleLowerCase('de').includes(needle)):items;
 }
-export function cannonSelectionPayload(data,c,{catalog=c.blueprintChoices,version=null}={}) {
-  const id=data.get('blueprint');
-  if(id===null||id==='__current__')return {};
-  if(id==='')return c.blueprint?{blueprint:null}:{};
-  const choice=choices({blueprintChoices:catalog}).find(b=>b.id===id&&(version===null||String(b.version)===String(version)));
-  if(!choice)throw Error('Dieser Bauplan ist nicht mehr in der baubaren Auswahl. Verwerfen und neu wählen.');
-  if(id===c.blueprint?.id&&choice.version===c.blueprint.version)return {};
-  return {blueprint:id,version:choice.version,selection:{version:choice.version,assignment:c.assignment}};
+const percentText=b=>b.built>0&&b.progress<.1?'Unter 0,1':fmt(b.progress);
+function renderChoice(b,{current,disabled,pending,retry}) {
+  const native=b.nativeProgress;
+  return `<li class="picker-choice">${blueprintPreview(b,{size:'small'})}<div class="picker-choice-body"><p class="picker-choice-title"><strong>${esc(b.name)}</strong> <span class="muted">v${esc(b.version)}</span>${current?' <span class="badge">Aktueller Auftrag</span>':''}</p><div class="bar" role="progressbar" aria-label="Baufortschritt aus Weltabgleich" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${b.progress}"><i style="width:${b.progress}%"></i></div><p>${percentText(b)} % gebaut · ${fmt(b.remaining)} Blöcke offen · ${fmt(b.distance)} Blöcke entfernt${b.origin?` · <span class="mono">${esc(b.origin.join(' '))}</span>`:''}</p>${native?`<p class="muted">${esc(nativeProgressLabel(native))}${native.fresh?'':', nicht live'}</p>`:''}</div><button class="primary small" type="button" data-build="${esc(b.id)}" data-version="${esc(b.version)}" aria-label="${esc(b.name)} jetzt vorbereiten und bauen"${disabled?' disabled':''}>${pending?'Startet …':retry?'Erneut versuchen':'Bauen'}</button></li>`;
+}
+export const choiceKey=b=>`${b.id}:${b.version}`;
+export function renderPickerList(c,{query='',disabled=false,pending=null,retry=null}={}) {
+  const all=pickerChoices(c),shown=filterChoices(all,query);
+  if(!all.length)return `<p class="muted picker-empty">${esc(c.blueprintChoices?.message||'Kein baubarer Bauplan verfügbar.')}</p>`;
+  if(!shown.length)return `<p class="muted picker-empty">Kein Bauplan passt zu „${esc(query.trim())}“.</p>`;
+  const group=(title,items)=>items.length?`<section class="picker-group"><h3 class="eyebrow">${title} · ${items.length}</h3><ul>${items.map(b=>renderChoice(b,{disabled,pending:pending===choiceKey(b),retry:retry===choiceKey(b),current:b.id===c.blueprint?.id&&b.version===c.blueprint?.version})).join('')}</ul></section>`:'';
+  return group('Angefangen',shown.filter(isStarted))+group('Noch nicht begonnen',shown.filter(b=>!isStarted(b)));
+}
+// The stage says how far the request got, so the text can say what really changed.
+export function buildFailure(error) {
+  if(!error?.status)return `Verbindung unterbrochen: ${error?.message||'keine Antwort'}. Ob die Kanone gestartet wurde, ist offen. Der Stand wird neu geladen.`;
+  const stage=error.data?.stage;
+  if(stage==='prepare')return `Bauplan zugewiesen, aber nicht gestartet: ${error.message}`;
+  if(stage==='start')return `Bauplan vorbereitet, Start nicht bestätigt: ${error.message}`;
+  return `Nichts geändert: ${error.message}`;
 }

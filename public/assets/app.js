@@ -1,9 +1,10 @@
-import { esc, fmt } from './format.js?v=20261101-polish-2';
-import { renderChoicePreview, cannonSelectionPayload, updateCannonPicker } from './cannon-picker.js?v=20261101-polish-2';
-import { renderCannon, cannonSettingsPayload, cannonStartState, updateCannonLive } from './cannon-ui.js?v=20261101-polish-2';
-import { coordinateFields, placementCard, placementValues, coordinateListText } from './placement.js?v=20261101-polish-2';
-import { blueprintPreview, installPreviewFallbacks } from './blueprint-preview.js?v=20261101-polish-2';
-import { connectPolling, createRefreshQueue } from './live-updates.js?v=20261101-polish-2';
+import { esc, fmt } from './format.js?v=20261101-select-1';
+import { updateCannonPicker } from './cannon-picker.js?v=20261101-select-1';
+import { createCannonPickerDialog } from './cannon-picker-dialog.js?v=20261101-select-1';
+import { renderCannon, cannonSettingsPayload, cannonStartState, updateCannonLive } from './cannon-ui.js?v=20261101-select-1';
+import { coordinateFields, placementCard, placementValues, coordinateListText } from './placement.js?v=20261101-select-1';
+import { blueprintPreview, installPreviewFallbacks } from './blueprint-preview.js?v=20261101-select-1';
+import { connectPolling, createRefreshQueue } from './live-updates.js?v=20261101-select-1';
 installPreviewFallbacks();
 const $ = id => document.getElementById(id);
 const when = t => t ? new Date(t).toLocaleString('de-DE', { dateStyle: 'short', timeStyle: 'short' }) : '–';
@@ -268,9 +269,10 @@ function renderCannonCard(c, sequence) {
   const old = cannonCard(c.name);
   cannonLatest.set(c.name,c);
   cannonPaintSequence.set(c.name.toLowerCase(),sequence);
+  cannonPicker.update(c);
   if (old && cardProtected(c.name, old)) {
     const baseline=cannonBaseline.get(c.name);
-    updateCannonPicker(old,c,ago);
+    updateCannonPicker(old,c);
     updateCannonLive(old,c,{isAdmin:isAdmin(),busy:busyCannons.has(c.name),sameAssignment:baseline?.assignment===c.assignment});
     cannonPending.set(c.name,{c,sequence});
     return true;
@@ -346,6 +348,20 @@ async function refreshOneCannon(name) {
   } catch (error) { if (error.status === 404 && revision === cannonRevision) return removeCannonCard(name, sequence); throw error; }
 }
 window.addEventListener('beforeunload', e => { if (dirtyCannons()) { e.preventDefault(); e.returnValue = ''; } });
+const cannonPicker = createCannonPickerDialog({
+  dialog: $('cannonPickerDialog'), ago,
+  read: name => api('/api/cannons/' + encodeURIComponent(name)),
+  build: async (name, body) => {
+    busyCannons.add(name);
+    try { return await api('/api/cannons/' + encodeURIComponent(name) + '/build', {method:'POST',body}); }
+    finally { busyCannons.delete(name); }
+  },
+  onSettled: (name, result, error) => {
+    if (result) { document.activeElement?.blur(); toast(`${name}: ${result.message}`); }
+    else if (!$('cannonPickerDialog').open) toast(`${name}: ${error.message}`, true);
+    cannonRevision++; refreshQueue.request('cannon:' + name); refreshQueue.resume();
+  },
+});
 
 function alignmentCard(c) {
   const a=c.alignment || {state:'disabled',message:'Ausrichtung deaktiviert: keine bestätigte Blockbindung.'}, b=a.binding, d=a.desired, o=a.observed;
@@ -369,26 +385,13 @@ $('cannonList').addEventListener('input', e => {
 });
 $('cannonList').addEventListener('reset', e => {
   const form = e.target; delete form.dataset.dirty;
-  delete form.dataset.choiceInvalid;
-  const warning=form.querySelector('[data-choice-warning]');if(warning)warning.textContent='';
   form.querySelector('.draft-note').textContent = '';
   form.querySelector('.form-error').textContent = '';
   setTimeout(() => { document.activeElement?.blur(); refreshQueue.request('cannon:' + form.closest('[data-cannon]').dataset.cannon); refreshQueue.resume(); }, 0);
 });
-$('cannonList').addEventListener('change',e=>{
-  if(!e.target.matches('.assignment-form select[name="blueprint"]'))return;
-  const c=cannonLatest.get(e.target.closest('[data-cannon]').dataset.cannon),form=e.target.closest('form');
-  const choice=c?.blueprintChoices?.items.find(b=>b.id===e.target.value&&String(b.version)===e.target.selectedOptions[0]?.dataset.version);
-  if(choice||e.target.value===''){delete form.dataset.choiceInvalid;form.querySelector('[data-choice-warning]').textContent='';}
-  form.querySelector('[data-choice-preview]').innerHTML=renderChoicePreview(choice);
-});
-$('cannonList').addEventListener('reset',e=>{
-  if(!e.target.matches('.assignment-form'))return;
-  setTimeout(()=>e.target.querySelector('select').dispatchEvent(new Event('change',{bubbles:true})),0);
-});
 $('cannonList').addEventListener('submit', async e => {
   const form = e.target;
-  if (!form.matches('.cannon-settings, .assignment-form')) return;
+  if (!form.matches('.cannon-settings')) return;
   e.preventDefault();
   const card = form.closest('[data-cannon]'), name = card.dataset.cannon;
   if (busyCannons.has(name)) return;
@@ -396,19 +399,7 @@ $('cannonList').addEventListener('submit', async e => {
   const error = form.querySelector('.form-error'); error.textContent = '';
   let controls = [];
   try {
-    let body;
-    if (form.matches('.cannon-settings')) {
-      if (card.querySelector('.assignment-form[data-dirty]')) throw new Error('Die Bauplan-Auswahl zuerst zuweisen oder verwerfen.');
-      body = cannonSettingsPayload(data, current, isAdmin());
-    }
-    else {
-      if (card.querySelector('.cannon-settings[data-dirty]')) throw new Error('Einstellungen zuerst speichern oder verwerfen.');
-      if(form.dataset.choiceInvalid)throw new Error('Der gewählte Bauplan ist nicht mehr baubar. Bitte neu wählen oder verwerfen.');
-      body = cannonSelectionPayload(data,current,{catalog:cannonLatest.get(name)?.blueprintChoices,version:form.querySelector('select').selectedOptions[0]?.dataset.version??null});
-      if (!Object.keys(body).length) { form.reset(); return; }
-      const blueprint = body.blueprint;
-      if (!confirm(blueprint ? `${name} den gewählten Bauplan zuweisen? Reste des alten Auftrags gehen zurück ins ME.` : `${name} keinen Bauplan mehr zuweisen?`)) return;
-    }
+    const body = cannonSettingsPayload(data, current, isAdmin());
     if (!Object.keys(body).length) { form.reset(); toast('Keine Änderungen.'); return; }
     busyCannons.add(name);
     controls = [...card.querySelectorAll('input, select, button')].map(el => [el, el.disabled]);
@@ -466,6 +457,11 @@ $('cannonList').addEventListener('click', guard(async e => {
     return;
   }
   if (b.dataset.act === 'position') { openBlueprint(b.dataset.bp); return; }
+  if (b.dataset.act === 'choose-blueprint') {
+    if (card.dataset.bindingDirty) throw new Error('Die Blockbindung zuerst bestätigen oder verwerfen.');
+    cannonPicker.open(name, cannonLatest.get(name));
+    return;
+  }
   busyCannons.add(name); b.disabled = true;
   try {
     if (b.dataset.act === 'discover') {
@@ -495,6 +491,10 @@ $('cannonList').addEventListener('click', guard(async e => {
     if (b.dataset.act === 'delete') {
       if (!confirm(`${name} entfernen? Läuft der Computer noch, meldet er sich gleich wieder an.`)) return;
       await api('/api/cannons/' + encodeURIComponent(name), { method: 'DELETE' });
+    }
+    if (b.dataset.act === 'unassign') {
+      if (!confirm(`Auftrag von ${name} aufheben? Reste gehen zurück ins ME, und eine laufende Kanone bekommt kein Material mehr.`)) return;
+      await api('/api/cannons/' + encodeURIComponent(name), { method: 'PUT', body: { blueprint: null } });
     }
     if (b.dataset.act === 'upgrade') {
       if (!confirm('Die aktuelle Bauplan-Version zuweisen? Der bisherige Auftrag wird ersetzt.')) return;

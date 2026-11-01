@@ -1,8 +1,8 @@
-import { esc, fmt } from './format.js?v=20261101-polish-2';
-import { renderCannonPicker, renderNativeProgress, nativeProgressLabel } from './cannon-picker.js?v=20261101-polish-2';
-import { cannonRangeCard, distanceText } from './cannon-range.js?v=20261101-polish-2';
-import { coordinateFields, placementValues } from './placement.js?v=20261101-polish-2';
-import { blueprintPreview } from './blueprint-preview.js?v=20261101-polish-2';
+import { esc, fmt } from './format.js?v=20261101-select-1';
+import { renderPickerButton, renderNativeProgress, nativeProgressLabel } from './cannon-picker.js?v=20261101-select-1';
+import { cannonRangeCard, distanceText } from './cannon-range.js?v=20261101-select-1';
+import { coordinateFields, placementValues } from './placement.js?v=20261101-select-1';
+import { blueprintPreview } from './blueprint-preview.js?v=20261101-select-1';
 
 const checked = value => value ? ' checked' : '';
 const states = { outofrange:'Außer Reichweite', alignment:'Material gesperrt', offline:'Computer offline', nocomputer:'Kein Computer', feeding:'Aktiv', preparing:'Wartet auf Schematic', waiting:'Wartet auf Material', full:'Kiste voll', done:'Fertig', paused:'Pausiert', unassigned:'Kein Bauplan', missing:'Bauplan fehlt', nosnapshot:'Kein Live-Bestand', error:'Fehler', start:'Startet', unknown:'Status ausstehend' };
@@ -129,7 +129,7 @@ export function renderCannon(c, { isAdmin, alignmentHtml, ago }) {
         ${bp ? `<div class="coordinate-row">${coordinateFields(bp)}${origin ? `<button class="text-button small" data-copy-coordinate="${origin.join(' ')}">X Y Z kopieren</button>` : ''}</div>` : ''}
         <div data-cannon-progress>${renderCannonProgress(c)}</div>
         <div data-cannon-start>${renderCannonStart(c,isAdmin)}</div>
-        ${canEdit ? renderCannonPicker(c,ago) : ''}
+        ${isAdmin ? renderPickerButton(c) : ''}
         ${canEdit && bp && bp.version !== bp.currentVersion ? `<button class="small" data-act="upgrade" data-bp="${esc(bp.id)}">Auf v${esc(bp.currentVersion)} aktualisieren</button>` : ''}
       </div>
     </div>
@@ -172,7 +172,7 @@ export function renderCannon(c, { isAdmin, alignmentHtml, ago }) {
         ${alignmentHtml}
         ${job?.message ? `<p class="muted">${esc(job.message)}</p>` : ''}
         ${(c.items || []).length ? `<p class="muted">Als Nächstes: ${c.items.slice(0,6).map(i => `${esc(String(i.item).replace(/^minecraft:/,''))} ${fmt(i.needed)}`).join(' · ')}</p>` : ''}
-        <button class="small danger" data-act="delete"${c.alignment?.enabled ? ' disabled title="Gebundene Station geschützt"' : ''}>Station entfernen</button>
+        <div class="row">${canEdit && bp ? '<button class="small danger" data-act="unassign">Auftrag aufheben</button>' : ''}<button class="small danger" data-act="delete"${c.alignment?.enabled ? ' disabled title="Gebundene Station geschützt"' : ''}>Station entfernen</button></div>
       </div>
     </details>
   </article>`;

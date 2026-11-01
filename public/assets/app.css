@@ -181,9 +181,9 @@ details details{margin-top:12px}
 .kv dd{margin:0;min-width:0;overflow-wrap:anywhere}
 
 /* ---------- dialogs ---------- */
-.drawer,.form-dialog{color:var(--text);background:var(--surface);border:1px solid var(--line);padding:24px;max-height:100dvh;overflow:auto;box-shadow:var(--shadow)}
+.drawer,.form-dialog,.picker-dialog{color:var(--text);background:var(--surface);border:1px solid var(--line);padding:24px;max-height:100dvh;overflow:auto;box-shadow:var(--shadow)}
 .drawer{position:fixed;inset:0 0 0 auto;width:min(720px,100%);max-width:100%;height:100dvh;margin:0 0 0 auto;border-width:0 0 0 1px}
-.drawer::backdrop,.form-dialog::backdrop{background:#070d1499}
+.drawer::backdrop,.form-dialog::backdrop,.picker-dialog::backdrop{background:#070d1499}
 .drawer-heading{display:flex;justify-content:space-between;gap:16px;align-items:flex-start;margin-bottom:16px}
 .drawer h2{font-size:21px;margin-bottom:4px}
 .drawer .panel{padding:16px;margin:20px 0;background:var(--surface-2);box-shadow:none}
@@ -191,6 +191,25 @@ details details{margin-top:12px}
 .drawer td,.drawer th{padding:10px 8px}
 .form-dialog{width:min(480px,calc(100% - 32px));border-radius:var(--radius)}
 .form-dialog .form-stack{max-width:none}
+.picker-dialog{width:min(780px,calc(100% - 32px));max-height:min(860px,calc(100dvh - 32px));padding:0;overflow:hidden;border-radius:var(--radius)}
+.picker-panel{display:flex;flex-direction:column;max-height:inherit;min-height:0;padding:20px 24px 0}
+.picker-head{display:flex;justify-content:space-between;gap:16px;align-items:flex-start}
+.picker-head h2{font-size:21px;margin:2px 0 0}
+.picker-intro{margin:8px 0 12px;font-size:13px;color:var(--muted)}
+.picker-search{display:grid;gap:4px;font-size:12px;color:var(--muted)}
+.picker-search input{width:100%;color:var(--text);font-size:14px}
+[data-picker-status] .notice,[data-picker-status] .muted{margin:12px 0 0}
+[data-picker-status] .muted{font-size:13px}
+.picker-list{flex:1 1 auto;min-height:120px;overflow:auto;margin:14px -24px 0;padding:0 24px;border-top:1px solid var(--line);overscroll-behavior:contain}
+.picker-group h3{position:sticky;top:0;z-index:2;padding:12px 0 8px;background:var(--surface)}
+.picker-group ul{margin:0;padding:0;list-style:none}
+.picker-choice{display:flex;gap:14px;align-items:center;padding:10px 0;border-top:1px solid var(--line)}
+.picker-choice-body{flex:1;min-width:0}
+.picker-choice-body p{margin:6px 0 0;font-size:12px;color:var(--muted)}
+.picker-choice-body .picker-choice-title{margin:0 0 7px;font-size:14px;color:var(--text);overflow-wrap:anywhere}
+.picker-choice>button{flex:none;min-width:92px;justify-content:center}
+.picker-empty{padding:20px 0}
+.picker-panel>.footnote{margin:0 -24px;padding:10px 24px 12px;border-top:1px solid var(--line)}
 body:has(dialog[open]){overflow:hidden}
 
 /* ---------- auth ---------- */
@@ -230,15 +249,6 @@ body:has(dialog[open]){overflow:hidden}
 .cannon-facts dt{margin-bottom:2px;font-size:12px}
 .cannon-facts dd{display:flex;flex-wrap:wrap;gap:2px 10px;align-items:center;font-size:13px}
 .cannon-facts dd .text-button{min-height:0}
-.assignment{margin:0;padding:0;border:0}
-.assignment>summary{display:inline-flex;gap:8px;padding:5px 11px;font-size:13px;border:1px solid var(--line-strong);border-radius:var(--radius-sm);background:var(--surface-2);color:var(--text)}
-.assignment>summary:hover{border-color:var(--cyan)}
-.assignment-form{padding:6px 0 2px}
-.assignment-form select{width:min(560px,100%)}
-.cannon-choice{display:flex;gap:12px;align-items:flex-start;margin:12px 0}
-.cannon-choice>div{min-width:0;flex:1}
-.cannon-choice p{margin:5px 0;font-size:12px}
-.cannon-choice .bar{margin-top:8px}
 .cannon>details{margin:0;padding:0 20px;border-top:1px solid var(--line);border-bottom:0}
 .cannon>details>summary{padding:12px 0;font-weight:550}
 .cannon-settings{margin:0 0 16px}
@@ -331,7 +341,13 @@ body:has(dialog[open]){overflow:hidden}
  .cannon-heading .badge{margin-left:0}
  .cannon .last-seen{order:3;width:100%}
 }
-@media(max-width:540px){.cannon-choice{flex-direction:column}}
+@media(max-width:540px){
+ .picker-panel{padding:16px 16px 0}
+ .picker-list,.picker-panel>.footnote{margin-left:-16px;margin-right:-16px;padding-left:16px;padding-right:16px}
+ .picker-choice{flex-wrap:wrap}
+ .picker-choice-body{flex-basis:calc(100% - 110px)}
+ .picker-choice>button{width:100%}
+}
 @media(prefers-reduced-motion:reduce){*{transition:none!important}}
 @media print{
  .materials-page{background:white;color:black}
