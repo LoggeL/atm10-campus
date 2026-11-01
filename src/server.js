@@ -20,6 +20,7 @@ import { registerAlignment } from './alignment.js';
 import { createSchematics } from './schematics.js';
 import { registerStationRoutes, endCannonJobs } from './api-stations.js';
 import { sceneJson, blueprintsBinary } from './viewer-data.js';
+import { registerPreviewRoutes } from './preview/service.js';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const page = name => readFileSync(join(root, 'public', name), 'utf8');
@@ -190,6 +191,8 @@ export async function buildServer(config = defaultConfig) {
     return db.prepare(`SELECT a.id, a.at, u.username AS user, a.via, a.action, a.target, a.detail_json AS detail FROM activity a
       LEFT JOIN users u ON u.id = a.user_id ORDER BY a.id DESC LIMIT ?`).all(limit).map(r => ({ ...r, detail: r.detail ? JSON.parse(r.detail) : null }));
   });
+
+  registerPreviewRoutes(app, campus);
 
   // ---------- blueprints ----------
   const actorVia = a => (a.via === 'token' ? 'api' : 'web');

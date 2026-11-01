@@ -4,6 +4,8 @@ import { VoxelRenderer } from './renderer.js';
 import { Navigation } from './navigation.js';
 import { buildAtlas } from './atlas.js';
 import { LAYERS, PRESETS, MODES, CAT, categoryModes, categoryColors, statusLabel, statusColor } from './layers.js';
+import { blueprintPreview, installPreviewFallbacks } from '/assets/blueprint-preview.js?v=20261101-previews-1';
+installPreviewFallbacks();
 
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -323,6 +325,7 @@ function renderBlueprints() {
         const st = BP_STATUS[b.status] || BP_STATUS.unknown, p = b.progress ?? 0;
         return `<div class="bp ${state.selected === b.id ? 'selected' : ''}" data-bp="${esc(b.id)}">
           <input type="checkbox" data-vis="${esc(b.id)}" ${state.visible.has(b.id) ? 'checked' : ''} aria-label="sichtbar">
+          ${blueprintPreview(b,{size:'small'})}
           <span class="t"><b>${esc(b.name)}</b><small>v${b.version} · ${esc(st.label)}</small></span>
           <span class="ring" style="--p:${p};--c:${st.color}" title="${String(p).replace('.', ',')} % gebaut"><span>${Math.round(p)} %</span></span>
         </div>`;
@@ -362,6 +365,7 @@ function renderDetail() {
     <span class="status-tag" style="--c:${st.color}">● ${esc(st.label)}</span>
     <h2>${esc(b.name)}</h2>
     <div class="sub">${esc(b.fileName)} · v${b.version} · ${esc(b.uploadedBy || '')} · ${esc(date)}</div>
+    <figure class="blueprint-figure">${blueprintPreview(b,{size:'large',eager:true})}<figcaption>Bauplan v${b.version} · ohne Weltbestand</figcaption></figure>
     ${b.description ? `<p class="desc">${esc(b.description)}</p>` : ''}
     <div class="progress"><div style="width:${b.progress ?? 0}%"></div></div>
     <small style="color:var(--muted)">${String(b.progress ?? 0).replace('.', ',')} % gebaut · ${b.origin.join(', ')} → ${hi.join(', ')}</small>

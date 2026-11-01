@@ -1,6 +1,8 @@
 'use strict';
-import { renderCannon, cannonSettingsPayload } from './cannon-ui.js?v=20261101-simple-1';
-import { coordinateFields, placementCard, placementValues, coordinateListText } from './placement.js?v=20261101-simple-1';
+import { renderCannon, cannonSettingsPayload } from './cannon-ui.js?v=20261101-previews-1';
+import { coordinateFields, placementCard, placementValues, coordinateListText } from './placement.js?v=20261101-previews-1';
+import { blueprintPreview, installPreviewFallbacks } from './blueprint-preview.js?v=20261101-previews-1';
+installPreviewFallbacks();
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const fmt = n => n == null ? '–' : Number(n).toLocaleString('de-DE');
@@ -88,7 +90,7 @@ function renderRows() {
   $('bpRows').innerHTML = rows.map(b => {
     const c = b.conflicts || {};
     const conflictText = [c.protectedBlockEntities ? `${fmt(c.protectedBlockEntities)} Maschinen` : '', c.overlapCells ? `${fmt(c.overlapCells)} Überlappung` : '', c.changedSinceBase ? `${fmt(c.changedSinceBase)} geändert` : ''].filter(Boolean).join(' · ') || '–';
-    return `<tr class="click" data-id="${esc(b.id)}"><td><button class="text-button blueprint-name">${esc(b.name)}</button><div class="muted mono">${esc(b.fileName)}</div></td><td>${badge(b.status)}${conflictText !== '–' ? `<div class="muted" style="font-size:12px">${esc(conflictText)}</div>` : ''}</td><td>v${b.version}</td>
+    return `<tr class="click" data-id="${esc(b.id)}"><td><div class="blueprint-entry">${blueprintPreview(b)}<span><button class="text-button blueprint-name">${esc(b.name)}</button><span class="muted mono blueprint-file">${esc(b.fileName)}</span></span></div></td><td>${badge(b.status)}${conflictText !== '–' ? `<div class="muted" style="font-size:12px">${esc(conflictText)}</div>` : ''}</td><td>v${b.version}</td>
       <td><div class="progress-cell"><div class="bar"><i style="width:${b.progress ?? 0}%"></i></div><span>${b.progress == null ? '–' : b.progress.toLocaleString('de-DE') + ' %'}</span></div></td>
       <td><button class="text-button" aria-label="Details zu ${esc(b.name)}">Details</button></td></tr>`;
   }).join('') || '<tr><td colspan="5" class="muted">Keine passenden Baupläne. Suche oder Filter ändern, oder einen neuen Bauplan hochladen.</td></tr>';
@@ -104,7 +106,7 @@ function renderCoordinates() {
   const rows = status.blueprints.filter(b => !q || `${b.name} ${b.id} ${b.fileName}`.toLowerCase().includes(q))
     .sort((a,b) => a.fileName.localeCompare(b.fileName, 'de', {numeric:true}));
   $('coordinateCount').textContent = `${rows.length} von ${status.blueprints.length} Bauplänen · Stand ${when(status.generatedAt)}`;
-  $('coordinateRows').innerHTML = rows.map(b => `<tr><td><button class="text-button blueprint-name" data-open-blueprint="${esc(b.id)}">${esc(b.name)}</button><div class="muted mono">${esc(b.fileName)}</div></td><td>v${b.version}</td><td>${coordinateFields(b)}</td><td>${placementValues(b) ? `<button class="small" data-copy-coordinate="${b.origin.join(' ')}">X Y Z kopieren</button>` : ''}<a class="btn small" href="/api/blueprints/${encodeURIComponent(b.id)}/download?version=${b.version}">NBT v${b.version}</a></td></tr>`).join('') || '<tr><td colspan="4">Keine passenden Baupläne.</td></tr>';
+  $('coordinateRows').innerHTML = rows.map(b => `<tr><td><button class="text-button blueprint-entry" data-open-blueprint="${esc(b.id)}">${blueprintPreview(b,{size:'small'})}<span><span class="blueprint-name">${esc(b.name)}</span><span class="muted mono blueprint-file">${esc(b.fileName)}</span></span></button></td><td>v${b.version}</td><td>${coordinateFields(b)}</td><td>${placementValues(b) ? `<button class="small" data-copy-coordinate="${b.origin.join(' ')}">X Y Z kopieren</button>` : ''}<a class="btn small" href="/api/blueprints/${encodeURIComponent(b.id)}/download?version=${b.version}">NBT v${b.version}</a></td></tr>`).join('') || '<tr><td colspan="4">Keine passenden Baupläne.</td></tr>';
 }
 $('coordinateSearch').addEventListener('input', renderCoordinates);
 $('coordinateRows').addEventListener('click', e => { const b = e.target.closest('[data-open-blueprint]'); if (b) openBlueprint(b.dataset.openBlueprint); });
@@ -136,6 +138,7 @@ const openBlueprint = guard(async id => {
   $('drawer').innerHTML = `
     <div class="drawer-heading"><div><h2 id="blueprintTitle">${esc(bp.name)}</h2><div class="muted mono">${esc(bp.fileName)}</div></div><button class="small" id="dClose">Schließen</button></div>
     <div class="row">${st ? badge(st.status) : ''}<a class="btn small" href="/viewer#bp=${encodeURIComponent(id)}">Im 3D-Viewer</a><a class="btn small" href="/api/blueprints/${encodeURIComponent(id)}/materials?format=html">Materialliste</a></div>
+    <figure class="blueprint-figure">${blueprintPreview(bp,{size:'large',eager:true})}<figcaption>Bauplan v${bp.currentVersion} · Blockvorschau ohne Weltbestand</figcaption></figure>
     ${placementCard({origin:cur?.origin, version:bp.currentVersion})}
     <dl class="kv">
       <dt>Bauplan verschieben</dt><dd><button class="small" id="dMove">Position im Campus ändern</button></dd>

@@ -3,6 +3,7 @@
 Web-App auf der HomeBox für das Campus-Redesign unseres ATM10-Servers:
 
 - **Baupläne** (Create/Vanilla-Structure-NBT) mit Versionen: Upload, Download (einzeln oder ZIP), Wiederherstellen, Position ändern.
+- **Bauplan-Vorschauen** aus den tatsächlichen NBT-Blöcken: als Bild in Bauplan- und Koordinatenlisten, Details, Kanonenkarten und Viewer-Auswahl. Kanonen zeigen die zugewiesene Version.
 - **Live-Bestand**: liest alle paar Minuten die Region-Files der Welt (read-only) und erzeugt einen Snapshot des Campus-Ausschnitts, aber nur, wenn der Server gespeichert hat.
 - **Konfliktanalyse** je Bauplan gegen Live: Fortschritt, Maschinen/Block-Entities im Weg, seit Planung geänderte Zellen, Überlappungen zwischen Bauplänen, Bearbeitungskonflikte (409 bei veralteter `baseVersion`).
 - **3D-Viewer** (`/viewer`, three.js): texturierte Voxel-Chunks (Greedy-Meshing + Ambient Occlusion im Web-Worker), Tageszeit mit Sonnenschatten, leuchtende Lampen (Bloom), Orbit/Fliegen/Laufen mit Kollision, Höhenschnitt, Tooltip je Block.
@@ -16,6 +17,12 @@ Web-App auf der HomeBox für das Campus-Redesign unseres ATM10-Servers:
 Die Materialtexturen und das Titelbild sind mit Codex (imagegen) erzeugt; Quellen und Prompts liegen in `assets-src/` (`PROMPTS.md`).
 `python3 tools/build-textures.py` (Pillow) macht daraus `public/viewer/textures/*.png` (64 px, kachelbar, Graustufen) und `public/viewer/hero.webp`.
 Die Blockfarben stammen aus den Mod-Jars (`tools/extract-texture-colors.py` → `src/data-texture-colors.json.gz`) und färben die Texturen je Block ein.
+
+### Bauplan-Vorschauen
+
+`GET /api/blueprints/:id/preview.png?version=N` liefert ein authentifiziertes PNG (640 × 400). Ohne Versionsangabe gilt die aktuelle Revision. Die Vorschau zeigt den vollständigen Bauplan ohne Weltbestand oder Baufortschritt. Wie der Viewer verwendet sie Würfelgeometrie, die Blockfarben aus dem Modpack und die gemeinsamen Materialtexturen; spezielle Blockmodelle wie Treppen und Maschinen sind vereinfacht. Luft und Structure Void werden ausgelassen. Reine Abrisspläne zeigen ein leeres Raster.
+
+Die App lädt Bilder erst in der Nähe des sichtbaren Bereichs. Der Server rendert bei Bedarf in einem separaten Worker und speichert unter `DATA_DIR/previews`. Inhalts- und Renderer-Hash verhindern veraltete Bilder nach NBT- oder Rendereränderungen. Änderungen nur am Weltanker verwenden dasselbe Bild. Private ETags erlauben eine erneute Zugriffskontrolle bei jedem Abruf. Parallele Anfragen desselben Inhalts teilen einen Renderauftrag. Maximal ein Worker läuft gleichzeitig (30 Sekunden, 512 MB Heap, bis zu 128 wartende Aufträge); der Bildcache bleibt auf 1.000 Bilder beziehungsweise 128 MB begrenzt. Fehler erscheinen als lesbarer Platzhalter, die Bauplanfunktionen bleiben verfügbar.
 
 Die **Materialliste** hat zusätzlich eine bebilderte HTML-Ansicht (`/api/materials?format=html`, auch pro Bauplan).
 Sie zeigt die exakte Item-ID, Connecting-Variante, Mengen und den Zeitstand von Weltaufnahme/ME-Bestand.

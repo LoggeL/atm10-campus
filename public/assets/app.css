@@ -65,6 +65,7 @@ tbody tr.click:hover{background:var(--panel2)}
 .blueprint-table td:first-child{min-width:240px}
 .blueprint-table td .mono{margin-top:3px}
 .blueprint-name{font-weight:600;color:var(--text);font-size:14px;min-height:auto}
+.blueprint-file{display:block;font-size:12px}
 .num{text-align:right;font-variant-numeric:tabular-nums}
 .badge{display:inline-flex;align-items:center;font-size:12px;white-space:nowrap;line-height:1.4}
 .badge.conflict{color:var(--red)}

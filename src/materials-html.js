@@ -31,7 +31,7 @@ export function materialsHtml(report, title, requestUrl) {
     ${me ? `<td class="num">${fmt(r.me)}</td><td class="num">${fmt(r.short)}</td><td>${r.craftable ? 'Ja' : 'Nein'}</td>` : ''}</tr>`).join('');
   return `<!doctype html>
 <html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Materialliste · ${esc(title)}</title><link rel="stylesheet" href="/assets/app.css?v=20261101-simple-1"></head>
+<title>Materialliste · ${esc(title)}</title><link rel="stylesheet" href="/assets/app.css?v=20261101-previews-1"></head>
 <body class="materials-page"><a class="skip-link" href="#main">Zum Inhalt</a>
 <header class="top"><a class="brand" href="/app">ATM10 Campus</a><span class="spacer"></span><a href="/viewer">3D-Viewer</a><a href="/app">Baupläne</a><a href="/app#cannons">Kanonen</a></header>
 <main id="main"><div class="page-heading"><h1>Materialliste</h1></div><p class="intro">${esc(title)}</p>
@@ -48,5 +48,5 @@ ${t.blocked || t.unknown ? `<p class="badge warning">${fmt(t.blocked)} Zellen mi
 ${me ? '<th scope="col" class="num">Im ME</th><th scope="col" class="num">Fehlt im ME</th><th scope="col">Im ME craftbar</th>' : ''}</tr></thead>
 <tbody>${rows || `<tr><td colspan="${me ? 8 : 5}" class="muted">Für diese Auswahl fehlen keine Materialien.</td></tr>`}<tr id="materialEmpty" class="hide"><td colspan="${me ? 8 : 5}" class="muted">Kein Material passt zur Suche.</td></tr></tbody></table></div>
 <p class="footnote">Blockbilder aus den Minecraft- und Modtexturen. Connecting-Bilder zeigen einen einzelnen Block; die Kennzeichnung nennt die benötigte Variante.</p>
-</main><script src="/assets/materials.js?v=20261101-simple-1" defer></script></body></html>`;
+</main><script src="/assets/materials.js?v=20261101-previews-1" defer></script></body></html>`;
 }

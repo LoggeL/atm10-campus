@@ -58,6 +58,7 @@ test('out-of-range transfer is retained for admins and escaped; pending target v
   const html = render(c);
   assert.match(html,/data-act="transfer"/);
   assert.match(html,/Für v3: 500 63 -27/);
+  assert.match(html,/\/api\/blueprints\/west\/preview\.png\?version=2/);
   assert.match(html,/free&lt;script&gt;/);
   assert.doesNotMatch(render(c,false),/data-act="transfer"/);
 });

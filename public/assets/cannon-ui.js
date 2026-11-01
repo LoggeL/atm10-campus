@@ -1,5 +1,6 @@
-import { cannonRangeCard, distanceText } from './cannon-range.js?v=20261101-simple-1';
-import { coordinateFields, placementValues } from './placement.js?v=20261101-simple-1';
+import { cannonRangeCard, distanceText } from './cannon-range.js?v=20261101-previews-1';
+import { coordinateFields, placementValues } from './placement.js?v=20261101-previews-1';
+import { blueprintPreview } from './blueprint-preview.js?v=20261101-previews-1';
 
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
 const fmt = n => n == null ? '–' : Number(n).toLocaleString('de-DE');
@@ -52,7 +53,7 @@ export function renderCannon(c, bpOptions, { isAdmin, alignmentHtml, ago }) {
   return `<article class="panel cannon" data-cannon="${esc(c.name)}" aria-label="${esc(c.name)}">
     <div class="cannon-heading"><h2>${esc(c.name)}</h2><span class="connection"><span class="dot${c.online ? ' on' : ''}"></span>${c.online ? 'Online' : 'Offline'}</span><span class="last-seen">${c.lastSeenAt ? 'Meldung ' + esc(ago(c.lastSeenAt)) : 'Noch keine Meldung'}</span></div>
     <dl class="kv">
-      <dt>Bauplan</dt><dd><span>${bp ? `${esc(bp.name)} · v${esc(bp.version)}` : 'Kein Bauplan zugewiesen'}</span>
+      <dt>Bauplan</dt><dd>${bp ? blueprintPreview(bp) : ''}<span>${bp ? `${esc(bp.name)} · v${esc(bp.version)}` : 'Kein Bauplan zugewiesen'}</span>
         ${canEdit ? `<details data-section="assignment" class="assignment"><summary>Ändern</summary><form class="assignment-form"><label class="setting">Bauplan<select name="blueprint"><option value="">Kein Bauplan</option>${opts.map(([id,name]) => `<option value="${esc(id)}"${bp?.id === id ? ' selected' : ''}>${esc(name)}</option>`).join('')}</select></label><div class="form-actions"><button class="small" type="submit">Zuweisen</button><button class="small" type="reset">Verwerfen</button><span class="draft-note" role="status"></span></div><p class="form-error" role="alert"></p></form></details>` : ''}
         ${canEdit && bp && bp.version !== bp.currentVersion ? `<button class="small" data-act="upgrade" data-bp="${esc(bp.id)}">Auf v${esc(bp.currentVersion)} aktualisieren</button>` : ''}</dd>
       ${bp ? `<dt>Zielkoordinaten</dt><dd>${coordinateFields(bp)}${origin ? `<button class="text-button small" data-copy-coordinate="${origin.join(' ')}">Kopieren</button>` : ''}</dd>` : ''}

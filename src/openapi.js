@@ -67,6 +67,7 @@ export function openapi(baseUrl) {
         requestBody: { content: { 'application/octet-stream': { schema: { type: 'string', format: 'binary' } } } },
         responses: { 200: { description: 'Gespeichert' }, 409: { description: 'Bearbeitungskonflikt' } } },
       },
+      '/api/blueprints/{id}/preview.png': { get: { summary: 'Isometrische PNG-Vorschau aus den Blöcken des Bauplans (640 × 400)', parameters: [id, { name: 'version', in: 'query', schema: { type: 'integer', minimum: 1 }, description: 'Ohne Angabe aktuelle Version; mit Angabe genau diese Revision' }], responses: { 200: { description: 'PNG; private Cache mit ETag', content: { 'image/png': { schema: { type: 'string', format: 'binary' } } } }, 304: { description: 'Vorschau unverändert' }, 503: { description: 'Vorschau konnte gerade nicht erzeugt werden' } } } },
       '/api/blueprints/{id}/download': { get: { summary: 'NBT herunterladen', parameters: [id, { name: 'version', in: 'query', schema: { type: 'integer' } }], responses: ok } },
       '/api/blueprints/{id}/versions/{version}/analysis': { get: { summary: 'Detailanalyse mit Beispielkoordinaten', parameters: [id, { name: 'version', in: 'path', required: true, schema: { type: 'integer' } }, { name: 'snapshot', in: 'query', schema: { type: 'integer' } }], responses: ok } },
       '/api/blueprints/{id}/revert': { post: { summary: 'Alte Version als neue Version wiederherstellen', parameters: [id], requestBody: json({ type: 'object', required: ['version'], properties: { version: { type: 'integer' } } }), responses: ok } },
