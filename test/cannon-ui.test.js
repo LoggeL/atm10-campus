@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { renderCannon, cannonSettingsPayload } from '../public/assets/cannon-ui.js';
+import { renderCannon, cannonSettingsPayload, cannonStartState } from '../public/assets/cannon-ui.js';
 import { DEFAULT_OPTIONS } from '../src/api-stations.js';
 
 const station = () => ({ name:'kanone-11', assignment:17, online:true, state:'feeding', options:{...DEFAULT_OPTIONS},
@@ -68,4 +68,24 @@ test('station names, plan names and job errors cannot inject markup into forms',
   assert.doesNotMatch(html,/<script>|<img src=x/);
   assert.match(html,/&lt;img/);
   assert.match(html,/&quot; onmouseover=&quot;/);
+});
+
+test('web start requires a live verified automatic plan and distinguishes running and paused native states', () => {
+  const c=station();c.alignment={enabled:true,state:'aligned',observed:{state:'STOPPED'}};
+  assert.deepEqual(cannonStartState(c,true),{visible:true,enabled:true,label:'Kanone starten',reason:''});
+  assert.match(render(c),/data-act="start" title=/);
+  assert.doesNotMatch(render(c,false),/data-act="start"/);
+  c.alignment.observed.state='PAUSED';assert.equal(cannonStartState(c,true).label,'Fortsetzen');assert.equal(cannonStartState(c,true).enabled,true);
+  c.alignment.observed.state='RUNNING';assert.equal(cannonStartState(c,true).label,'Läuft');assert.equal(cannonStartState(c,true).enabled,false);
+  c.alignment.observed.state='STOPPED';
+  for(const change of [c=>c.online=false,c=>c.range.state='outofrange',c=>c.schematic.job.state='waiting',c=>c.schematic.job.version=1,c=>c.alignment.state='mismatch',c=>c.options.paused=true,c=>c.done=true]){
+    const unsafe=structuredClone(c);change(unsafe);assert.equal(cannonStartState(unsafe,true).enabled,false);assert.match(render(unsafe),/data-act="start" disabled/);
+  }
+});
+
+test('manual schematic copy explains the missing setup and provides the appropriate action', () => {
+  const c=station();c.schematic.settings.enabled=false;c.alignment={enabled:false};
+  assert.match(render(c),/Kanonen-Position noch nicht bestätigt/);assert.match(render(c),/data-act="open-binding"/);
+  assert.doesNotMatch(render(c),/Manuell einsetzen|data-act="start"/);
+  c.alignment.enabled=true;assert.match(render(c),/Automatische Vorbereitung ist aus/);assert.match(render(c),/data-act="open-settings"/);
 });

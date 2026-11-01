@@ -4,7 +4,8 @@ import { VoxelRenderer } from './renderer.js';
 import { Navigation } from './navigation.js';
 import { buildAtlas } from './atlas.js';
 import { LAYERS, PRESETS, MODES, CAT, categoryModes, categoryColors, statusLabel, statusColor } from './layers.js';
-import { blueprintPreview, installPreviewFallbacks } from '/assets/blueprint-preview.js?v=20261101-previews-1';
+import { blueprintPreview, installPreviewFallbacks } from '/assets/blueprint-preview.js?v=20261101-live-1';
+import { connectLiveUpdates, createRefreshQueue } from '/assets/live-updates.js?v=20261101-live-1';
 installPreviewFallbacks();
 
 const $ = s => document.querySelector(s);
@@ -45,8 +46,8 @@ function toast(html, ms = 4000) {
   if (ms) toast.timer = setTimeout(() => t.classList.add('hidden'), ms);
 }
 
-async function api(url) {
-  const r = await fetch(url, { credentials: 'same-origin' });
+async function api(url, options = {}) {
+  const r = await fetch(url, { credentials: 'same-origin', ...options });
   if (r.status === 401) { location.href = '/login'; throw new Error('Nicht angemeldet'); }
   if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || `${r.status} ${r.statusText}`);
   return r;
@@ -170,7 +171,12 @@ async function main() {
   };
   requestAnimationFrame(frame);
   setInterval(updateHud, 500);
-  setInterval(checkLive, 60_000);
+  const updates = createRefreshQueue({run:checkLive,canRun:() => !document.hidden});
+  connectLiveUpdates({
+    onChange:change => { if (change.topics?.some(topic => ['blueprints','snapshots'].includes(topic))) updates.request('scene'); },
+    onSync:() => updates.request('scene'),
+    onAuth:() => { location.href = '/login'; },
+  });
 }
 
 let firstDone = false;
@@ -501,16 +507,14 @@ function renderSnapshot() {
 }
 
 async function checkLive() {
-  try {
-    const s = await (await api('/api/status')).json();
-    const sc = state.scene;
-    if (sc.snapshot && sc.snapshot.id === sc.live && s.live && s.live.id !== sc.live) {
-      toast('Neuer Live-Stand der Welt verfügbar. <a href="" id="reload">Neu laden</a>', 0);
-    } else if (s.edition?.versionsKey && checkLive.key && s.edition.versionsKey !== checkLive.key) {
-      toast('Baupläne wurden geändert. <a href="" id="reload">Neu laden</a>', 0);
-    }
-    checkLive.key = s.edition?.versionsKey;
-  } catch { /* offline: ignore */ }
+  const s = await (await api('/api/status', {signal:AbortSignal.timeout(20_000)})).json();
+  const sc = state.scene;
+  if (sc.snapshot && sc.snapshot.id === sc.live && s.live && s.live.id !== sc.live) {
+    toast('Neuer Live-Stand der Welt verfügbar. <a href="" id="reload">Neu laden</a>', 0);
+  } else if (s.edition?.versionsKey && checkLive.key && s.edition.versionsKey !== checkLive.key) {
+    toast('Baupläne wurden geändert. <a href="" id="reload">Neu laden</a>', 0);
+  }
+  checkLive.key = s.edition?.versionsKey;
 }
 
 // ---------- clip, hover, picking ----------

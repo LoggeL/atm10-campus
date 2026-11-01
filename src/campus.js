@@ -3,6 +3,7 @@ import { mkdirSync, writeFileSync, readFileSync, rmSync, existsSync } from 'node
 import { join } from 'node:path';
 import { Worker } from 'node:worker_threads';
 import { createHash } from 'node:crypto';
+import { EventEmitter } from 'node:events';
 import { parseStructure } from './nbt.js';
 import { loadGrid, worldStamp } from './snapshot.js';
 import { analyzeBlueprint, findOverlaps, statusOf } from './analysis.js';
@@ -23,6 +24,7 @@ const META_FIELDS_OWNED = new Set(['file', 'name', 'origin', 'size', 'placed_blo
 export class Campus {
   constructor(db, config) {
     this.db = db; this.config = config;
+    this.events = new EventEmitter();
     this.structures = new Map(); // version id -> parsed structure
     this.grids = new Map();      // snapshot id -> grid (small LRU)
     this.statusCache = null;
@@ -32,7 +34,14 @@ export class Campus {
     mkdirSync(join(config.dataDir, 'package'), { recursive: true });
   }
 
-  invalidate() { this.statusCache = null; this.binCache = null; this.knownNamesCache = null; }
+  invalidate(topic = 'blueprints') {
+    this.statusCache = null; this.binCache = null; this.knownNamesCache = null;
+    this.events.emit('change', topic);
+  }
+
+  // Alignment installs a guard while a native action is using this blueprint.
+  // Domain entrypoints cover browser, agent and import writes alike.
+  assertBlueprintWritable(id) {}
 
   // ---------- blueprints ----------
   versionPath(bpId, version) { return join(this.config.dataDir, 'blueprints', bpId, `v${version}.nbt`); }
@@ -95,6 +104,7 @@ export class Campus {
   saveVersion({ fileName, bytes, origin, name, category, description, meta, note, baseVersion, baseSnapshotId, actor, via }) {
     if (!fileName || !/\.nbt$/i.test(fileName)) throw new HttpError(400, 'fileName muss auf .nbt enden.');
     const id = blueprintIdFromFile(fileName);
+    this.assertBlueprintWritable(id);
     let structure;
     try { structure = parseStructure(bytes); } catch (e) { throw new HttpError(422, 'NBT ungültig: ' + e.message); }
     const hash = sha(bytes);
@@ -135,6 +145,7 @@ export class Campus {
   }
 
   updateMeta(id, { name, category, description, meta }, actor, log = true) {
+    this.assertBlueprintWritable(id);
     const bp = this.getBlueprint(id);
     const merged = meta ? { ...bp.meta, ...meta } : null;
     this.db.prepare('UPDATE blueprints SET name = COALESCE(?, name), category = COALESCE(?, category), description = COALESCE(?, description), meta_json = COALESCE(?, meta_json), updated_at = ? WHERE id = ?')
@@ -145,6 +156,7 @@ export class Campus {
   }
 
   archive(id, actor) {
+    this.assertBlueprintWritable(id);
     this.getBlueprint(id);
     this.db.prepare('UPDATE blueprints SET archived_at = ?, updated_at = ? WHERE id = ?').run(now(), now(), id);
     logActivity(this.db, actor, 'blueprint.archive', id);
@@ -203,7 +215,7 @@ export class Campus {
           const summary = { recordCount: context.recordCount, blockEntityCount: context.blockEntityCount, chunksLoaded: context.chunksLoaded, chunksMissing: context.chunksMissing, durationMs: context.durationMs, worldTime: new Date(stamp).toISOString() };
           this.db.prepare('UPDATE snapshots SET dir = ?, summary_json = ?, deleted_at = NULL WHERE id = ?').run(dir, JSON.stringify(summary), id);
           logActivity(this.db, actor, 'snapshot.capture', String(id), { source, attempt, ...summary });
-          this.invalidate();
+          this.invalidate('snapshots');
           this.prune();
           return { skipped: false, snapshot: this.getSnapshot(id) };
         } catch (e) { lastErr = e; await new Promise(r => setTimeout(r, 2000 * attempt)); }

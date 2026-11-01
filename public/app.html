@@ -1,10 +1,10 @@
 <!doctype html>
 <html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>ATM10 Campus</title><link rel="stylesheet" href="/assets/app.css?v=20261101-previews-1"><link rel="stylesheet" href="/assets/blueprint-preview.css?v=20261101-previews-1"></head>
+<title>ATM10 Campus</title><link rel="stylesheet" href="/assets/app.css?v=20261101-live-1"><link rel="stylesheet" href="/assets/blueprint-preview.css?v=20261101-live-1"></head>
 <body>
 <a class="skip-link" href="#main">Zum Inhalt</a>
 <header class="top">
-  <a class="brand" href="/app">ATM10 Campus</a><span class="spacer"></span>
+  <a class="brand" href="/app">ATM10 Campus</a><span class="live-connection" id="liveConnection" role="status">Verbindung wird hergestellt</span><span class="spacer"></span>
   <a href="/viewer">3D-Viewer</a><a href="/api/materials?format=html">Materialliste</a>
   <details class="menu" id="accountMenu"><summary>Konto</summary><div class="menu-content"><span class="muted" id="who"></span><button id="logout">Abmelden</button></div></details>
 </header>
@@ -58,11 +58,11 @@
           <li>Aufbau: <span class="mono">ME-Kabel → ME Bridge → Computer → Kiste → Schematicannon</span>. ME Bridge und Kiste hängen beide direkt am Computer oder beide am selben Wired-Modem-Netz. Eine einfache Kiste oder ein Fass nehmen, keine Doppelkiste. Die Kiste berührt die Kanone an einer beliebigen Seite, die Kanone zieht Blöcke und Schießpulver daraus. Die ME Bridge braucht einen ME-Kanal.</li>
           <li>Am Computer eingeben: <div class="secret" id="ccInstall"></div> Token und Kanonen-Namen eintippen, fertig. Das Script startet bei jedem Neustart und aktualisiert sich selbst.</li>
           <li>Die Kanone taucht hier auf. Bauplan wählen, unter <b>Ausrichtung</b> den Kanonen-Block bestätigen und <b>Schematic automatisch vorbereiten</b> aktivieren. Der Server setzt den Rest-Plan mit den Bauplan-Zielkoordinaten ein, sobald die Kanone vollständig gestoppt ist. Ein manuell eingelegtes Schematic vorher herausnehmen. Ohne Server-Brücke bleibt der Rest-NBT-Download für den Schematic Table verfügbar.</li>
-          <li>In der Kanone <b>„Skip Missing“ ausschalten</b> (ist bei neuen Kanonen an), sonst überspringt sie Blöcke, die gerade noch nicht in der Kiste liegen. Modus „Replace Solid with Any“ (Standard) lassen, nicht „Replace Solid with Empty“. „Protect Block Entities“ an lassen. Dann Play drücken: fehlt etwas, wartet die Kanone und baut weiter, sobald das Script nachgefüllt hat.</li>
+          <li>Die automatische Vorbereitung übernimmt auch die gespeicherten Einstellungen. Sobald der Bauplan eingesetzt und die Kanone live bestätigt ist, als Admin <b>Kanone starten</b> wählen. Eine pausierte Kanone lässt sich mit <b>Fortsetzen</b> weiterbauen. Stoppen und Zurücksetzen erfolgt im Spiel. Fehlt Material, wartet die Kanone bei ausgeschaltetem „Fehlende Materialien überspringen“ auf Nachschub.</li>
         </ol>
       </details>
     <div id="cannonList"></div>
-    <p class="footnote">Den Bau startest du an der Kanone im Spiel. Der Fortschritt folgt dem zuletzt gespeicherten Weltstand.</p>
+    <p class="footnote">Bestätigte, automatisch vorbereitete Kanonen kannst du als Admin hier starten oder fortsetzen. Stoppen und Zurücksetzen erfolgt im Spiel. Der Baufortschritt folgt dem zuletzt gespeicherten Weltstand.</p>
   </section>
 
   <section data-pane="agent" class="hide">
@@ -103,5 +103,5 @@
 <dialog class="drawer" id="drawer" aria-labelledby="blueprintTitle"></dialog>
 <dialog class="form-dialog" id="editDialog" aria-labelledby="editTitle"></dialog>
 <input type="file" id="hiddenFile" accept=".nbt" class="hide">
-<script type="module" src="/assets/app.js?v=20261101-previews-1"></script>
+<script type="module" src="/assets/app.js?v=20261101-live-1"></script>
 </body></html>

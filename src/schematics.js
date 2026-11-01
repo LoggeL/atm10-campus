@@ -9,6 +9,7 @@ import { cannonRange } from './cannon-range.js';
 const DEFAULTS = { enabled: false, autoUpdate: true, replaceMode: 2, skipMissing: false, protectBlockEntities: true };
 const hash = bytes => createHash('sha256').update(bytes).digest('hex');
 const decode = s => JSON.parse(s || 'null');
+const readyMessage = job => `Bauplan v${job.version} eingesetzt, Ziel ${job.origin.join(' ')}. Über „Starten“ in der App oder Play an der Kanone bauen.`;
 export function schematicSettings(input = {}, base = DEFAULTS) {
   if (!input || typeof input !== 'object' || Array.isArray(input)) throw new HttpError(400, 'Schematic-Einstellungen als Objekt senden.');
   const out = { ...DEFAULTS, ...base };
@@ -37,6 +38,7 @@ export function createSchematics(campus, mat) {
     const job = jobFor(name);
     if (!job) return { settings: settingsFor(name), job: null };
     const { signature, ...publicJob } = job;
+    if (publicJob.state === 'ready') publicJob.message = readyMessage(publicJob);
     return { settings: settingsFor(name), job: publicJob };
   };
   const configure = (name, input) => {
@@ -77,7 +79,7 @@ export function createSchematics(campus, mat) {
     if (!job || job.id !== id) throw new HttpError(409, 'Schematic-Auftrag wurde geändert.');
     const row = db.prepare('SELECT * FROM cannons WHERE name = ?').get(name);
     job.state = 'ready'; job.updatedAt = now();
-    job.message = `Bauplan v${job.version} eingesetzt, Ziel ${job.origin.join(' ')}. Zum Bauen Play an der Kanone drücken.`;
+    job.message = readyMessage(job);
     saveJob(name, job);
     db.prepare('UPDATE cannons SET version = ?, assignment = ?, start_json = NULL, updated_at = ? WHERE name = ?')
       .run(job.version, Math.max(row.assignment + 1, Math.floor(Date.now() / 1000)), now(), row.name);

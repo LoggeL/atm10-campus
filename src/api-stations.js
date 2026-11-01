@@ -177,7 +177,7 @@ export function registerStationRoutes(app, campus, mat, alignment, schematics) {
       if (!bp || bp.version !== b.baseVersion) throw new HttpError(409, 'Bauplanversion wurde geändert. Bitte neu laden.');
       if (t.blueprint_id) throw new HttpError(409, 'Die Zielkanone hat bereits einen Auftrag.');
       const status = JSON.parse(t.status_json || 'null');
-      if (!Number.isFinite(Date.parse(t.last_seen_at)) || Date.now() - Date.parse(t.last_seen_at) >= ONLINE_MS || !['1.1.0','1.2.0'].includes(status?.script) || !Number.isFinite(Date.parse(status?.at)) || Date.now() - Date.parse(status.at) >= ONLINE_MS) throw new HttpError(409, 'Ziel-Computer ist offline oder sein Status ist veraltet.');
+      if (!Number.isFinite(Date.parse(t.last_seen_at)) || Date.now() - Date.parse(t.last_seen_at) >= ONLINE_MS || !['1.1.0','1.2.0','1.3.0'].includes(status?.script) || !Number.isFinite(Date.parse(status?.at)) || Date.now() - Date.parse(status.at) >= ONLINE_MS) throw new HttpError(409, 'Ziel-Computer ist offline oder sein Status ist veraltet.');
       if (!alignment.binding(s.name) || cannonRange(alignment.binding(t.name), bp.origin).state !== 'inrange') throw new HttpError(409, 'Bestätigte Kanonen in der Oberwelt und ein Ziel in Reichweite sind erforderlich.');
       return { s, t, bp };
     };

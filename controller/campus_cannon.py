@@ -105,16 +105,22 @@ class CannonBridge:
         marker = 'has the following block data: '
         if marker not in raw:
             raise ValueError('Block nicht geladen, offline oder keine Blockdaten. Keine Änderung.')
-        n = parse_snbt(raw.split(marker, 1)[1].strip())
+        try:
+            n = parse_snbt(raw.split(marker, 1)[1].strip())
+        except ValueError:
+            # Long checklist/book/flight payloads can exceed RCON's response chunk.
+            # Read only the fields needed by the interlock and verify their identity twice.
+            from campus_probe import read_fields
+            n = read_fields(self.run, b, parse_snbt)
         if not isinstance(n, dict) or n.get('id') != 'create:schematicannon':
             raise ValueError('Erwartet: create:schematicannon. Keine Änderung.')
         slots = [i for i in n.get('Inventory', {}).get('Items', []) if type(i.get('Slot')) is int and i['Slot'] == 0]
         item = slots[0] if len(slots) == 1 else {}
         components = item.get('components', {}) if item.get('id') == 'create:schematic' else {}
         printer = n.get('Printer')
-        return {'state':n.get('State'), 'amountPlaced':n.get('AmountPlaced'),
+        return {'state':n.get('State'), 'status':n.get('Status'), 'amountPlaced':n.get('AmountPlaced'),
                 'amountToPlace':n.get('AmountToPlace'), 'printer':printer,
-                'flyingBlocks':len(n['FlyingBlocks']) if isinstance(n.get('FlyingBlocks'),list) else None,
+                'flyingBlocks':n.get('FlyingBlockCount', len(n['FlyingBlocks']) if isinstance(n.get('FlyingBlocks'),list) else None),
                 'item':item.get('id'), 'components':components, 'options': ({'replace_mode':n['Options'].get('replace_mode'), 'skip_missing':bool(n['Options'].get('skip_missing')), 'replace_block_entities':bool(n['Options'].get('replace_block_entities'))} if isinstance(n.get('Options'),dict) else None), 'at':time.time(),
                 'fileHash':self.file_hash(b['owner'], components.get('create:schematic_file'))}
 
@@ -132,7 +138,7 @@ class CannonBridge:
 
     def handle(self, action, obj):
         with self.lock:
-            expected = {'probe':{'binding'}, 'bind':{'station','binding','nonce'}, 'inspect':{'station'}, 'apply':{'station','desired'}, 'prepare':{'station','desired','nbtBase64','options','size'}}
+            expected = {'probe':{'binding'}, 'bind':{'station','binding','nonce'}, 'inspect':{'station'}, 'apply':{'station','desired'}, 'prepare':{'station','desired','nbtBase64','options','size'}, 'start':{'station','desired','options'}}
             if action not in expected or not isinstance(obj, dict) or set(obj) != expected[action]:
                 raise ValueError('Ungültiger Bridge-Auftrag.')
             if action == 'probe':
@@ -166,6 +172,9 @@ class CannonBridge:
             if station not in registry: raise ValueError('Station nicht gebunden. Admin muss Block bestätigen.')
             b = validate_binding(registry[station]); observed = self.inspect(b)
             if action == 'inspect': return {'binding':b, 'observed':observed}
+            if action == 'start':
+                from campus_start import start
+                return start(self, b, obj['desired'], obj['options'], observed)
             if action == 'prepare':
                 from campus_schematic import prepare_schematic
                 return prepare_schematic(self, b, obj['desired'], obj['nbtBase64'], obj['options'], obj['size'])
@@ -235,7 +244,7 @@ class RequestAuth:
 
 def serve_campus(handler, controller, bridge, auth):
     """Only POSTs here; original controller bearer grants no Campus authority."""
-    if handler.path not in ('/campus/probe','/campus/bind','/campus/inspect','/campus/apply','/campus/prepare'):
+    if handler.path not in ('/campus/probe','/campus/bind','/campus/inspect','/campus/apply','/campus/prepare','/campus/start'):
         return handler.reply(404, {'error':'Unbekannter Endpunkt.'})
     try:
         length = int(handler.headers.get('Content-Length','0'))

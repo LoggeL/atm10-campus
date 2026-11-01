@@ -21,6 +21,7 @@ import { createSchematics } from './schematics.js';
 import { registerStationRoutes, endCannonJobs } from './api-stations.js';
 import { sceneJson, blueprintsBinary } from './viewer-data.js';
 import { registerPreviewRoutes } from './preview/service.js';
+import { registerRealtime } from './realtime.js';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const page = name => readFileSync(join(root, 'public', name), 'utf8');
@@ -50,6 +51,8 @@ export async function buildServer(config = defaultConfig) {
     if (status >= 500) req.log.error(err);
     reply.code(status).send({ error: err.message, ...(err.extra || {}) });
   });
+
+  registerRealtime(app, campus, config.realtime);
 
   const html = (reply, body) => reply.type('text/html; charset=utf-8').header('Cache-Control', 'no-store').send(body);
   const setSession = (reply, userId) => {

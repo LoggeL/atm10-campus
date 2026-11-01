@@ -20,6 +20,7 @@ test('strict 256-block range includes height and candidate ranking preserves occ
   assert.equal(cannonRange(null, [1,64,1]).state, 'unbound');
   assert.equal(cannonRange({ ...binding(0), dimension: 'minecraft:the_end' }, [1,64,1]).state, 'dimension');
   const rows = ['source','free','busy','offline','unbound','distant','nether'].map((name, i) => ({ name, assignment: i, blueprint_id: name === 'busy' ? 'already-building' : null, status_json: JSON.stringify({ script: '1.2.0', at: new Date().toISOString() }), last_seen_at: name === 'offline' ? '2000-01-01' : new Date().toISOString() }));
+  rows.find(r => r.name === 'free').status_json = JSON.stringify({script:'1.3.0',at:new Date().toISOString()});
   const bindings = { source: binding(-300), free: binding(20), busy: binding(0), offline: binding(3), distant: binding(500), nether: { ...binding(0), dimension: 'minecraft:the_nether' } };
   const found = reachableCannons(rows, 'SOURCE', [0,64,0], n => bindings[n], () => false);
   assert.deepEqual(found.map(c => c.name), ['free','busy','offline']);
@@ -111,19 +112,15 @@ test('out-of-range plans stay visible and blocked; a guarded transfer preserves 
   observations.free = { ...idle(), item: 'create:schematic', components: { 'create:schematic_owner': 'Someone' } };
   assert.equal((await req('POST', endpoint, body)).statusCode, 409);
   observations.free = idle();
-  inspectHook = async name => {
-    if (name === 'free') {
-      inspectHook = null;
-      await req('PATCH', '/api/blueprints/Build', { baseVersion: 1, origin: [5,64,4] });
-    }
-  };
-  assert.equal((await req('POST', endpoint, body)).statusCode, 409, 'version drift during live probe cannot transfer a stale revision');
-  assert.equal((await req('GET', '/api/cannons/free')).json().blueprint, null);
+  assert.equal((await req('PATCH', '/api/blueprints/Build', { baseVersion: 1, origin: [5,64,4] })).statusCode, 200);
+  assert.equal((await req('POST', endpoint, body)).statusCode, 409, 'a transfer must select the current version');
   let release, arrived;
   const hold = new Promise(resolve => { release = resolve; }), entered = new Promise(resolve => { arrived = resolve; });
   inspectHook = async name => { if (name === 'free') { arrived(); await hold; } };
   const inflight = Promise.resolve(req('POST', endpoint, { ...body, baseVersion: 2 }));
   await entered;
+  assert.equal((await req('PATCH', '/api/blueprints/Build', { baseVersion: 2, origin: [6,64,4] })).statusCode, 409, 'version drift is rejected during the live transfer probe');
+  assert.equal(app.campus.getBlueprint('Build').currentVersion, 2);
   assert.equal((await req('PUT', '/api/cannons/source', { blueprint: null })).statusCode, 409);
   assert.equal((await req('PUT', '/api/cannons/free', { blueprint: 'Build' })).statusCode, 409);
   release(); inspectHook = null;

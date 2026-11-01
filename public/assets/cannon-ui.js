@@ -1,6 +1,6 @@
-import { cannonRangeCard, distanceText } from './cannon-range.js?v=20261101-previews-1';
-import { coordinateFields, placementValues } from './placement.js?v=20261101-previews-1';
-import { blueprintPreview } from './blueprint-preview.js?v=20261101-previews-1';
+import { cannonRangeCard, distanceText } from './cannon-range.js?v=20261101-live-1';
+import { coordinateFields, placementValues } from './placement.js?v=20261101-live-1';
+import { blueprintPreview } from './blueprint-preview.js?v=20261101-live-1';
 
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
 const fmt = n => n == null ? '–' : Number(n).toLocaleString('de-DE');
@@ -9,6 +9,23 @@ const states = { outofrange:'Außer Reichweite', alignment:'Material gesperrt', 
 const jobs = { outofrange:'Außer Reichweite', queued:'Wartet auf Vorbereitung', applying:'Wird eingesetzt', waiting:'Wartet auf Kanone', ready:'Vorbereitet', empty:'Kein Rest zu bauen', error:'Vorbereitung fehlgeschlagen' };
 
 export function canEditCannon(c, isAdmin) { return isAdmin || !c.alignment?.enabled; }
+
+export function cannonStartState(c, isAdmin) {
+  const native = c?.alignment?.observed?.state;
+  const visible = !!(isAdmin && c?.alignment?.enabled && c?.schematic?.settings?.enabled && c?.blueprint);
+  const label = native === 'RUNNING' ? 'Läuft' : native === 'PAUSED' ? 'Fortsetzen' : 'Kanone starten';
+  const reason = !visible ? 'Automatische Vorbereitung und bestätigte Kanonen-Position erforderlich.'
+    : !c.online ? 'Der Minecraft-Computer ist offline.'
+    : c.range?.state !== 'inrange' ? 'Das Bauziel ist nicht als erreichbar bestätigt.'
+    : c.schematic.job?.state !== 'ready' || c.schematic.job?.version !== c.blueprint.version ? 'Der gewählte Bauplan ist noch nicht eingesetzt.'
+    : c.alignment.state !== 'aligned' ? c.alignment.message || 'Die Live-Prüfung der Kanone fehlt.'
+    : c.options?.paused ? 'Die Materialzufuhr ist pausiert.'
+    : c.done ? 'Für diesen Auftrag ist nichts mehr zu bauen.'
+    : native === 'RUNNING' ? 'Die Kanone baut bereits.'
+    : !['STOPPED','PAUSED'].includes(native) ? 'Der Zustand der Kanone ist noch nicht bestätigt.'
+    : '';
+  return {visible, enabled:visible && !reason, label, reason};
+}
 
 // Submit only edits. In particular, changing the feeder must not re-apply an unchanged schematic.
 export function cannonSettingsPayload(data, c, isAdmin) {
@@ -41,6 +58,7 @@ export function renderCannon(c, bpOptions, { isAdmin, alignmentHtml, ago }) {
   const sc = c.schematic?.settings || {}, job = c.schematic?.job;
   const live = c.online && !c.status?.stale ? c.status : null;
   const canEdit = canEditCannon(c, isAdmin), canSchematic = isAdmin && c.alignment?.enabled;
+  const start = cannonStartState(c, isAdmin);
   // A fresh computer report may refine feeding, but never override a server-side safety gate.
   const state = !c.online && bp && !['done','paused','outofrange'].includes(c.state) ? 'offline' : c.state === 'feeding' && live ? live.state : c.state;
   const blocked = ['alignment','outofrange','error','missing','nosnapshot'].includes(c.state);
@@ -59,8 +77,9 @@ export function renderCannon(c, bpOptions, { isAdmin, alignmentHtml, ago }) {
       ${bp ? `<dt>Zielkoordinaten</dt><dd>${coordinateFields(bp)}${origin ? `<button class="text-button small" data-copy-coordinate="${origin.join(' ')}">Kopieren</button>` : ''}</dd>` : ''}
       <dt>Reichweite</dt><dd><span class="muted" title="Weniger als 256 Blöcke Luftlinie, Höhe eingeschlossen">${rangeText}</span><span class="badge ${r?.state === 'inrange' ? 'built' : 'warning'}">${r?.state === 'inrange' ? 'Erreichbar' : r?.state === 'outofrange' ? 'Außer Reichweite' : r?.state === 'dimension' ? 'Andere Dimension' : r?.state === 'unbound' ? 'Kanone noch nicht verbunden' : 'Kein Ziel'}</span>${bp && r?.version && r.version !== bp.version ? `<span class="muted">Für v${esc(r.version)}: ${esc(r.origin?.join(' '))}</span>` : ''}</dd>
       <dt>Materialversorgung</dt><dd><span class="badge ${blocked ? 'warning' : state === 'done' ? 'built' : 'ok'}">${esc(states[state] || state)}</span>${live?.chest ? `<span class="muted">Kiste ${fmt(live.chest.used)}/${fmt(live.chest.slots)}</span>` : ''}</dd>
-      <dt>Schematic</dt><dd>${esc(sc.enabled ? jobs[job?.state] || 'Wartet auf Bauplan' : 'Manuell einsetzen')}${job?.version ? ` <span class="muted">v${esc(job.version)}</span>` : ''}</dd>
+      <dt>Schematic</dt><dd>${esc(sc.enabled ? jobs[job?.state] || 'Wartet auf Bauplan' : c.alignment?.enabled ? 'Automatische Vorbereitung ist aus' : 'Kanonen-Position noch nicht bestätigt')}${job?.version ? ` <span class="muted">v${esc(job.version)}</span>` : ''}${!sc.enabled && isAdmin ? `<button class="text-button small" data-act="${c.alignment?.enabled ? 'open-settings' : 'open-binding'}">${c.alignment?.enabled ? 'Automatik einrichten' : 'Position bestätigen'}</button>` : ''}</dd>
     </dl>
+    ${start.visible ? `<div class="cannon-start"><button class="primary" data-act="start"${start.enabled ? '' : ' disabled'} title="${esc(start.reason || 'Bauplan und Kanone werden vor dem Start live geprüft.')}">${start.label}</button><span class="muted">${esc(start.reason || `Baut v${bp.version} an ${bp.origin.join(' ')}. Die Kanone wird vor dem Start live geprüft.`)}</span></div>` : ''}
     ${bp && t ? `<div class="cannon-progress"><div class="bar"><i style="width:${pct ?? 0}%"></i></div><p>${pct == null ? 'Fortschritt noch unbekannt' : fmt(pct) + ' %'} · noch ${fmt(t.needed)} Items in ${fmt(t.kinds)} Sorten</p></div>` : ''}
     ${r && ['outofrange','dimension'].includes(r.state) ? cannonRangeCard(c, isAdmin) : ''}
     ${c.message && c.state !== 'outofrange' ? `<p class="notice${c.state === 'error' ? ' error' : ''}" role="status">${esc(c.message)}</p>` : ''}
@@ -76,7 +95,7 @@ export function renderCannon(c, bpOptions, { isAdmin, alignmentHtml, ago }) {
         ${isAdmin && !c.alignment?.enabled ? '<p class="footnote">Zuerst unter „Verbindung und Diagnose“ den Kanonen-Block bestätigen.</p>' : !isAdmin && canEdit ? '<p class="footnote">Die automatische Vorbereitung richtet ein Admin ein.</p>' : ''}
         <details data-section="advanced"><summary>Weitere Einstellungen</summary>
           ${checkbox('o_paused', 'Materialzufuhr pausieren', o.paused)}
-          <p class="footnote">Pausiert die Lieferung aus dem ME. Die Kanone selbst bedienst du im Spiel.</p>
+          <p class="footnote">Pausiert die Lieferung aus dem ME. Einen laufenden Bau hältst du an der Kanone im Spiel an.</p>
           ${checkbox('o_skipBlocked', 'Zellen mit Maschinen nicht beliefern', o.skipBlocked)}
           <div class="form-row">${[['bufferStacks','Puffer (Stacks)',1,16],['gunpowder','Schießpulver',0,64],['craftBatch','Craft-Menge',1,4096]].map(([k,label,min,max]) => `<label>${label}<input type="number" name="o_${k}" min="${min}" max="${max}" step="1" value="${o[k]}" required></label>`).join('')}</div>
           <fieldset${canSchematic ? '' : ' disabled'}><label class="setting">Blöcke ersetzen<select name="s_replaceMode">${[[0,'Feste Blöcke stehen lassen'],[1,'Feste Blöcke nur durch feste ersetzen'],[2,'Vorhandene Blöcke ersetzen']].map(([v,label]) => `<option value="${v}"${(sc.replaceMode ?? 2) === v ? ' selected' : ''}>${label}</option>`).join('')}</select></label>

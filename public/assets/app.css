@@ -134,6 +134,10 @@ pre{background:var(--bg);border:1px solid var(--line);border-radius:var(--radius
 .dot{width:7px;height:7px;border-radius:50%;background:#697d8b;display:inline-block}
 .dot.on{background:var(--green)}
 .cannon .last-seen{margin-left:auto;font-size:12px;color:var(--muted)}
+.live-connection{font-size:12px;color:var(--muted)}
+.live-connection.connected{color:var(--green)}
+.cannon-start{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin:16px 0}
+.cannon-start>span{font-size:12px;flex:1;min-width:180px}
 .cannon .kv{margin:20px 0}
 .cannon .kv dd{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
 .cannon .kv dd>details.assignment{margin:0;padding:0;border:0}

@@ -3,7 +3,7 @@
 -- through an Advanced Peripherals ME Bridge. Which blueprint and the options are set in the web app (tab "Kanonen");
 -- this computer only knows URL, a station token and its cannon name (install: wget run <url>/cc/install.lua).
 -- Strings shown on screen use Latin-1 escapes (\228 = ae-umlaut ...), the CC font is ISO-8859-1.
-local VERSION = "1.2.0"
+local VERSION = "1.3.0"
 
 settings.define("campus.url", { description = "Campus-URL", type = "string" })
 settings.define("campus.token", { description = "API-Token mit Scope Station", type = "string" })
@@ -344,12 +344,51 @@ local function reportStock()
   return request("POST", "/api/me/stock", { source = NAME, items = items })
 end
 
+-- status-reporting-start
+-- A deterministic signature avoids reports caused only by Lua table iteration order.
+local function statusSignature(value)
+  local kind = type(value)
+  if kind == "table" then
+    local entries = {}
+    for key, item in pairs(value) do
+      entries[#entries + 1] = statusSignature(key) .. "=" .. statusSignature(item)
+    end
+    table.sort(entries)
+    return "{" .. table.concat(entries, ";") .. "}"
+  end
+  if kind == "string" then return "s" .. #value .. ":" .. value end
+  return kind .. ":" .. tostring(value)
+end
+
+local function statusReporter(clock, send)
+  local acknowledged, acknowledgedAt, retryAt, failures = nil, -1e9, -1e9, 0
+  return function(payload, heartbeat)
+    local stamp, signature = clock(), statusSignature(payload)
+    if stamp < retryAt then return nil, nil, false end
+    if signature == acknowledged and stamp - acknowledgedAt < heartbeat then return true, nil, false end
+    -- Only this main-loop reporter makes HTTP calls. A failed send never acknowledges a change.
+    local ok, response, err = pcall(send, payload)
+    if not ok then err, response = tostring(response), nil end
+    if response then
+      acknowledged, acknowledgedAt, retryAt, failures = signature, clock(), -1e9, 0
+      return response, nil, true
+    end
+    failures = math.min(failures + 1, 4)
+    retryAt = clock() + math.min(30, 5 * 2 ^ (failures - 1))
+    return nil, err or "Status konnte nicht gesendet werden", true
+  end
+end
+-- status-reporting-end
+
+local sendStatus = statusReporter(now, function(payload)
+  return request("POST", "/api/cannons/" .. NAME .. "/status", payload)
+end)
 local function reportStatus()
-  return request("POST", "/api/cannons/" .. NAME .. "/status", {
+  return sendStatus({
     assignment = plan and plan.assignment or 0, state = view.state, script = VERSION, api = api,
     message = (view.state == "error" and view.error) or view.message or view.craftError,
     chest = view.chest, delivered = state.delivered, shortages = view.shortages,
-  })
+  }, plan and plan.intervals and plan.intervals.status or 30)
 end
 
 local function selfUpdate(target)
@@ -417,7 +456,13 @@ local function redraw()
 end
 
 -- ---------- main ----------
-local planAt, statusAt, stockAt = -1e9, -1e9, -1e9
+local planAt, stockAt = -1e9, -1e9
+local wakeRequested = false
+local function wake()
+  if wakeRequested then return end
+  wakeRequested = true
+  os.queueEvent("campus_wake")
+end
 
 local function tick()
   view.error = nil
@@ -438,6 +483,8 @@ local function tick()
   if view.craftErrAt and now() - view.craftErrAt > 600 then view.craftError, view.craftErrAt = nil, nil end
   if not ok then
     view.state, view.error, view.shortages, view.chest = "error", perr, {}, nil
+  elseif not plan then
+    view.state, view.error, view.shortages = "error", view.error or "Kein Bauplan abrufbar", {}
   elseif plan then
     local preparing = plan.schematic and plan.schematic.settings.enabled and plan.schematic.job and plan.schematic.job.state ~= "ready"
     if not preparing and plan.assignment ~= state.assignment then startAssignment(plan) end
@@ -456,11 +503,8 @@ local function tick()
     else feed() end
   end
 
-  if plan and now() - statusAt >= iv.status then
-    local _, err = reportStatus()
-    statusAt = now()
-    if err then view.error = err end
-  end
+  local _, reportError = reportStatus()
+  if reportError then view.error = reportError end
   if ok and settings.get("campus.stock") and now() - stockAt >= iv.stock then
     local _, err = reportStock()
     stockAt = err and now() - iv.stock + 60 or now()
@@ -470,10 +514,23 @@ end
 
 local function mainLoop()
   while true do
+    wakeRequested = false
     local ok, err = pcall(tick)
-    if not ok then view.state, view.error = "error", tostring(err) end
+    if not ok then
+      view.state, view.error = "error", tostring(err)
+      reportStatus()
+    end
     redraw()
-    sleep(5)
+    -- Events received during an HTTP/peripheral call leave a pending wake, so they
+    -- cannot be lost by its filtered event wait. The next iteration stays sequential.
+    if not wakeRequested then
+      local timer = os.startTimer(5)
+      while not wakeRequested do
+        local ev, id = os.pullEvent()
+        if ev == "timer" and id == timer then break end
+      end
+      os.cancelTimer(timer)
+    end
   end
 end
 
@@ -482,11 +539,13 @@ local function eventLoop()
   while true do
     local ev, a, b, c = os.pullEvent()
     if ev == "char" and a == "q" then return end
-    if ev == "char" and a == "r" then planAt, stockAt = -1e9, -1e9 end
+    if ev == "char" and a == "r" then planAt, stockAt = -1e9, -1e9; wake() end
     if ev == "ae_crafting" then
       if a == true then view.craftError, view.craftJob, view.craftErrAt = "Crafting-Auftrag " .. tostring(b) .. ": " .. errText(c), b, now()
       elseif b == view.craftJob then view.craftError, view.craftErrAt = nil, nil end
+      wake()
     end
+    if ev == "peripheral" or ev == "peripheral_detach" then wake() end
   end
 end
 

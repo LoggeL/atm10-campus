@@ -1,7 +1,8 @@
 'use strict';
-import { renderCannon, cannonSettingsPayload } from './cannon-ui.js?v=20261101-previews-1';
-import { coordinateFields, placementCard, placementValues, coordinateListText } from './placement.js?v=20261101-previews-1';
-import { blueprintPreview, installPreviewFallbacks } from './blueprint-preview.js?v=20261101-previews-1';
+import { renderCannon, cannonSettingsPayload, cannonStartState } from './cannon-ui.js?v=20261101-live-1';
+import { coordinateFields, placementCard, placementValues, coordinateListText } from './placement.js?v=20261101-live-1';
+import { blueprintPreview, installPreviewFallbacks } from './blueprint-preview.js?v=20261101-live-1';
+import { connectLiveUpdates, createRefreshQueue } from './live-updates.js?v=20261101-live-1';
 installPreviewFallbacks();
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -22,7 +23,8 @@ async function api(path, opts = {}) {
   const headers = { 'x-campus-csrf': '1', ...(opts.headers || {}) };
   let body = opts.body;
   if (body && !(body instanceof Blob) && !(body instanceof ArrayBuffer) && typeof body !== 'string') { body = JSON.stringify(body); headers['content-type'] = 'application/json'; }
-  const r = await fetch(path, { ...opts, headers, body });
+  const signal = opts.signal || (!opts.method || opts.method === 'GET' ? AbortSignal.timeout(20_000) : undefined);
+  const r = await fetch(path, { ...opts, signal, headers, body });
   if (r.status === 401) { location.href = '/login'; throw new Error('Nicht angemeldet'); }
   const j = r.headers.get('content-type')?.includes('json') ? await r.json() : null;
   if (!r.ok) { const e = new Error(j?.error || r.statusText); e.data = j; e.status = r.status; throw e; }
@@ -34,7 +36,7 @@ function toast(msg, err) {
 }
 const guard = fn => async (...a) => { try { await fn(...a); } catch (e) { toast(e.message, true); } };
 
-let me = null, status = null;
+let me = null, status = null, activeTab = 'overview', liveUpdates = null;
 
 // ---------- tabs ----------
 document.querySelectorAll('nav.tabs [data-tab]').forEach(b => b.addEventListener('click', e => {
@@ -42,6 +44,7 @@ document.querySelectorAll('nav.tabs [data-tab]').forEach(b => b.addEventListener
 }));
 function showTab(tab) {
   if (tab === 'admin' && me?.user?.role !== 'admin') tab = 'overview';
+  activeTab = tab;
   document.querySelectorAll('nav.tabs [data-tab]').forEach(b => {
     if (b.dataset.tab === tab) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current');
   });
@@ -53,6 +56,7 @@ function showTab(tab) {
   const loader = { overview: loadStatus, coordinates: loadStatus, snapshots: loadSnapshots, cannons: loadCannons, agent: loadTokens, activity: loadActivity, admin: loadAdmin }[tab];
   loader?.().catch(e => toast(e.message, true));
   history.replaceState(null, '', '#' + tab);
+  refreshQueue.resume();
 }
 document.addEventListener('click', e => document.querySelectorAll('.menu[open]').forEach(d => { if (!d.contains(e.target)) d.open = false; }));
 document.addEventListener('keydown', e => { if (e.key === 'Escape') document.querySelectorAll('.menu[open]').forEach(d => { d.open = false; d.querySelector('summary').focus(); }); });
@@ -225,7 +229,9 @@ $('newBp').onclick = () => pickFile(file => editForm('Neuer Bauplan', `<p class=
 // ---------- snapshots ----------
 async function loadSnapshots() {
   const { sources, snapshots } = await api('/api/snapshots');
+  const selectedSource = $('snapSource').value;
   $('snapSource').innerHTML = sources.map(s => `<option value="${esc(s)}">${s === 'live' ? 'Live-Welt' : esc(s)}</option>`).join('');
+  if (sources.includes(selectedSource)) $('snapSource').value = selectedSource;
   $('snapSource').classList.toggle('hide', sources.length < 2);
   $('snapRows').innerHTML = snapshots.map(s => `<tr><td>#${s.id}${s.pinned ? ' <span class="muted">(gesichert)</span>' : ''}</td><td>${esc(s.source === 'live' ? 'Live' : s.label)}</td><td>${esc(when(s.capturedAt))}</td><td>${esc(when(s.worldTime))}</td>
     <td class="num">${fmt(s.recordCount)}</td><td class="num">${fmt(s.blockEntityCount)}</td><td><a class="btn small" href="/viewer?snapshot=${s.id}">im Viewer</a></td></tr>`).join('') || '<tr><td colspan="7" class="muted">Noch keine Snapshots.</td></tr>';
@@ -239,58 +245,98 @@ $('snapNow').onclick = guard(async () => {
 });
 
 // ---------- cannons ----------
-let cannonTimer = null, cannonLoad = null, cannonRevision = 0;
+let cannonLoad = null, cannonRevision = 0, cannonReadSequence = 0, optionsReadSequence = 0, stockReadSequence = 0, cannonOptions = [], cannonOptionsLoaded = false;
 const cannonBaseline = new Map();
+const cannonPaintSequence = new Map();
 const busyCannons = new Set();
 const isAdmin = () => me?.user?.role === 'admin';
-const dirtyCannons = () => !!document.querySelector('.cannon form[data-dirty]');
+const dirtyCannons = () => !!document.querySelector('.cannon form[data-dirty], .cannon[data-binding-dirty]');
+const cannonCard = name => [...$('cannonList').querySelectorAll('[data-cannon]')].find(el => el.dataset.cannon.toLowerCase() === name.toLowerCase());
+const cardProtected = (name, card = cannonCard(name)) => busyCannons.has(card?.dataset.cannon || name) || !!(card && (card.dataset.bindingDirty || card.querySelector('form[data-dirty]') || card.contains(document.activeElement)));
+async function loadCannonOptions() {
+  const sequence = ++optionsReadSequence;
+  const bps = await api('/api/blueprints');
+  if (sequence !== optionsReadSequence) return;
+  cannonOptions = bps.filter(b => b.current || b.version).map(b => [b.id, b.name]).sort((a,b) => a[1].localeCompare(b[1], 'de'));
+  cannonOptionsLoaded = true;
+}
+async function loadStock() {
+  const sequence = ++stockReadSequence;
+  const {stock:s} = await api('/api/me/stock');
+  if (sequence !== stockReadSequence) return;
+  $('meLine').textContent = s ? `ME-Bestand ${ago(s.at)} · ${fmt(s.kinds)} relevante Sorten` : 'Noch kein ME-Bestand gemeldet.';
+}
+function cannonParent() {
+  if (!$('cannonList').querySelector('.cannons')) $('cannonList').innerHTML = '<div class="cannons"></div>';
+  return $('cannonList').querySelector('.cannons');
+}
+function renderCannonCard(c, sequence) {
+  if ((cannonPaintSequence.get(c.name.toLowerCase()) || 0) > sequence) return true;
+  const old = cannonCard(c.name);
+  if (cardProtected(c.name, old)) return false;
+  const template = document.createElement('template');
+  template.innerHTML = renderCannon(c, cannonOptions, {isAdmin:isAdmin(), alignmentHtml:alignmentCard(c), ago});
+  const next = template.content.firstElementChild;
+  if (old) {
+    old.querySelectorAll('details[data-section]').forEach(d => {
+      const matching = [...next.querySelectorAll('details[data-section]')].find(n => n.dataset.section === d.dataset.section);
+      if (matching) matching.open = d.open;
+    });
+    old.replaceWith(next);
+  } else {
+    const parent = cannonParent(); parent.querySelector('.empty-cannons')?.remove(); parent.append(next);
+  }
+  cannonBaseline.set(c.name, c);
+  cannonPaintSequence.set(c.name.toLowerCase(), sequence);
+  return true;
+}
+function removeCannonCard(name, sequence) {
+  if ((cannonPaintSequence.get(name.toLowerCase()) || 0) > sequence) return true;
+  if (cardProtected(name)) return false;
+  const old = cannonCard(name);
+  cannonBaseline.delete(old?.dataset.cannon || name); old?.remove();
+  cannonPaintSequence.set(name.toLowerCase(), sequence);
+  const parent = cannonParent();
+  if (!parent.querySelector('[data-cannon]')) { parent.innerHTML = '<p class="muted empty-cannons">Noch keine Kanone gemeldet. Sobald ein Computer das Script startet, erscheint er hier.</p>'; $('ccSetup').open = true; }
+  return true;
+}
 async function loadCannons(force = false) {
   if (cannonLoad) {
     if (!force) return cannonLoad;
     await cannonLoad.catch(() => {});
   }
-  cannonLoad = refreshCannons();
-  try { await cannonLoad; } finally { cannonLoad = null; scheduleCannons(); }
+  const loading = cannonLoad = (async () => {
+    await Promise.all([loadCannonOptions(), loadStock()]);
+    return refreshCannons();
+  })();
+  try { return await loading; } finally { if (cannonLoad === loading) cannonLoad = null; }
 }
 async function refreshCannons() {
   const revision = cannonRevision;
-  const [list, stock, bps] = await Promise.all([api('/api/cannons'), api('/api/me/stock'), api('/api/blueprints')]);
-  if (revision !== cannonRevision) return;
+  if (!cannonOptionsLoaded) await loadCannonOptions();
+  const sequence = ++cannonReadSequence;
+  const list = await api('/api/cannons');
+  if (revision !== cannonRevision) return false;
   $('ccInstall').textContent = `wget run ${location.origin}/cc/install.lua`;
-  const s = stock.stock;
-  $('meLine').textContent = s ? `ME-Bestand ${ago(s.at)} · ${fmt(s.kinds)} relevante Sorten` : 'Noch kein ME-Bestand gemeldet.';
   if (!list.length) $('ccSetup').open = true;
-  const options = bps.filter(b => b.current || b.version).map(b => [b.id, b.name]).sort((a,b) => a[1].localeCompare(b[1], 'de'));
-  if (!$('cannonList').querySelector('.cannons')) $('cannonList').innerHTML = '<div class="cannons"></div>';
-  const parent = $('cannonList').querySelector('.cannons');
-  for (const c of list) {
-    const old = [...parent.children].find(el => el.dataset.cannon === c.name);
-    // Check after the request, so edits made while the response was in flight are retained.
-    if (old && (busyCannons.has(c.name) || old.querySelector('form[data-dirty]') || old.contains(document.activeElement))) continue;
-    const template = document.createElement('template');
-    template.innerHTML = renderCannon(c, options, {isAdmin:isAdmin(), alignmentHtml:alignmentCard(c), ago});
-    const next = template.content.firstElementChild;
-    if (old) {
-      old.querySelectorAll('details[data-section]').forEach(d => {
-        const matching = [...next.querySelectorAll('details[data-section]')].find(n => n.dataset.section === d.dataset.section);
-        if (matching) matching.open = d.open;
-      });
-      old.replaceWith(next);
-    } else parent.append(next);
-    cannonBaseline.set(c.name, c);
+  const parent = cannonParent();
+  for (const c of list) if (!renderCannonCard(c, sequence)) refreshQueue.request('cannon:' + c.name);
+  for (const old of [...parent.querySelectorAll('[data-cannon]')]) {
+    if (!list.some(c => c.name === old.dataset.cannon) && !removeCannonCard(old.dataset.cannon, sequence)) refreshQueue.request('cannon:' + old.dataset.cannon);
   }
-  for (const old of [...parent.children]) {
-    if (!list.some(c => c.name === old.dataset.cannon)) { cannonBaseline.delete(old.dataset.cannon); old.remove(); }
-  }
-  if (!list.length) parent.innerHTML = '<p class="muted">Noch keine Kanone gemeldet. Sobald ein Computer das Script startet, erscheint er hier.</p>';
+  if (!parent.querySelector('[data-cannon]')) parent.innerHTML = '<p class="muted empty-cannons">Noch keine Kanone gemeldet. Sobald ein Computer das Script startet, erscheint er hier.</p>';
+  return true;
 }
-function scheduleCannons() {
-  clearTimeout(cannonTimer);
-  cannonTimer = setTimeout(() => {
-    if ($('cannonList').closest('.hide')) return;
-    if (document.hidden) return scheduleCannons();
-    loadCannons().catch(() => scheduleCannons());
-  }, 15e3);
+async function refreshOneCannon(name) {
+  if (cannonLoad) await cannonLoad;
+  if (cardProtected(name)) return false;
+  const revision = cannonRevision;
+  if (!cannonOptionsLoaded) await loadCannonOptions();
+  const sequence = ++cannonReadSequence;
+  try {
+    const c = await api('/api/cannons/' + encodeURIComponent(name));
+    return revision === cannonRevision && renderCannonCard(c, sequence);
+  } catch (error) { if (error.status === 404 && revision === cannonRevision) return removeCannonCard(name, sequence); throw error; }
 }
 $('showSetup').onclick = () => { $('ccSetup').open = !$('ccSetup').open; if ($('ccSetup').open) $('ccSetup').scrollIntoView({block:'nearest'}); };
 $('ccSetup').addEventListener('toggle', () => $('showSetup').setAttribute('aria-expanded', String($('ccSetup').open)));
@@ -306,13 +352,14 @@ function alignmentCard(c) {
     <p class="warn">Nur Campus-Materialfreigabe, kein unveränderlicher Baulock: Die native Create-GUI und manuell bereitgestellte Materialien können das umgehen. Bestehender Kisteninhalt bleibt verfügbar. Während Apply niemand im Spiel die Kanone bedienen; Readback ist keine dauerhafte GUI-Sperre.</p>
     ${me?.user?.role==='admin'?`<p>Blockbindung manuell eingeben. Beispiel (nicht vorausgefüllt): minecraft:overworld 94 64 21, Owner KGZJonny. Erst am richtigen Block prüfen, dann ausdrücklich binden. Die Probe schreibt keine Welt-NBT.</p>
       <div class="row"><label>Dimension <select data-bind="dimension">${['minecraft:overworld','minecraft:the_nether','minecraft:the_end'].map(dim=>`<option${b?.dimension===dim?' selected':''}>${dim}</option>`).join('')}</select></label>${['x','y','z'].map(k=>`<label>${k} <input data-bind="${k}" type="number" step="1" value="${esc(b?.[k]??'')}" required></label>`).join('')}<label>Schematic-Owner <input data-bind="owner" value="${esc(b?.owner??'')}" autocomplete="off" maxlength="16" required></label></div>
-      <button class="small" data-act="alignment-probe">Block read-only prüfen / Bindung bestätigen</button>
+      <button class="small" data-act="alignment-probe">Block prüfen / Bindung bestätigen</button><button class="small" data-act="binding-reset">Eingaben verwerfen</button>
       ${b?'<button class="small primary" data-act="alignment-apply">Nach Stop/Reset: Ausrichtung anwenden / erneut versuchen</button>':''}
-      <p class="muted">Aktivierung benötigt Feeder 1.1.0 oder 1.2.0 mit frischer Statusmeldung. Apply nur STOPPED, AmountPlaced=0, AmountToPlace=0, ohne Printer-Cache; sonst im Spiel bewusst stoppen/zurücksetzen bzw. Schematic entnehmen. Es gibt keinen automatischen Reset. Bei automatischer Vorbereitung wird das Schematic direkt eingesetzt. Sonst die exakte gewählte NBT-Version am Schematic Table hochladen und einlegen. Bauplanwechsel stellt den neuen Anker bereit und versucht sicheres Apply; bei laufender/gecachter Kanone bleibt er ausstehend.</p>`:''}
+      <p class="muted">Aktivierung benötigt Feeder 1.1.0, 1.2.0 oder 1.3.0 mit frischer Statusmeldung. Apply nur STOPPED, AmountPlaced=0, AmountToPlace=0, ohne Printer-Cache; sonst im Spiel bewusst stoppen/zurücksetzen bzw. Schematic entnehmen. Es gibt keinen automatischen Reset. Bei automatischer Vorbereitung wird das Schematic direkt eingesetzt. Sonst die exakte gewählte NBT-Version am Schematic Table hochladen und einlegen. Bauplanwechsel stellt den neuen Anker bereit und versucht sicheres Apply; bei laufender/gecachter Kanone bleibt er ausstehend.</p>`:''}
   </details>`;
 }
 // alignment-card-end
 $('cannonList').addEventListener('input', e => {
+  if (e.target.matches('[data-bind]')) e.target.closest('[data-cannon]').dataset.bindingDirty = '1';
   const form = e.target.closest('form');
   if (form) { form.dataset.dirty = '1'; form.querySelector('.draft-note').textContent = 'Ungespeichert'; }
 });
@@ -320,6 +367,7 @@ $('cannonList').addEventListener('reset', e => {
   const form = e.target; delete form.dataset.dirty;
   form.querySelector('.draft-note').textContent = '';
   form.querySelector('.form-error').textContent = '';
+  setTimeout(() => { document.activeElement?.blur(); refreshQueue.request('cannon:' + form.closest('[data-cannon]').dataset.cannon); refreshQueue.resume(); }, 0);
 });
 $('cannonList').addEventListener('submit', async e => {
   const form = e.target;
@@ -364,11 +412,31 @@ $('cannonList').addEventListener('click', guard(async e => {
   const b = e.target.closest('button[data-act]'), card = e.target.closest('[data-cannon]');
   if (!b || !card) return;
   const name = card.dataset.cannon;
-  if (busyCannons.has(name)) return;
+  if (b.disabled || busyCannons.has(name)) return;
+  if (['open-binding','open-settings'].includes(b.dataset.act)) {
+    const section = b.dataset.act === 'open-binding' ? 'binding' : 'settings';
+    const details = card.querySelector(`[data-section="${section}"]`);
+    for (let p = details; p && p !== card; p = p.parentElement) if (p.tagName === 'DETAILS') p.open = true;
+    details.scrollIntoView({block:'nearest'}); details.querySelector('input:not(:disabled),select:not(:disabled)')?.focus(); return;
+  }
+  if (b.dataset.act === 'binding-reset') { delete card.dataset.bindingDirty; b.blur(); refreshQueue.request('cannon:' + name); refreshQueue.resume(); return; }
   if (b.dataset.act !== 'position' && card.querySelector('form[data-dirty]')) { toast('Änderungen zuerst speichern oder verwerfen.', true); return; }
+  if (b.dataset.act === 'start') {
+    const current = cannonBaseline.get(name), start = cannonStartState(current, isAdmin());
+    if (!start.enabled) throw new Error(start.reason);
+    if (card.dataset.bindingDirty) throw new Error('Die Blockbindung zuerst bestätigen oder verwerfen.');
+    busyCannons.add(name); b.disabled = true; b.textContent = 'Wird geprüft …';
+    try {
+      const result = await api('/api/cannons/' + encodeURIComponent(name) + '/start', {method:'POST',body:{assignment:current.assignment,version:current.blueprint.version}});
+      toast(`${name}: ${result.message || 'Start bestätigt.'}`);
+    } finally {
+      busyCannons.delete(name); b.disabled = false; b.textContent = start.label; cannonRevision++; b.blur(); refreshQueue.request('cannon:' + name); refreshQueue.resume();
+    }
+    return;
+  }
   const alignmentUrl='/api/cannons/'+encodeURIComponent(name)+'/alignment';
   if (b.dataset.act === 'transfer') {
-    if (!confirm(`Auftrag von ${name} an ${b.dataset.target} verschieben? Beide Kanonen müssen vollständig gestoppt und zurückgesetzt sein. Einstellungen und Bauplan-Ziel werden übernommen. Danach an der Zielkanone Play drücken.`)) return;
+    if (!confirm(`Auftrag von ${name} an ${b.dataset.target} verschieben? Beide Kanonen müssen vollständig gestoppt und zurückgesetzt sein. Einstellungen und Bauplan-Ziel werden übernommen. Danach kannst du die Zielkanone starten.`)) return;
     b.disabled = true; busyCannons.add(name);
     try {
       const result = await api('/api/cannons/' + encodeURIComponent(name) + '/transfer', { method: 'POST', body: {
@@ -380,41 +448,44 @@ $('cannonList').addEventListener('click', guard(async e => {
     cannonRevision++; b.blur(); await loadCannons(true);
     return;
   }
-  if(b.dataset.act==='alignment-probe') {
-    const binding={};
-    for(const k of ['dimension','x','y','z','owner']) {
-      const value=card.querySelector(`[data-bind="${k}"]`).value;
-      if(!value)throw new Error('Dimension, x/y/z und Owner vollständig eingeben.');
-      binding[k]=['x','y','z'].includes(k)?Number(value):value;
+  if (b.dataset.act === 'position') { openBlueprint(b.dataset.bp); return; }
+  busyCannons.add(name); b.disabled = true;
+  try {
+    if(b.dataset.act==='alignment-probe') {
+      const binding={};
+      for(const k of ['dimension','x','y','z','owner']) {
+        const value=card.querySelector(`[data-bind="${k}"]`).value;
+        if(!value)throw new Error('Dimension, x/y/z und Owner vollständig eingeben.');
+        binding[k]=['x','y','z'].includes(k)?Number(value):value;
+      }
+      const probe=await api(alignmentUrl+'/probe',{method:'POST',body:{binding}});
+      const o=probe.observed;
+      if(confirm(`READ-ONLY PROBE: create:schematicannon in ${binding.dimension} ${binding.x} ${binding.y} ${binding.z}\nNative State: ${o.state}, AmountPlaced ${o.amountPlaced}\nOwner-Bindung: ${binding.owner}\nEingelegte Datei: ${o.components?.['create:schematic_file']||'keine'}\n\nIst dies wirklich die Kanone dieser Station? Bindung und Materialschutz AKTIVIEREN? Bis zum sicheren Apply wird die Materiallieferung gesperrt. Kein Welt-NBT-Write durch Binden. Native GUI bleibt bedienbar.`)) {
+        await api(alignmentUrl+'/bind',{method:'POST',body:{binding,nonce:probe.nonce,confirm:true}});
+        delete card.dataset.bindingDirty;
+        toast('Blockbindung bestätigt. Jetzt die automatische Schematic-Vorbereitung aktivieren und speichern.');
+      }
     }
-    const probe=await api(alignmentUrl+'/probe',{method:'POST',body:{binding}});
-    const o=probe.observed;
-    if(confirm(`READ-ONLY PROBE: create:schematicannon in ${binding.dimension} ${binding.x} ${binding.y} ${binding.z}\nNative State: ${o.state}, AmountPlaced ${o.amountPlaced}\nOwner-Bindung: ${binding.owner}\nEingelegte Datei: ${o.components?.['create:schematic_file']||'keine'}\n\nIst dies wirklich die Kanone dieser Station? Bindung und Materialschutz AKTIVIEREN? Bis zum sicheren Apply wird die Materiallieferung gesperrt. Kein Welt-NBT-Write durch Binden. Native GUI bleibt bedienbar.`)) {
-      await api(alignmentUrl+'/bind',{method:'POST',body:{binding,nonce:probe.nonce,confirm:true}});
-      toast('Blockbindung bestätigt. Materialschutz aktiv; nach Stop/Reset Ausrichtung anwenden.');
+    if(b.dataset.act==='alignment-apply') {
+      if(!confirm('Nur gestoppte, ungestartete Kanone ohne Printer-Cache. Niemand darf während Apply die native GUI bedienen. Sichere Ausrichtung jetzt versuchen (kein Reset)?'))return;
+      const result=await api(alignmentUrl+'/apply',{method:'POST',body:{}});toast(result.state==='aligned'?'Ausrichtung live bestätigt.':result.message);
     }
+    if (b.dataset.act === 'delete') {
+      if (!confirm(`${name} entfernen? Läuft der Computer noch, meldet er sich gleich wieder an.`)) return;
+      await api('/api/cannons/' + encodeURIComponent(name), { method: 'DELETE' });
+    }
+    if (b.dataset.act === 'upgrade') {
+      if (!confirm('Die aktuelle Bauplan-Version zuweisen? Der bisherige Auftrag wird ersetzt.')) return;
+      await api('/api/cannons/' + encodeURIComponent(name), { method: 'PUT', body: { blueprint: b.dataset.bp, version: null } });
+    }
+    if (b.dataset.act === 'prepare') {
+      await api('/api/cannons/' + encodeURIComponent(name) + '/schematic/prepare', { method: 'POST', body: {} });
+      toast('Aktueller Rest-Plan wird bei gestoppter Kanone eingesetzt.');
+    }
+    cannonRevision++;
+  } finally {
+    busyCannons.delete(name); b.disabled = false; b.blur(); refreshQueue.request('cannon:' + name); refreshQueue.resume();
   }
-  if(b.dataset.act==='alignment-apply') {
-    if(!confirm('Nur gestoppte, ungestartete Kanone ohne Printer-Cache. Niemand darf während Apply die native GUI bedienen. Sichere Ausrichtung jetzt versuchen (kein Reset)?'))return;
-    const result=await api(alignmentUrl+'/apply',{method:'POST',body:{}});toast(result.state==='aligned'?'Ausrichtung live bestätigt.':result.message);
-  }
-  if (b.dataset.act === 'delete') {
-    if (!confirm(`${name} entfernen? Läuft der Computer noch, meldet er sich gleich wieder an.`)) return;
-    await api('/api/cannons/' + encodeURIComponent(name), { method: 'DELETE' });
-  }
-  if (b.dataset.act === 'upgrade') {
-    if (!confirm('Die aktuelle Bauplan-Version zuweisen? Der bisherige Auftrag wird ersetzt.')) return;
-    await api('/api/cannons/' + encodeURIComponent(name), { method: 'PUT', body: { blueprint: b.dataset.bp, version: null } });
-  }
-  if (b.dataset.act === 'position') {
-    openBlueprint(b.dataset.bp);
-    return;
-  }
-  if (b.dataset.act === 'prepare') {
-    await api('/api/cannons/' + encodeURIComponent(name) + '/schematic/prepare', { method: 'POST', body: {} });
-    toast('Aktueller Rest-Plan wird bei gestoppter Kanone eingesetzt.');
-  }
-  cannonRevision++; b.blur(); await loadCannons(true);
 }));
 document.querySelectorAll('[data-goto]').forEach(a => a.addEventListener('click', e => { e.preventDefault(); showTab(a.dataset.goto); }));
 
@@ -461,7 +532,7 @@ $('tokCreate').onclick = guard(async () => {
 });
 
 // ---------- activity ----------
-const ACTIONS = { 'blueprint.create': 'Bauplan angelegt', 'blueprint.version': 'Neue Version', 'blueprint.meta': 'Metadaten geändert', 'blueprint.archive': 'Archiviert', 'snapshot.capture': 'Snapshot erfasst', 'package.import': 'HTML importiert', 'token.create': 'Token erzeugt', 'token.revoke': 'Token widerrufen', 'invite.create': 'Einladung erzeugt', 'auth.register': 'Account angelegt', 'auth.login': 'Angemeldet', 'user.update': 'Account geändert', 'cannon.assign': 'Kanone zugewiesen', 'cannon.transfer': 'Auftrag verschoben', 'cannon.delete': 'Kanone entfernt' };
+const ACTIONS = { 'blueprint.create': 'Bauplan angelegt', 'blueprint.version': 'Neue Version', 'blueprint.meta': 'Metadaten geändert', 'blueprint.archive': 'Archiviert', 'snapshot.capture': 'Snapshot erfasst', 'package.import': 'HTML importiert', 'token.create': 'Token erzeugt', 'token.revoke': 'Token widerrufen', 'invite.create': 'Einladung erzeugt', 'auth.register': 'Account angelegt', 'auth.login': 'Angemeldet', 'user.update': 'Account geändert', 'cannon.assign': 'Kanone zugewiesen', 'cannon.transfer': 'Auftrag verschoben', 'cannon.delete': 'Kanone entfernt', 'cannon.start': 'Kanone gestartet' };
 async function loadActivity() {
   const list = await api('/api/activity?limit=200');
   $('actRows').innerHTML = list.filter(a => a.action !== 'auth.login').map(a => `<tr><td>${esc(when(a.at))}</td><td>${esc(a.user || 'System')}</td><td>${esc(a.via)}</td><td>${esc(ACTIONS[a.action] || a.action)}</td><td class="mono">${esc(a.target || '')}</td>
@@ -501,7 +572,50 @@ $('impGo').onclick = guard(async () => {
   } finally { $('impGo').disabled = false; }
 });
 
-$('logout').onclick = guard(async () => { await api('/api/auth/logout', { method: 'POST' }); location.href = '/login'; });
+// ---------- server updates ----------
+const refreshQueue = createRefreshQueue({
+  canRun(key) {
+    if (document.hidden || !me || $('editDialog').open) return false;
+    if (key === 'status') return ['overview','coordinates'].includes(activeTab) && !$('drawer').open && !document.activeElement?.closest('#bpRows,#coordinateRows');
+    if (key === 'snapshots') return activeTab === 'snapshots' && !document.activeElement?.closest('[data-pane="snapshots"] input,[data-pane="snapshots"] select');
+    if (key === 'activity') return activeTab === 'activity';
+    if (activeTab !== 'cannons') return false;
+    return !key.startsWith('cannon:') || !cardProtected(key.slice(7));
+  },
+  async run(key) {
+    if (key === 'status') return loadStatus();
+    if (key === 'snapshots') return loadSnapshots();
+    if (key === 'activity') return loadActivity();
+    if (key === 'stock') return loadStock();
+    if (key === 'options') { await loadCannonOptions(); refreshQueue.request('cannons'); return; }
+    if (key === 'cannons') { if (cannonLoad) await cannonLoad; return refreshCannons(); }
+    if (key.startsWith('cannon:')) return refreshOneCannon(key.slice(7));
+  },
+});
+function queueChanges(change) {
+  const topics = new Set(change?.topics || []);
+  if (topics.has('blueprints') || topics.has('snapshots')) { refreshQueue.request('status'); refreshQueue.request('cannons'); }
+  if (topics.has('blueprints')) refreshQueue.request('options');
+  if (topics.has('snapshots')) refreshQueue.request('snapshots');
+  if (topics.has('stock')) refreshQueue.request('stock');
+  if (topics.has('activity')) refreshQueue.request('activity');
+  if (topics.has('cannons')) {
+    if (Array.isArray(change.cannons) && change.cannons.length) change.cannons.forEach(name => refreshQueue.request('cannon:' + name));
+    else refreshQueue.request('cannons');
+  }
+}
+function syncVisible() {
+  if (activeTab === 'cannons') ['options','cannons','stock'].forEach(key => refreshQueue.request(key));
+  else if (['overview','coordinates'].includes(activeTab)) refreshQueue.request('status');
+  else if (['activity','snapshots'].includes(activeTab)) refreshQueue.request(activeTab);
+  refreshQueue.resume();
+}
+document.addEventListener('focusout', () => setTimeout(() => refreshQueue.resume(),0));
+document.addEventListener('visibilitychange', () => refreshQueue.resume());
+$('drawer').addEventListener('close', () => refreshQueue.resume());
+$('editDialog').addEventListener('close', () => refreshQueue.resume());
+
+$('logout').onclick = guard(async () => { await api('/api/auth/logout', { method: 'POST' }); liveUpdates?.close(); location.href = '/login'; });
 
 function routeFromHash() {
   const tab = location.hash.slice(1), bpLink = /^bp=(.+)$/.exec(tab);
@@ -518,6 +632,6 @@ window.addEventListener('hashchange', () => { if (me) routeFromHash(); });
     if (me.user.role === 'admin') $('adminTab').classList.remove('hide');
     routeFromHash();
     if (!['#overview','#coordinates'].includes(location.hash)) loadStatus().catch(() => {});
-    setInterval(() => { if (!document.hidden && !$('drawer').classList.contains('open')) loadStatus().catch(() => {}); }, 60e3);
+    liveUpdates = connectLiveUpdates({onChange:queueChanges,onSync:syncVisible,onState:connected => { $('liveConnection').textContent = connected ? 'Live verbunden' : 'Verbindung wird hergestellt'; $('liveConnection').classList.toggle('connected',connected); },onAuth:() => { location.href = '/login'; }});
   } catch (e) { toast(e.message, true); }
 })();
