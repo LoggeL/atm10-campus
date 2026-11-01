@@ -2,6 +2,7 @@
 export function openapi(baseUrl) {
   const json = schema => ({ content: { 'application/json': { schema } } });
   const id = { name: 'id', in: 'path', required: true, schema: { type: 'string' }, description: 'Bauplan-ID = Dateiname ohne .nbt, z. B. 01_Technikhof_P01' };
+  const cannonName = { name: 'name', in: 'path', required: true, schema: { type: 'string' } };
   const ok = { 200: { description: 'OK' } };
   return {
     openapi: '3.1.0',
@@ -110,11 +111,16 @@ export function openapi(baseUrl) {
         get: { summary: 'Eine Kanone', parameters: [{ name: 'name', in: 'path', required: true, schema: { type: 'string', pattern: '^[A-Za-z0-9_-]{1,40}$' }, description: 'Name der Kanone (wie am CC-Computer eingerichtet)' }], responses: ok },
         put: { summary: 'Bauplan zuweisen und/oder Optionen ändern (Schreib-Token). Neuer Bauplan oder neue Version = neuer Auftrag: der Computer gibt Reste zurück und zählt neu.', parameters: [{ name: 'name', in: 'path', required: true, schema: { type: 'string', pattern: '^[A-Za-z0-9_-]{1,40}$' }, description: 'Name der Kanone (wie am CC-Computer eingerichtet)' }],
           requestBody: json({ type: 'object', properties: { blueprint: { type: ['string', 'null'] }, version: { type: ['integer', 'null'], description: 'Standard: aktuelle Version' },
-            options: { type: 'object', properties: { paused: { type: 'boolean' }, bufferStacks: { type: 'integer', minimum: 1, maximum: 16 }, gunpowder: { type: 'integer', minimum: 0, maximum: 64 }, autoCraft: { type: 'boolean' }, craftBatch: { type: 'integer', minimum: 1, maximum: 4096 }, returnLeftovers: { type: 'boolean' }, skipBlocked: { type: 'boolean' } } } } }), responses: ok },
+            options: { type: 'object', properties: { paused: { type: 'boolean' }, bufferStacks: { type: 'integer', minimum: 1, maximum: 16 }, gunpowder: { type: 'integer', minimum: 0, maximum: 64 }, autoCraft: { type: 'boolean' }, craftBatch: { type: 'integer', minimum: 1, maximum: 4096 }, returnLeftovers: { type: 'boolean' }, skipBlocked: { type: 'boolean' } } },
+            schematic: { type: 'object', description: 'Direkte Übergabe an Create 1.21.1-6.0.10 über die bestätigte Blockbindung und signierte Host-Brücke. Ziel ist der Bauplan-Ursprung; nur Oberwelt und Originalausrichtung.', properties: {
+              enabled: { type: 'boolean', default: false },
+              autoUpdate: { type: 'boolean', default: true }, replaceMode: { type: 'integer', enum: [0, 1, 2], default: 2 }, skipMissing: { type: 'boolean', default: false }, protectBlockEntities: { type: 'boolean', default: true }
+            } } } }), responses: ok },
         delete: { summary: 'Kanone entfernen (Schreib-Token)', parameters: [{ name: 'name', in: 'path', required: true, schema: { type: 'string', pattern: '^[A-Za-z0-9_-]{1,40}$' }, description: 'Name der Kanone (wie am CC-Computer eingerichtet)' }], responses: ok },
       },
       '/api/cannons/{name}/plan': { get: { summary: 'Für den CC-Computer (Station-Token): was in die Kiste soll, unterste Schicht zuerst (items[].minY), plus Optionen und Auftragsnummer. Unbekannte Namen werden angelegt.', parameters: [{ name: 'name', in: 'path', required: true, schema: { type: 'string', pattern: '^[A-Za-z0-9_-]{1,40}$' }, description: 'Name der Kanone (wie am CC-Computer eingerichtet)' }], responses: ok } },
       '/api/cannons/{name}/status': { post: { summary: 'Status des CC-Computers melden (Station-Token): state, chest, delivered, shortages[]', parameters: [{ name: 'name', in: 'path', required: true, schema: { type: 'string', pattern: '^[A-Za-z0-9_-]{1,40}$' }, description: 'Name der Kanone (wie am CC-Computer eingerichtet)' }], requestBody: json({ type: 'object' }), responses: ok } },
+      '/api/cannons/{name}/schematic/prepare': { post: { parameters: [cannonName], summary: 'Neuen festen Rest-Plan aus dem aktuellen Live-Snapshot vormerken (Browser-Admin). Die Brücke setzt ihn nur bei vollständig gestoppter Kanone ein.', requestBody: json({ type: 'object' }), responses: ok } },
       '/api/me/stock': {
         get: { summary: 'Zuletzt gemeldeter ME-Bestand (?items=1 mit Liste {item: [Menge, craftbar]})', parameters: [{ name: 'items', in: 'query', schema: { type: 'boolean' } }], responses: ok },
         post: { summary: 'ME-Bestand melden (Station-Token). items: [{name, count, craftable}] oder {name: count}', requestBody: json({ type: 'object', required: ['items'], properties: { source: { type: 'string' }, items: {} } }), responses: ok },

@@ -3,7 +3,7 @@
 -- through an Advanced Peripherals ME Bridge. Which blueprint and the options are set in the web app (tab "Kanonen");
 -- this computer only knows URL, a station token and its cannon name (install: wget run <url>/cc/install.lua).
 -- Strings shown on screen use Latin-1 escapes (\228 = ae-umlaut ...), the CC font is ISO-8859-1.
-local VERSION = "1.1.0"
+local VERSION = "1.2.0"
 
 settings.define("campus.url", { description = "Campus-URL", type = "string" })
 settings.define("campus.token", { description = "API-Token mit Scope Station", type = "string" })
@@ -439,8 +439,10 @@ local function tick()
   if not ok then
     view.state, view.error, view.shortages, view.chest = "error", perr, {}, nil
   elseif plan then
-    if plan.assignment ~= state.assignment then startAssignment(plan) end
-    if not alignmentReady(plan, planReceivedAt, now()) then view.state, view.message, view.shortages = "alignment", latin1(plan.message or "Live-Freigabe fehlt oder abgelaufen"), {}
+    local preparing = plan.schematic and plan.schematic.settings.enabled and plan.schematic.job and plan.schematic.job.state ~= "ready"
+    if not preparing and plan.assignment ~= state.assignment then startAssignment(plan) end
+    if preparing then view.state, view.message, view.shortages = "alignment", latin1(plan.schematic.job.message or "Schematic wird vorbereitet"), {}
+    elseif not alignmentReady(plan, planReceivedAt, now()) then view.state, view.message, view.shortages = "alignment", latin1(plan.message or "Live-Freigabe fehlt oder abgelaufen"), {}
     elseif not plan.blueprint then view.state, view.message, view.shortages = plan.state, plan.message and latin1(plan.message), {}
     elseif plan.options.paused then view.state, view.shortages = "paused", {}
     elseif plan.done then

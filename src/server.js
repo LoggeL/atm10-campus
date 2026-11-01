@@ -17,6 +17,7 @@ import { openapi } from './openapi.js';
 import { registerAgentRoutes } from './api-agent.js';
 import { registerMaterialRoutes } from './api-materials.js';
 import { registerAlignment } from './alignment.js';
+import { createSchematics } from './schematics.js';
 import { registerStationRoutes, endCannonJobs } from './api-stations.js';
 import { sceneJson, blueprintsBinary } from './viewer-data.js';
 
@@ -261,14 +262,19 @@ export async function buildServer(config = defaultConfig) {
   });
   app.delete('/api/blueprints/:id', async req => {
     const a = requireActor(req, 'write');
+    for (const r of db.prepare('SELECT name FROM cannons WHERE blueprint_id = ?').all(req.params.id)) {
+      if (alignment.busy(r.name)) throw new HttpError(409, 'Ein Schematic wird gerade eingesetzt. Bitte kurz warten.');
+    }
     campus.archive(req.params.id, a);
     endCannonJobs(db, req.params.id, a);
     return { ok: true };
   });
 
   registerAgentRoutes(app, campus);
-  const alignment = registerAlignment(app, campus);
-  registerStationRoutes(app, campus, registerMaterialRoutes(app, campus), alignment);
+  const materials = registerMaterialRoutes(app, campus);
+  const schematics = createSchematics(campus, materials);
+  const alignment = registerAlignment(app, campus, schematics);
+  registerStationRoutes(app, campus, materials, alignment, schematics);
 
   // ---------- viewer data ----------
   const snapParam = q => (q.snapshot && q.snapshot !== 'none' ? campus.getSnapshot(Number(q.snapshot)).id : q.snapshot === 'none' ? null : campus.latestSnapshot('live')?.id ?? null);

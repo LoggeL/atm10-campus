@@ -207,7 +207,7 @@ $('snapNow').onclick = guard(async () => {
 });
 
 // ---------- cannons ----------
-const CANNON_STATE = { alignment: 'Ausrichtung gesperrt', offline: 'Computer offline', nocomputer: 'Kein Computer', feeding: 'Liefert', waiting: 'Wartet auf Material', full: 'Kiste voll', done: 'Fertig', paused: 'Pausiert', unassigned: 'Kein Bauplan', missing: 'Bauplan fehlt', nosnapshot: 'Kein Live-Bestand', error: 'Fehler', start: 'Startet' };
+const CANNON_STATE = { alignment: 'Ausrichtung gesperrt', offline: 'Computer offline', nocomputer: 'Kein Computer', feeding: 'Liefert', preparing: 'Schematic vorbereiten', waiting: 'Wartet auf Material', full: 'Kiste voll', done: 'Fertig', paused: 'Pausiert', unassigned: 'Kein Bauplan', missing: 'Bauplan fehlt', nosnapshot: 'Kein Live-Bestand', error: 'Fehler', start: 'Startet' };
 const shortName = item => String(item).replace(/^minecraft:/, '');
 let cannonTimer = null;
 async function loadCannons() {
@@ -226,7 +226,7 @@ function scheduleCannons() {
   clearTimeout(cannonTimer);
   cannonTimer = setTimeout(() => {
     if ($('cannonList').closest('.hide')) return;
-    if (document.hidden || document.activeElement?.closest?.('.cannon select, .cannon input')) return scheduleCannons();
+    if (document.hidden || document.activeElement?.closest?.('.cannon select, .cannon input') || document.querySelector('.schematic-form[data-dirty]')) return scheduleCannons();
     loadCannons().catch(() => scheduleCannons());
   }, 15e3);
 }
@@ -242,12 +242,14 @@ function alignmentCard(c) {
       <div class="row"><label>Dimension <select data-bind="dimension">${['minecraft:overworld','minecraft:the_nether','minecraft:the_end'].map(dim=>`<option${b?.dimension===dim?' selected':''}>${dim}</option>`).join('')}</select></label>${['x','y','z'].map(k=>`<label>${k} <input data-bind="${k}" type="number" step="1" value="${esc(b?.[k]??'')}" required></label>`).join('')}<label>Schematic-Owner <input data-bind="owner" value="${esc(b?.owner??'')}" autocomplete="off" maxlength="16" required></label></div>
       <button class="small" data-act="alignment-probe">Block read-only prüfen / Bindung bestätigen</button>
       ${b?'<button class="small primary" data-act="alignment-apply">Nach Stop/Reset: Ausrichtung anwenden / erneut versuchen</button>':''}
-      <p class="muted">Aktivierung benötigt Feeder 1.1.0 mit frischer Statusmeldung. Apply nur STOPPED, AmountPlaced=0, AmountToPlace=0, ohne Printer-Cache; sonst im Spiel bewusst stoppen/zurücksetzen bzw. Schematic entnehmen. Es gibt keinen automatischen Reset. Exakte gewählte NBT-Version am Schematic Table hochladen und einlegen. Bauplanwechsel stellt den neuen Anker bereit und versucht sicheres Apply; bei laufender/gecachter Kanone bleibt er ausstehend.</p>`:''}
+      <p class="muted">Aktivierung benötigt Feeder 1.1.0 oder 1.2.0 mit frischer Statusmeldung. Apply nur STOPPED, AmountPlaced=0, AmountToPlace=0, ohne Printer-Cache; sonst im Spiel bewusst stoppen/zurücksetzen bzw. Schematic entnehmen. Es gibt keinen automatischen Reset. Bei automatischer Vorbereitung wird das Schematic direkt eingesetzt. Sonst die exakte gewählte NBT-Version am Schematic Table hochladen und einlegen. Bauplanwechsel stellt den neuen Anker bereit und versucht sicheres Apply; bei laufender/gecachter Kanone bleibt er ausstehend.</p>`:''}
   </details>`;
 }
 // alignment-card-end
 function cannonCard(c, bpOptions) {
   const o = c.options, st = c.status, t = c.totals, bp = c.blueprint;
+  const sc = c.schematic?.settings || {}, job = c.schematic?.job;
+  const jobState = { queued: 'Wartet auf Vorbereitung', applying: 'Wird eingesetzt', waiting: 'Wartet auf Kanone', ready: 'Schematic eingesetzt', empty: 'Kein Rest zu bauen', error: 'Vorbereitung fehlgeschlagen' };
   const pct = t && t.start ? Math.max(0, Math.min(100, Math.round((t.start - t.needed) / t.start * 1000) / 10)) : null;
   const live = st && !st.stale && c.online ? st : null;
   const offline = !c.online && bp && !['done', 'paused'].includes(c.state);
@@ -276,10 +278,42 @@ function cannonCard(c, bpOptions) {
       <label>Schießpulver <input type="number" min="0" max="64" data-o="gunpowder" value="${o.gunpowder}"></label>
       <label>Craft-Menge <input type="number" min="1" max="4096" data-o="craftBatch" value="${o.craftBatch}"></label>
     </div>
-    ${alignmentCard(c)}
+    <details class="schematic-details"${sc.enabled ? ' open' : ''}><summary>Schematic automatisch vorbereiten</summary>
+      <form class="schematic-form">
+        <label class="row"><input name="enabled" type="checkbox"${sc.enabled ? ' checked' : ''}> Bauplan direkt in die Kanone einsetzen</label>
+        <p class="muted">Die App überträgt den Rest-Bauplan mit Zielkoordinaten und diesen Einstellungen. Die Kanone muss vollständig gestoppt sein. Danach startet Play den Bau.</p>
+        <p class="muted">${c.alignment?.binding ? `Bestätigte Kanone: <span class="mono">${esc([c.alignment.binding.x,c.alignment.binding.y,c.alignment.binding.z].join(' '))}</span> (${esc(c.alignment.binding.dimension)}).` : 'Zuerst unten unter Ausrichtung den Kanonen-Block prüfen und bestätigen.'}</p>
+        ${bp ? `<div class="muted" style="margin:8px 0">Bauplan-Ziel: <span class="mono">${esc(bp.origin.join(' '))}</span> (Oberwelt, Originalausrichtung). <button class="small" type="button" data-act="position" data-bp="${esc(bp.id)}">Zielkoordinaten ändern</button></div>` : '<p class="muted">Zuerst oben einen Bauplan wählen.</p>'}
+        <label class="setting">Blöcke ersetzen <select name="replaceMode" aria-label="Blöcke ersetzen">${[[0, 'Feste Blöcke stehen lassen'], [1, 'Feste Blöcke nur durch feste ersetzen'], [2, 'Vorhandene Blöcke ersetzen']].map(([v, label]) => `<option value="${v}"${(sc.replaceMode ?? 2) === v ? ' selected' : ''}>${label}</option>`).join('')}</select></label>
+        <div class="opts">
+          <label><input name="autoUpdate" type="checkbox"${sc.autoUpdate !== false ? ' checked' : ''}> Neue Planversionen übernehmen</label>
+          <label><input name="skipMissing" type="checkbox"${sc.skipMissing ? ' checked' : ''}> Fehlende Materialien überspringen</label>
+          <label><input name="protectBlockEntities" type="checkbox"${sc.protectBlockEntities !== false ? ' checked' : ''}> Maschinen schützen</label>
+        </div>
+        <div class="row"><button type="submit" class="small primary">Einstellungen speichern</button><button type="button" class="small" data-act="prepare"${sc.enabled && bp ? '' : ' disabled'}>Rest-Plan neu vorbereiten</button></div>
+      </form>
+      ${job && sc.enabled ? `<div class="schematic-status" role="status"><span class="badge ${job.state === 'ready' ? 'built' : 'warning'}">${esc(jobState[job.state] || job.state)}</span><p>${esc(job.message)}</p>${job.version ? `<span class="muted">v${job.version}${job.snapshot ? ' · Bestand #' + job.snapshot : ''}${job.updatedAt ? ' · ' + esc(when(job.updatedAt)) : ''}</span>` : ''}</div>` : ''}
+    </details>
+${alignmentCard(c)}
     <div class="row"><button class="small danger" data-act="delete"${c.alignment?.enabled?' disabled title="Gebundene Station geschützt"':''}>Entfernen</button></div>
   </div>`;
 }
+$('cannonList').addEventListener('input', e => {
+  const form = e.target.closest('.schematic-form');
+  if (form) form.dataset.dirty = '1';
+});
+$('cannonList').addEventListener('submit', guard(async e => {
+  if (!e.target.matches('.schematic-form')) return;
+  e.preventDefault();
+  const form = e.target, fields = form.elements, name = form.closest('[data-cannon]').dataset.cannon;
+  const schematic = { enabled: fields.enabled.checked,
+    replaceMode: Number(fields.replaceMode.value), autoUpdate: fields.autoUpdate.checked, skipMissing: fields.skipMissing.checked,
+    protectBlockEntities: fields.protectBlockEntities.checked };
+  await api('/api/cannons/' + encodeURIComponent(name), { method: 'PUT', body: { schematic } });
+  delete form.dataset.dirty;
+  toast('Schematic-Einstellungen gespeichert.');
+  await loadCannons();
+}));
 $('cannonList').addEventListener('change', guard(async e => {
   const card = e.target.closest('[data-cannon]');
   if (!card) return;
@@ -325,6 +359,14 @@ $('cannonList').addEventListener('click', guard(async e => {
   }
   if (b.dataset.act === 'upgrade') {
     await api('/api/cannons/' + encodeURIComponent(name), { method: 'PUT', body: { blueprint: b.dataset.bp, version: null } });
+  }
+  if (b.dataset.act === 'position') {
+    openBlueprint(b.dataset.bp);
+    return;
+  }
+  if (b.dataset.act === 'prepare') {
+    await api('/api/cannons/' + encodeURIComponent(name) + '/schematic/prepare', { method: 'POST', body: {} });
+    toast('Aktueller Rest-Plan wird bei gestoppter Kanone eingesetzt.');
   }
   loadCannons();
 }));

@@ -114,7 +114,7 @@ class CannonBridge:
         printer = n.get('Printer')
         return {'state':n.get('State'), 'amountPlaced':n.get('AmountPlaced'),
                 'amountToPlace':n.get('AmountToPlace'), 'printer':printer,
-                'item':item.get('id'), 'components':components, 'at':time.time(),
+                'item':item.get('id'), 'components':components, 'options': ({'replace_mode':n['Options'].get('replace_mode'), 'skip_missing':bool(n['Options'].get('skip_missing')), 'replace_block_entities':bool(n['Options'].get('replace_block_entities'))} if isinstance(n.get('Options'),dict) else None), 'at':time.time(),
                 'fileHash':self.file_hash(b['owner'], components.get('create:schematic_file'))}
 
     def file_hash(self, owner, filename):
@@ -131,7 +131,7 @@ class CannonBridge:
 
     def handle(self, action, obj):
         with self.lock:
-            expected = {'probe':{'binding'}, 'bind':{'station','binding','nonce'}, 'inspect':{'station'}, 'apply':{'station','desired'}}
+            expected = {'probe':{'binding'}, 'bind':{'station','binding','nonce'}, 'inspect':{'station'}, 'apply':{'station','desired'}, 'prepare':{'station','desired','nbtBase64','options','size'}}
             if action not in expected or not isinstance(obj, dict) or set(obj) != expected[action]:
                 raise ValueError('Ungültiger Bridge-Auftrag.')
             if action == 'probe':
@@ -165,6 +165,9 @@ class CannonBridge:
             if station not in registry: raise ValueError('Station nicht gebunden. Admin muss Block bestätigen.')
             b = validate_binding(registry[station]); observed = self.inspect(b)
             if action == 'inspect': return {'binding':b, 'observed':observed}
+            if action == 'prepare':
+                from campus_schematic import prepare_schematic
+                return prepare_schematic(self, b, obj['desired'], obj['nbtBase64'], obj['options'], obj['size'])
             return self.apply(b, obj['desired'], observed)
 
     def apply(self, b, d, o):
@@ -231,11 +234,12 @@ class RequestAuth:
 
 def serve_campus(handler, controller, bridge, auth):
     """Only POSTs here; original controller bearer grants no Campus authority."""
-    if handler.path not in ('/campus/probe','/campus/bind','/campus/inspect','/campus/apply'):
+    if handler.path not in ('/campus/probe','/campus/bind','/campus/inspect','/campus/apply','/campus/prepare'):
         return handler.reply(404, {'error':'Unbekannter Endpunkt.'})
     try:
         length = int(handler.headers.get('Content-Length','0'))
-        if not 0 < length <= 4096 or handler.headers.get('Transfer-Encoding'): raise ValueError('Ungültige Länge.')
+        limit = 24*1024*1024 if handler.path == '/campus/prepare' else 4096
+        if not 0 < length <= limit or handler.headers.get('Transfer-Encoding'): raise ValueError('Ungültige Länge.')
         handler.connection.settimeout(5)
         raw = handler.rfile.read(length)
         if not auth.verify(handler.path, handler.headers, raw):

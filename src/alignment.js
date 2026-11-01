@@ -1,5 +1,6 @@
 // All privileged requests originate here, never in the browser or CC computer.
 import { createHmac, randomBytes } from 'node:crypto';
+import { isDeepStrictEqual } from 'node:util';
 import { requireActor, HttpError } from './auth.js';
 import { logActivity, now } from './db.js';
 
@@ -17,11 +18,12 @@ export function bridgeClient(config) {
   };
 }
 
-const same=(a,b)=>JSON.stringify(a)===JSON.stringify(b);
+const same=isDeepStrictEqual;
 export function verifyAlignment(desired,o,receipt) {
   if(!receipt || !same(desired,receipt))return 'Gewählte Bauplanversion noch nicht sicher angewendet. Stoppen/zurücksetzen und Anwenden wiederholen.';
   if(!o || !Number.isFinite(o.at) || Math.abs(Date.now()/1000-o.at)>15)return 'Live-Probe fehlt oder ist veraltet.';
   if(o.fileHash!==desired.sha256)return 'Datei-/Revisionshash stimmt nicht mit der gewählten Campus-Version überein.';
+  if(desired.options && !same(o.options,desired.options))return 'Kanonen-Einstellungen stimmen nicht mit dem vorbereiteten Plan überein.';
   const expected={'create:schematic_file':desired.file,'create:schematic_owner':desired.owner,'create:schematic_anchor':desired.anchor,'create:schematic_rotation':desired.rotation,'create:schematic_mirror':desired.mirror,'create:schematic_deployed':1};
   if(o.item!=='create:schematic' || Object.entries(expected).some(([k,v])=>!same(o.components?.[k],v)))return 'Schematic-Datei, Owner, Anker, Rotation oder Spiegelung abweichend.';
   if(!['STOPPED','RUNNING','PAUSED'].includes(o.state))return 'Unbekannter nativer Kanonenzustand.';
@@ -31,7 +33,7 @@ export function verifyAlignment(desired,o,receipt) {
   return null;
 }
 
-export function registerAlignment(app, campus) {
+export function registerAlignment(app, campus, schematics) {
   const db=campus.db;
   db.exec(`CREATE TABLE IF NOT EXISTS cannon_alignment (name TEXT PRIMARY KEY COLLATE NOCASE, binding_json TEXT NOT NULL, applied_json TEXT, last_error TEXT, updated_at TEXT NOT NULL);`);
   const row=name=>db.prepare('SELECT * FROM cannons WHERE name = ?').get(name);
@@ -47,6 +49,13 @@ export function registerAlignment(app, campus) {
     if(!r.blueprint_id)return null;
     const bp=campus.getBlueprint(r.blueprint_id),v=campus.version(bp.id,r.version),binding=JSON.parse(rec.binding_json);
     if(bp.archived)throw new HttpError(409,'Bauplan archiviert.');
+    const sc=schematics.view(r.name);
+    if(sc.settings.enabled) {
+      const job=sc.job;
+      if(!job || job.state==='empty')return null;
+      return {file:job.fileName,sha256:job.sha256,owner:binding.owner,anchor:job.origin,rotation:'none',mirror:'none',blueprint:job.blueprint,version:job.version,assignment:r.assignment,
+        options:{replace_mode:sc.settings.replaceMode,skip_missing:sc.settings.skipMissing,replace_block_entities:!sc.settings.protectBlockEntities}};
+    }
     return {file:bp.fileName,sha256:v.sha256,owner:binding.owner,anchor:v.origin,rotation:'none',mirror:'none',blueprint:bp.id,version:v.version,assignment:r.assignment};
   };
   const disabled={state:'disabled',enabled:false,binding:null,desired:null,observed:null,message:'Ausrichtung deaktiviert: keine bestätigte Blockbindung. Bestehender Materialfluss unverändert.'};
@@ -63,7 +72,32 @@ export function registerAlignment(app, campus) {
     }catch(e){return {enabled:true,state:e.statusCode===409?'mismatch':'offline',binding,desired,observed:null,message:e.message};}
   };
   const applying=new Set();
+  const bindingFor=name=>{const rec=record(name);return rec?JSON.parse(rec.binding_json):null;};
+  const prepare=async(name,actor)=>{
+    name=check(name).name.toLowerCase();
+    if(applying.has(name))throw new HttpError(409,'Schematic-Vorbereitung läuft bereits.');
+    applying.add(name);
+    let job;
+    try {
+      const rec=record(name),r=check(name);
+      if(!rec)throw new HttpError(409,'Zuerst den Kanonen-Block bestätigen.');
+      const sc=schematics.sync(r,campus.latestSnapshot('live'),bindingFor(name));job=sc.job;
+      if(!sc.settings.enabled || !job || ['empty','ready'].includes(job.state))return view(name);
+      const desired=desiredFor(r,rec),{assignment,options,...target}=desired;
+      db.prepare('UPDATE cannon_alignment SET applied_json=NULL,last_error=NULL WHERE name=?').run(name);
+      const result=await request('prepare',{station:r.name,desired:target,options,size:job.size,nbtBase64:schematics.bytes(job).toString('base64')});
+      if(!same(JSON.parse(rec.binding_json),result.binding) || row(name)?.assignment!==assignment || record(name)?.binding_json!==rec.binding_json)throw new HttpError(409,'Auftrag/Bindung während Vorbereitung geändert.');
+      const error=verifyAlignment(desired,result.observed,desired);if(error)throw new HttpError(409,error);
+      schematics.ready(name,job.id);
+      const receipt=desiredFor(check(name),record(name));
+      db.prepare('UPDATE cannon_alignment SET applied_json=?,last_error=NULL,updated_at=? WHERE name=?').run(JSON.stringify(receipt),now(),name);
+      logActivity(db,actor,'schematic.ready',name,{job:job.id,version:job.version,origin:job.origin});
+      return view(name);
+    }catch(e){if(job)schematics.waiting(name,job.id,e.message);db.prepare('UPDATE cannon_alignment SET last_error=? WHERE name=?').run(e.message,name);throw e;}
+    finally{applying.delete(name);}
+  };
   const apply=async(name,actor)=>{
+    if(schematics.settingsFor(name).enabled)return prepare(name,actor);
     name=check(name).name.toLowerCase();
     if(applying.has(name))throw new HttpError(409,'Ausrichtungsauftrag läuft bereits.');
     applying.add(name);
@@ -100,11 +134,28 @@ export function registerAlignment(app, campus) {
     if(applying.has(r.name.toLowerCase()))throw new HttpError(409,'Apply läuft. Bindung nicht geändert.');
     if(req.body?.confirm!==true)throw new HttpError(400,'Block und Aktivierung ausdrücklich bestätigen.');
     const status=JSON.parse(r.status_json||'null');
-    if(status?.script!=='1.1.0' || !Number.isFinite(Date.parse(status.at)) || Date.now()-Date.parse(status.at)>180000)throw new HttpError(409,'Vor Aktivierung Feeder auf 1.1.0 aktualisieren und frische Statusmeldung abwarten. Legacy-Feeder können alte Materialpläne weiterverwenden.');
+    if(!['1.1.0','1.2.0'].includes(status?.script) || !Number.isFinite(Date.parse(status.at)) || Date.now()-Date.parse(status.at)>180000)throw new HttpError(409,'Vor Aktivierung Feeder aktualisieren und frische Statusmeldung abwarten. Legacy-Feeder können alte Materialpläne weiterverwenden.');
     const result=await request('bind',{station:r.name,binding:req.body.binding,nonce:req.body.nonce});
     db.prepare('INSERT INTO cannon_alignment(name,binding_json,updated_at) VALUES(?,?,?) ON CONFLICT(name) DO UPDATE SET binding_json=excluded.binding_json,applied_json=NULL,last_error=NULL,updated_at=excluded.updated_at').run(r.name,JSON.stringify(result.binding),now());
     logActivity(db,a,'cannon.alignment.bind',r.name,{binding:result.binding});return view(r.name);
   });
   app.post('/api/cannons/:name/alignment/apply',async req=>{const a=admin(req);check(req.params.name);return apply(req.params.name,a);});
-  return {view,gate,apply,admin,busy:name=>applying.has(name.toLowerCase()),enabled:name=>!!record(name)};
+  app.post('/api/cannons/:name/schematic/prepare',async req=>{
+    const actor=admin(req),r=check(req.params.name);
+    if(applying.has(r.name.toLowerCase()))throw new HttpError(409,'Vorbereitung läuft bereits.');
+    if(!schematics.settingsFor(r.name).enabled || !r.blueprint_id)throw new HttpError(400,'Automatische Vorbereitung aktivieren und einen Bauplan wählen.');
+    if(!campus.latestSnapshot('live'))throw new HttpError(503,'Noch kein Live-Snapshot.');
+    schematics.sync(r,campus.latestSnapshot('live'),bindingFor(r.name),true);
+    try{await prepare(r.name,actor);}catch{/* Exact refusal is stored in the job and alignment view. */}
+    return schematics.view(r.name);
+  });
+  let timer;
+  app.addHook('onReady',async()=>{timer=setInterval(async()=>{
+    for(const r of db.prepare('SELECT * FROM cannons WHERE blueprint_id IS NOT NULL').all()) {
+      if(!record(r.name) || !schematics.settingsFor(r.name).enabled || applying.has(r.name.toLowerCase()))continue;
+      try{await prepare(r.name,null);}catch{/* Fail closed; the next poll retries at a safe stop. */}
+    }
+  },10000);timer.unref();});
+  app.addHook('onClose',async()=>{clearInterval(timer);});
+  return {view,gate,apply,prepare,admin,binding:bindingFor,busy:name=>applying.has(name.toLowerCase()),enabled:name=>!!record(name)};
 }

@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { requireActor, HttpError } from './auth.js';
-import { now, logActivity } from './db.js';
+import { now, logActivity, tx } from './db.js';
 import { normalizeStockItems, saveStock, latestStock } from './me-stock.js';
 
 const ccDir = join(dirname(fileURLToPath(import.meta.url)), '..', 'public', 'cc');
@@ -63,7 +63,7 @@ export function endCannonJobs(db, bpId, actor) {
   return rows.length;
 }
 
-export function registerStationRoutes(app, campus, mat, alignment) {
+export function registerStationRoutes(app, campus, mat, alignment, schematics) {
   const db = campus.db;
   const getRow = name => db.prepare('SELECT * FROM cannons WHERE name = ?').get(name);
   const checkName = name => {
@@ -88,9 +88,10 @@ export function registerStationRoutes(app, campus, mat, alignment) {
   };
 
   const planFor = (row, snap) => {
+    const schematic = schematics.sync(row, snap, alignment.binding(row.name));
     const options = normalizeOptions(JSON.parse(row.options_json || '{}'));
     const base = {
-      cannon: row.name, assignment: row.assignment, options, script: scriptVersion(), intervals: INTERVALS,
+      cannon: row.name, assignment: row.assignment, options, schematic, script: scriptVersion(), intervals: INTERVALS,
       snapshot: snap ? { id: snap.id, capturedAt: snap.capturedAt, worldTime: snap.worldTime } : null,
     };
     const idle = (state, message) => ({ ...base, state, message, blueprint: null, items: [], totals: { needed: 0, kinds: 0, start: 0 }, done: false });
@@ -99,7 +100,7 @@ export function registerStationRoutes(app, campus, mat, alignment) {
     try { bp = campus.getBlueprint(row.blueprint_id); } catch { return idle('missing', 'Zugewiesener Bauplan existiert nicht mehr.'); }
     if (bp.archived) return idle('missing', 'Zugewiesener Bauplan ist archiviert.');
     if (!snap) return idle('nosnapshot', 'Noch kein Live-Snapshot.');
-    const v = campus.version(bp.id, row.version);
+    const v = campus.version(bp.id, schematic.settings.enabled && schematic.job?.state === 'ready' ? schematic.job.version : row.version);
     const r = mat.remainingOf(bp, v, snap, { skipBlocked: options.skipBlocked });
     const items = cannonItems(r.items);
     const needed = items.reduce((a, e) => a + e.needed, 0);
@@ -110,7 +111,7 @@ export function registerStationRoutes(app, campus, mat, alignment) {
       start = JSON.parse(json);
     }
     return {
-      ...base, state: options.paused ? 'paused' : needed ? 'feeding' : 'done', message: null,
+      ...base, state: options.paused ? 'paused' : schematic.settings.enabled && schematic.job?.state !== 'ready' && needed ? 'preparing' : needed ? 'feeding' : 'done', message: null,
       blueprint: { id: bp.id, name: bp.name, version: v.version, currentVersion: bp.currentVersion, origin: v.origin, size: v.size },
       items,
       totals: { needed, kinds: items.length, start: Math.max(start.needed, needed) },
@@ -132,6 +133,7 @@ export function registerStationRoutes(app, campus, mat, alignment) {
       options: normalizeOptions(JSON.parse(row.options_json || '{}')),
       blueprint: plan.blueprint ?? null, state: blocked ? 'alignment' : plan.state, message: blocked ? alignmentView.message : plan.message ?? null, totals: plan.totals ?? null, done: !blocked && !!plan.done,
       restNbt: plan.restNbt ?? null, items: plan.items ?? [],
+      schematic: plan.schematic ?? schematics.view(row.name),
       status: status && status.assignment === row.assignment ? status : status && { ...status, stale: true },
     };
   };
@@ -158,6 +160,10 @@ export function registerStationRoutes(app, campus, mat, alignment) {
     const name = checkName(req.params.name), b = req.body || {};
     const row = getRow(name) || ensureRow(name);
     if (alignment.enabled(name)) alignment.admin(req);
+    if (b.schematic !== undefined) {
+      alignment.admin(req);
+      if (b.schematic.enabled && !alignment.enabled(name)) throw new HttpError(400, 'Zuerst unter Ausrichtung den Kanonen-Block bestätigen.');
+    }
     if (alignment.busy(name)) throw new HttpError(409, 'Apply läuft. Auftrag bleibt unverändert; danach erneut wählen.');
     const options = normalizeOptions(b.options, JSON.parse(row.options_json || '{}'));
     let { blueprint_id: bpId, version, assignment, start_json: start } = row;
@@ -178,9 +184,13 @@ export function registerStationRoutes(app, campus, mat, alignment) {
     if (options.skipBlocked !== prevSkip) start = null;
     const snap = liveSnap();
     if (bpId && !start && snap) start = startFor(bpId, version, options, snap);
-    db.prepare('UPDATE cannons SET blueprint_id = ?, version = ?, assignment = ?, options_json = ?, start_json = ?, updated_at = ? WHERE name = ?')
-      .run(bpId, version, assignment, JSON.stringify(options), start, now(), name);
-    if (alignment.enabled(name) && assignment !== row.assignment && bpId) {
+    tx(db, () => {
+      if (b.schematic !== undefined) schematics.configure(row.name, b.schematic);
+      db.prepare('UPDATE cannons SET blueprint_id = ?, version = ?, assignment = ?, options_json = ?, start_json = ?, updated_at = ? WHERE name = ?')
+        .run(bpId, version, assignment, JSON.stringify(options), start, now(), name);
+      schematics.sync(getRow(name), snap, alignment.binding(name));
+    });
+    if (alignment.enabled(name) && (assignment !== row.assignment || b.schematic !== undefined) && bpId) {
       try { await alignment.apply(name, a); } catch { /* Queued: UI shows exact live refusal; never reset a printer. */ }
     }
     return cannonView(getRow(name), snap);

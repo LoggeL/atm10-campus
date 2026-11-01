@@ -1,6 +1,6 @@
 <!doctype html>
 <html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>ATM10 Campus</title><link rel="stylesheet" href="/assets/app.css?v=20261101-coordinates-1"></head>
+<title>ATM10 Campus</title><link rel="stylesheet" href="/assets/app.css?v=20261101-schematics-1"></head>
 <body>
 <header class="top">
   <div><h1>ATM10 Campus</h1><div class="sub" id="liveLine">Live-Bestand wird geladen …</div></div>
@@ -67,7 +67,7 @@
           <li>Unter <a href="#agent" data-goto="agent">Agent-Zugang</a> einen Token mit Scope <b>Station (ME-Computer)</b> anlegen. Der darf nur lesen und Bestand/Status melden, keine Baupläne ändern.</li>
           <li>Aufbau: <span class="mono">ME-Kabel → ME Bridge → Computer → Kiste → Schematicannon</span>. ME Bridge und Kiste hängen beide direkt am Computer oder beide am selben Wired-Modem-Netz. Eine einfache Kiste oder ein Fass nehmen, keine Doppelkiste. Die Kiste berührt die Kanone an einer beliebigen Seite, die Kanone zieht Blöcke und Schießpulver daraus. Die ME Bridge braucht einen ME-Kanal.</li>
           <li>Am Computer eingeben: <div class="secret" id="ccInstall"></div> Token und Kanonen-Namen eintippen, fertig. Das Script startet bei jedem Neustart und aktualisiert sich selbst.</li>
-          <li>Die Kanone taucht hier auf. Bauplan wählen, dann <b>Rest-NBT</b> laden, in den <span class="mono">schematics</span>-Ordner legen, am Schematic Table hochladen und genau am origin platzieren.</li>
+          <li>Die Kanone taucht hier auf. Bauplan wählen, unter <b>Ausrichtung</b> den Kanonen-Block bestätigen und <b>Schematic automatisch vorbereiten</b> aktivieren. Der Server setzt den Rest-Plan mit den Bauplan-Zielkoordinaten ein, sobald die Kanone vollständig gestoppt ist. Ein manuell eingelegtes Schematic vorher herausnehmen. Ohne Server-Brücke bleibt der Rest-NBT-Download für den Schematic Table verfügbar.</li>
           <li>In der Kanone <b>„Skip Missing“ ausschalten</b> (ist bei neuen Kanonen an), sonst überspringt sie Blöcke, die gerade noch nicht in der Kiste liegen. Modus „Replace Solid with Any“ (Standard) lassen, nicht „Replace Solid with Empty“. „Protect Block Entities“ an lassen. Dann Play drücken: fehlt etwas, wartet die Kanone und baut weiter, sobald das Script nachgefüllt hat.</li>
         </ol>
       </details>
@@ -110,5 +110,5 @@
 <div class="scrim" id="scrim"></div>
 <aside class="drawer" id="drawer" aria-label="Bauplan-Details"></aside>
 <input type="file" id="hiddenFile" accept=".nbt" class="hide">
-<script type="module" src="/assets/app.js?v=20261101-coordinates-1"></script>
+<script type="module" src="/assets/app.js?v=20261101-schematics-1"></script>
 </body></html>

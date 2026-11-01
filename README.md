@@ -9,6 +9,7 @@ Web-App auf der HomeBox für das Campus-Redesign unseres ATM10-Servers:
   Kombinierbare Ebenen (Bestand, Abriss, Gebaut, Noch setzen, Ersetzen, Maschine im Weg, Seit Planung geändert, Überlappung) mit Modus je Ebene (Echt / Farbe / Geist / Gedimmt / Aus) und Presets wie „Noch zu bauen“ oder „Konflikte“.
 - **Agent-Bearbeitung**: Baupläne blockgenau per Operationen ändern (`set`, `fill`, `replace`, `clear`, `void`, `copy`, mit `dryRun`-Vorschau und Analyse), als ASCII-Schichten oder JSON lesen, echten Bestand abfragen.
 - **Login per Einladung**, persönliche **API-Tokens** für Agents (`/docs`, `/api/openapi.json`).
+- **Schematics direkt in die Kanone**: Rest-Plan mit Bauplan-Zielkoordinaten und Kanonen-Einstellungen automatisch vorbereiten, neue Versionen bei vollständigem Stopp übernehmen. Der Bau startet mit Play an der Kanone.
 
 ## Viewer-Assets
 
@@ -59,6 +60,18 @@ DATA_DIR=./data WORLD_DIR=/pfad/zur/world BOOTSTRAP_INVITE=irgendein-langer-code
 
 Dokploy-App `atm10-campus` (Dockerfile, Auto-Deploy bei Push auf `main`), Domain `campus.logge.top`.
 Mounts: Volume `atm10-campus-data` → `/data`, Bind `~/minecraft/atm10/data/world` → `/worlds/live`, Bind `~/minecraft/atm10-backup-20261021/world` → `/worlds/backup-20261021`, Bind `~/atm10-campus-seed` → `/seed`.
+
+## Automatische Schematic-Vorbereitung (Create 1.21.1-6.0.10)
+
+Im Kanonen-Tab den Bauplan zuweisen und unter „Ausrichtung“ als Browser-Admin den physischen Kanonen-Block prüfen und bestätigen. Danach „Schematic automatisch vorbereiten“ aktivieren. Die App überträgt den Rest-Plan mit den Zielkoordinaten der Bauplanversion und den gewählten Ersetzungs-/Material-/Maschinenschutz-Einstellungen. „Zielkoordinaten ändern“ öffnet den Bauplan; eine Positionsänderung wird als neue Version gespeichert. Ausrichtung und Spiegelung entsprechen der NBT. Automatische Rest-Pläne verwenden den Live-Bestand der Oberwelt.
+
+Die bestehende signierte Controller-Anbindung wird um `/campus/prepare` erweitert. Neben `campus_cannon.py` müssen `controller/campus_schematic.py` und `controller/campus_snbt.py` neben dem vorhandenen `control.py` auf dem Host liegen. Danach nur den Controller-Service neu starten. Die bisherigen Bridge-Adresse, Signatur und Block-Registry werden weiterverwendet; ein zusätzlicher Worker oder Station-Token ist nicht erforderlich. Details zur Host-Anbindung stehen in `docs/cannon-alignment.md`.
+
+Jeder Auftrag friert Rest-NBT, SHA256, Version, Live-Snapshot, Ziel und Einstellungen ein. Neue Planversionen werden bei aktivierter Versionsübernahme vorgemerkt und alle zehn Sekunden erneut versucht. Ein anderer Live-Snapshot allein unterbricht keinen Bau. „Rest-Plan neu vorbereiten“ erzeugt einen Auftrag aus dem neuesten vorhandenen Snapshot. Die Materialfreigabe bleibt bis zur bestätigten Übergabe gesperrt und prüft anschließend auch die Kanonen-Einstellungen live. Der CC-Versorger 1.2.0 lädt sich über sein vorhandenes Auto-Update nach.
+
+Die Brücke verlangt `STOPPED`, Null-Zähler, leere `FlyingBlocks` und einen uninitialisierten Drucker. Der abschließende einzelne Server-Befehl prüft Blocktyp, Zustand, Zähler und das zuvor gelesene Inventar erneut. Laufende oder pausierte Kanonen werden nicht verändert. Manuelle Schematics im Eingang müssen zuerst entfernt werden. Vorhandene Campus-Schematics werden neu beschrieben, leere Schematics im Ausgabefach wiederverwendet. Ist keine Vorlage vorhanden, erstellt die Brücke ein Campus-Schematic. Andere Inventarslots und ihre NBT-Typen bleiben erhalten. Der vorherige Kanonenzustand liegt unter `discord/campus-schematic-backups`. Der Modus zum Leerräumen wird bei den dünn besetzten Rest-Plänen nicht angeboten. Play startet den Bau im Spiel.
+
+Prüfen: `LOG_LEVEL=silent npm test`, `python3 test/bridge_test.py`, `python3 test/controller_alignment_test.py` auf dem Controller-Host sowie `uv run --with lupa python test/feeder_alignment_test.py`.
 
 ## Neue Version von Jonnys HTML
 
