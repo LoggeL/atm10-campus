@@ -1,5 +1,5 @@
 'use strict';
-import { coordinateFields, placementCard, placementValues, coordinateListText } from './placement.js';
+import { coordinateFields, placementCard, placementValues, coordinateListText } from './placement.js?v=20261101-coordinates-1';
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const fmt = n => n == null ? '–' : Number(n).toLocaleString('de-DE');
@@ -415,14 +415,20 @@ $('impGo').onclick = guard(async () => {
 
 $('logout').onclick = guard(async () => { await api('/api/auth/logout', { method: 'POST' }); location.href = '/login'; });
 
+function routeFromHash() {
+  const tab = location.hash.slice(1), bpLink = /^bp=(.+)$/.exec(tab);
+  closeDrawer();
+  showTab(['overview', 'coordinates', 'snapshots', 'cannons', 'agent', 'activity', 'admin'].includes(tab) ? tab : 'overview');
+  if (bpLink) openBlueprint(decodeURIComponent(bpLink[1]));
+}
+window.addEventListener('hashchange', () => { if (me) routeFromHash(); });
+
 (async () => {
   try {
     me = await api('/api/me');
     $('who').textContent = me.user.username;
     if (me.user.role === 'admin') $('adminTab').classList.remove('hide');
-    const tab = location.hash.slice(1), bpLink = /^bp=(.+)$/.exec(tab);
-    showTab(['overview', 'coordinates', 'snapshots', 'cannons', 'agent', 'activity', 'admin'].includes(tab) ? tab : 'overview');
-    if (bpLink) openBlueprint(decodeURIComponent(bpLink[1]));
+    routeFromHash();
     setInterval(() => { if (!document.hidden && !$('drawer').classList.contains('open')) loadStatus().catch(() => {}); }, 60e3);
   } catch (e) { toast(e.message, true); }
 })();
