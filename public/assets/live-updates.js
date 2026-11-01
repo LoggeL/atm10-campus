@@ -29,6 +29,48 @@ export function createRefreshQueue({run, canRun = () => true, onError = () => {}
   };
 }
 
+// One visible-page refresh at a time. Manual refresh resets the same 30-second clock;
+// hidden pages keep no backlog. Navigation coalesces into one refresh of the latest tab.
+export function connectPolling({refresh,onState=()=>{},intervalMs=30_000,immediate=true,
+  documentImpl=globalThis.document,windowImpl=globalThis.window,now=Date.now,setTicker=setInterval,clearTicker=clearInterval}) {
+  let stopped=false,suspended=false,inFlight=null,navigateAgain=false,nextAt=now()+intervalMs,lastUpdatedAt=null,error=null,deferred=false;
+  const visible=()=>!documentImpl?.hidden&&!suspended;
+  function state() {
+    if(stopped)return;
+    const remainingMs=Math.max(0,nextAt-now());
+    onState({phase:!visible()?'paused':inFlight?'refreshing':error?'error':deferred?'deferred':'idle',
+      remainingSeconds:Math.ceil(remainingMs/1000),progress:Math.min(1,Math.max(0,1-remainingMs/intervalMs)),lastUpdatedAt,error});
+  }
+  function refreshNow(reason='manual') {
+    if(stopped||!visible())return Promise.resolve(false);
+    if(inFlight){if(reason==='navigation')navigateAgain=true;return inFlight;}
+    error=null;deferred=false;
+    inFlight=Promise.resolve().then(()=>refresh(reason)).then(result=>{
+      deferred=result===false;
+      if(!deferred)lastUpdatedAt=now();
+      return !deferred;
+    },failure=>{error=failure?.message||'Aktualisierung fehlgeschlagen';return false;}).finally(()=>{
+      inFlight=null;nextAt=now()+intervalMs;
+      const again=navigateAgain;navigateAgain=false;
+      if(again&&!stopped&&visible())refreshNow('navigation');else state();
+    });
+    state();return inFlight;
+  }
+  function visibility() {if(visible())refreshNow('visible');else state();}
+  function pause() {suspended=true;state();}
+  function resume(event) {if(!suspended&&!event?.persisted)return;suspended=false;visibility();}
+  const ticker=setTicker(()=>{if(stopped||!visible())return;if(!inFlight&&now()>=nextAt)refreshNow('timer');else state();},1000);
+  documentImpl?.addEventListener('visibilitychange',visibility);
+  windowImpl?.addEventListener('pagehide',pause);windowImpl?.addEventListener('pageshow',resume);
+  function close() {
+    stopped=true;clearTicker(ticker);navigateAgain=false;
+    documentImpl?.removeEventListener('visibilitychange',visibility);
+    windowImpl?.removeEventListener('pagehide',pause);windowImpl?.removeEventListener('pageshow',resume);
+  }
+  if(immediate)refreshNow('initial');else state();
+  return {refreshNow,close};
+}
+
 // EventSource handles ordinary reconnects. A silent stream is reopened after missed
 // heartbeats; the sync event then reloads current state, including events missed offline.
 export function connectLiveUpdates({onChange, onSync, onState = () => {}, onAuth = () => {}, EventSourceImpl = globalThis.EventSource,

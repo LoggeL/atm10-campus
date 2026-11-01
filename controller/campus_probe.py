@@ -36,7 +36,7 @@ def read_fields(run, binding, parse):
 
     def identity():
         return {key: field(key, key.startswith('Inventory.')) for key in
-                ('id', 'State', 'Inventory.Items[{Slot:0}]', 'Options')}
+                ('id', 'State', 'Status', 'Inventory.Items[{Slot:0}]', 'Inventory.Items[{Slot:1}]', 'Options')}
 
     before = identity()
     if before['id'] != 'create:schematicannon':
@@ -48,9 +48,17 @@ def read_fields(run, binding, parse):
     printer['DeferredBlocks'] = [] if deferred == 0 else [None]
     printer['DeferredCount'] = deferred
     n = {'id': before['id'], 'State': before['State'], 'Options': before['Options'],
-         'Inventory': {'Items': [before['Inventory.Items[{Slot:0}]']] if before['Inventory.Items[{Slot:0}]'] else []},
+         'Inventory': {'Items': [before[key] for key in ('Inventory.Items[{Slot:0}]', 'Inventory.Items[{Slot:1}]') if before[key] is not None]},
          'Printer': printer, 'AmountPlaced': field('AmountPlaced'), 'AmountToPlace': field('AmountToPlace'),
-         'Status': field('Status', True), 'FlyingBlockCount': count('FlyingBlocks')}
+         'Status': before['Status'], 'FlyingBlockCount': count('FlyingBlocks')}
+    if n['Status'] == 'finished' and n['FlyingBlockCount'] == 0:
+        # A generic zero-count reply could belong to another RCON client. Before
+        # reporting a possible completion, prove no flights remain with our own
+        # unique read-only response. Normal full-NBT snapshots need no extra call.
+        from campus_discovery import condition
+        from types import SimpleNamespace
+        if not condition(SimpleNamespace(run=run), f'{prefix} unless data block {pos} FlyingBlocks[]'):
+            raise ValueError('Kanone meldet Abschluss, aber ausstehende Blöcke konnten nicht ausgeschlossen werden. Bitte erneut prüfen.')
     # Multiple RCON reads must never mix one schematic/state/options with another.
     if identity() != before:
         raise ValueError('Kanone während der Statusprüfung geändert. Bitte erneut versuchen.')

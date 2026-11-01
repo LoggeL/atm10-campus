@@ -4,8 +4,8 @@ import { VoxelRenderer } from './renderer.js';
 import { Navigation } from './navigation.js';
 import { buildAtlas } from './atlas.js';
 import { LAYERS, PRESETS, MODES, CAT, categoryModes, categoryColors, statusLabel, statusColor } from './layers.js';
-import { blueprintPreview, installPreviewFallbacks } from '/assets/blueprint-preview.js?v=20261101-live-1';
-import { connectLiveUpdates, createRefreshQueue } from '/assets/live-updates.js?v=20261101-live-1';
+import { blueprintPreview, installPreviewFallbacks } from '/assets/blueprint-preview.js?v=20261101-progress-1';
+import { connectPolling } from '/assets/live-updates.js?v=20261101-progress-1';
 installPreviewFallbacks();
 
 const $ = s => document.querySelector(s);
@@ -171,12 +171,13 @@ async function main() {
   };
   requestAnimationFrame(frame);
   setInterval(updateHud, 500);
-  const updates = createRefreshQueue({run:checkLive,canRun:() => !document.hidden});
-  connectLiveUpdates({
-    onChange:change => { if (change.topics?.some(topic => ['blueprints','snapshots'].includes(topic))) updates.request('scene'); },
-    onSync:() => updates.request('scene'),
-    onAuth:() => { location.href = '/login'; },
-  });
+  const polling=connectPolling({refresh:checkLive,onState:status=>{
+    const label=$('#refresh-label'),button=$('#refresh-now');
+    label.textContent=status.phase==='refreshing'?'Prüfe Änderungen …':status.phase==='error'?'Prüfung fehlgeschlagen':status.phase==='paused'?'Pausiert':`Prüfung in ${status.remainingSeconds} s`;
+    label.title=status.error||'Prüft neue Weltstände und Bauplanversionen. Die Ansicht bleibt erhalten.';
+    $('#refresh-progress').value=status.progress;button.disabled=status.phase==='refreshing';
+  }});
+  $('#refresh-now').addEventListener('click',()=>polling.refreshNow());
 }
 
 let firstDone = false;

@@ -1,10 +1,10 @@
 <!doctype html>
 <html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>ATM10 Campus</title><link rel="stylesheet" href="/assets/app.css?v=20261101-picker-1"><link rel="stylesheet" href="/assets/blueprint-preview.css?v=20261101-picker-1"></head>
+<title>ATM10 Campus</title><link rel="stylesheet" href="/assets/app.css?v=20261101-progress-1"><link rel="stylesheet" href="/assets/blueprint-preview.css?v=20261101-progress-1"></head>
 <body>
 <a class="skip-link" href="#main">Zum Inhalt</a>
 <header class="top">
-  <a class="brand" href="/app">ATM10 Campus</a><span class="live-connection" id="liveConnection" role="status">Verbindung wird hergestellt</span><span class="spacer"></span>
+  <a class="brand" href="/app">ATM10 Campus</a><span class="spacer"></span>
   <a href="/viewer">3D-Viewer</a><a href="/api/materials?format=html">Materialliste</a>
   <details class="menu" id="accountMenu"><summary>Konto</summary><div class="menu-content"><span class="muted" id="who"></span><button id="logout">Abmelden</button></div></details>
 </header>
@@ -19,6 +19,11 @@
   </div></details>
 </nav>
 <main id="main">
+  <div class="refresh-status" id="refreshStatus" aria-busy="false">
+    <div class="refresh-timing"><span id="refreshLabel">Aktualisierung alle 30 s</span><progress id="refreshProgress" max="1" value="0" aria-label="Zeit bis zur nächsten Aktualisierung"></progress></div>
+    <span class="refresh-last" id="refreshLast" role="status">Noch nicht aktualisiert</span>
+    <button class="small" id="refreshNow">Jetzt aktualisieren</button>
+  </div>
   <section data-pane="overview">
     <div class="page-heading"><h1>Baupläne</h1><button id="newBp">Neuer Bauplan</button></div>
     <div class="summary-line" id="cards" aria-label="Campus-Status"></div>
@@ -62,7 +67,7 @@
         </ol>
       </details>
     <div id="cannonList"></div>
-    <p class="footnote">Bestätigte, automatisch vorbereitete Kanonen kannst du als Admin hier starten oder fortsetzen. Stoppen und Zurücksetzen erfolgt im Spiel. Der Baufortschritt folgt dem zuletzt gespeicherten Weltstand.</p>
+    <p class="footnote">Bestätigte, automatisch vorbereitete Kanonen kannst du als Admin hier starten oder fortsetzen. Stoppen und Zurücksetzen erfolgt im Spiel. Die App fragt alle 30 Sekunden den aktuellen Auftrag ab. Der Weltabgleich zeigt zusätzlich den zuletzt gespeicherten Weltstand.</p>
   </section>
 
   <section data-pane="agent" class="hide">
@@ -103,5 +108,5 @@
 <dialog class="drawer" id="drawer" aria-labelledby="blueprintTitle"></dialog>
 <dialog class="form-dialog" id="editDialog" aria-labelledby="editTitle"></dialog>
 <input type="file" id="hiddenFile" accept=".nbt" class="hide">
-<script type="module" src="/assets/app.js?v=20261101-picker-1"></script>
+<script type="module" src="/assets/app.js?v=20261101-progress-1"></script>
 </body></html>

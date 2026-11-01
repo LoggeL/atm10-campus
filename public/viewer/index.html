@@ -5,11 +5,11 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Campus-Viewer · ATM10</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><rect x='2' y='2' width='12' height='12' rx='2' fill='%2373d8e5'/></svg>">
-<link rel="stylesheet" href="/viewer/viewer.css?v=20261101-live-1">
+<link rel="stylesheet" href="/viewer/viewer.css?v=20261101-progress-1">
 <script type="importmap">
 { "imports": { "three": "/vendor/three/build/three.module.min.js", "three/addons/": "/vendor/three/examples/jsm/" } }
 </script>
-<link rel="stylesheet" href="/assets/blueprint-preview.css?v=20261101-live-1"></head>
+<link rel="stylesheet" href="/assets/blueprint-preview.css?v=20261101-progress-1"></head>
 <body>
 <canvas id="scene" tabindex="0" aria-label="3D-Ansicht des Campus"></canvas>
 
@@ -30,6 +30,7 @@
     <label class="select"><span class="sr">Snapshot</span><select id="snapshot"></select></label>
   </div>
   <div id="edition" class="edition"></div>
+  <div class="viewer-refresh"><span id="refresh-label" role="status">Prüfung in 30 s</span><button id="refresh-now" type="button" class="tool-btn">Jetzt prüfen</button><progress id="refresh-progress" max="1" value="0" aria-label="Zeit bis zur nächsten Aktualisierung"></progress></div>
   <nav class="links">
     <a href="/app">Baupläne</a><a href="/app#cannons">Kanonen</a>
   </nav>
@@ -123,6 +124,6 @@
 <div id="hud" class="hud"></div>
 <div id="toast" class="toast hidden"></div>
 
-<script type="module" src="/viewer/main.js?v=20261101-live-1"></script>
+<script type="module" src="/viewer/main.js?v=20261101-progress-1"></script>
 </body>
 </html>

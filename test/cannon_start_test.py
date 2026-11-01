@@ -96,23 +96,32 @@ class StartTests(unittest.TestCase):
 
 
 class ProbeTests(unittest.TestCase):
-    def fixture(self, change=False):
+    def fixture(self, change=False, finished=False, change_output=False):
         item = {'Slot':0,'id':'create:schematic','components':expected_components(DESIRED)}
         values = {'id':'create:schematicannon','State':'RUNNING','Options':OPTIONS,'Inventory.Items[{Slot:0}]':item,
+                  'Inventory.Items[{Slot:1}]':{'Slot':1,'id':'create:empty_schematic','count':4},
                   'Printer.Anchor':DESIRED['anchor'],'Printer.CurrentPos':[0,1,2], 'Printer.PrintStage':'BLOCKS',
                   'Printer.EntityProgress':-1, 'AmountPlaced':500, 'AmountToPlace':2000,'Status':'placing'}
+        if finished:
+            values.update({'State':'STOPPED','Status':'finished','Inventory.Items[{Slot:0}]':None,
+                           'Printer.Anchor':None,'Printer.CurrentPos':None,'AmountPlaced':0,'AmountToPlace':0})
         calls=[];identities=0
         def run(command):
             nonlocal identities
             calls.append(command)
-            if command.endswith('21'):
+            if command == 'execute in minecraft:overworld run data get block 94 64 21':
                 return '94, 64, 21 has the following block data: {Inventory:{Items:[{components:{book:"' + 'x'*4096
+            if ' run data get storage ' in command:
+                self.assertIn('unless data block 94 64 21 FlyingBlocks[]', command)
+                return f'Storage {command.rsplit(" ",1)[1]} has the following contents: {{}}'
             if ' if data ' in command:
-                return 'Test passed, count: 3' if 'FlyingBlocks' in command else 'Test failed'
+                return 'Test passed, count: 3' if 'FlyingBlocks' in command and not finished else 'Test failed'
             path=command.split('data get block 94 64 21 ',1)[1]
             if path=='id':identities+=1
             value=values[path]
             if change and identities==2 and path=='State':value='STOPPED'
+            if change_output and identities==2 and path=='Inventory.Items[{Slot:1}]':value={**value,'count':5}
+            if value is None:return 'Found no elements matching ' + path
             return '94, 64, 21 has the following block data: ' + dumps(value)
         return run,calls
 
@@ -123,8 +132,47 @@ class ProbeTests(unittest.TestCase):
         self.assertEqual(result['state'],'RUNNING')
         self.assertEqual(result['amountPlaced'],500)
         self.assertEqual(result['flyingBlocks'],3)
+        self.assertFalse(result['inputEmpty'])
+        self.assertEqual((result['outputItem'], result['outputCount']), ('create:empty_schematic', 4))
         self.assertEqual(result['printer']['Anchor'],DESIRED['anchor'])
         self.assertTrue(all('data get block' in c or ' if data ' in c for c in calls))
+
+    def test_finished_fallback_preserves_output_and_proves_all_flights_landed(self):
+        run, calls = self.fixture(finished=True)
+        result = CannonBridge('/unused', run).inspect(BINDING)
+        self.assertEqual((result['state'], result['status']), ('STOPPED', 'finished'))
+        self.assertTrue(result['inputEmpty'])
+        self.assertEqual((result['outputItem'], result['outputCount']), ('create:empty_schematic', 4))
+        self.assertEqual((result['amountPlaced'], result['amountToPlace'], result['flyingBlocks']), (0, 0, 0))
+        self.assertNotIn('Anchor', result['printer'])
+        self.assertNotIn('CurrentPos', result['printer'])
+        self.assertEqual(len(calls), 22, 'one full read, twenty bounded fields and one flight proof')
+
+    def test_finished_fallback_rejects_unproved_zero_flights_and_output_changes(self):
+        run, _ = self.fixture(finished=True)
+        def unknown_proof(command):
+            return 'Test passed' if ' run data get storage ' in command else run(command)
+        with self.assertRaisesRegex(ValueError, 'keine eindeutige RCON-Antwort'):
+            CannonBridge('/unused', unknown_proof).inspect(BINDING)
+        run, _ = self.fixture(finished=True, change_output=True)
+        with self.assertRaisesRegex(ValueError, 'während der Statusprüfung geändert'):
+            CannonBridge('/unused', run).inspect(BINDING)
+
+    def test_full_snapshot_reports_inventory_evidence_without_inventing_completion(self):
+        for status, items, expected_empty, expected_output in [
+            ('finished', [{'Slot':1,'id':'create:empty_schematic','count':5}], True, 5),
+            ('schematicExpired', [{'Slot':1,'id':'create:empty_schematic','count':1}], True, 1),
+            ('idle', [], True, 0),
+            ('finished', [{'Slot':0,'id':'create:schematic'},{'Slot':0,'id':'create:schematic'}], None, 0),
+            ('finished', [{'id':'create:empty_schematic','count':1}], None, None),
+        ]:
+            with self.subTest(status=status,items=items):
+                block = {'id':'create:schematicannon','State':'STOPPED','Status':status,'Inventory':{'Items':items},
+                         'AmountPlaced':0,'AmountToPlace':0,'FlyingBlocks':[],'Printer':{'DeferredBlocks':[],'PrintStage':'BLOCKS','EntityProgress':-1}}
+                result = CannonBridge('/unused', lambda _: '94, 64, 21 has the following block data: ' + dumps(block)).inspect(BINDING)
+                self.assertEqual(result['status'], status)
+                self.assertEqual(result['inputEmpty'], expected_empty)
+                self.assertEqual(result['outputCount'], expected_output)
 
     def test_mixed_identity_probe_is_rejected(self):
         run,_=self.fixture(change=True)

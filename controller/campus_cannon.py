@@ -123,13 +123,25 @@ class CannonBridge:
             n = read_fields(self.run, b, parse_snbt)
         if not isinstance(n, dict) or n.get('id') != 'create:schematicannon':
             raise ValueError('Erwartet: create:schematicannon. Keine Änderung.')
-        slots = [i for i in n.get('Inventory', {}).get('Items', []) if type(i.get('Slot')) is int and i['Slot'] == 0]
+        inventory = n.get('Inventory')
+        items = inventory.get('Items') if isinstance(inventory, dict) else None
+        valid_items = isinstance(items, list) and all(isinstance(i, dict) and type(i.get('Slot')) is int for i in items)
+        slots = [i for i in items if i['Slot'] == 0] if valid_items else []
         item = slots[0] if len(slots) == 1 else {}
+        output_slots = [i for i in items if i['Slot'] == 1] if valid_items else []
+        output = output_slots[0] if len(output_slots) == 1 else {}
+        output_count = output.get('count')
+        if valid_items and not output_slots:
+            output_count = 0
+        elif len(output_slots) != 1 or type(output_count) is not int or output_count < 1:
+            output_count = None
         components = item.get('components', {}) if item.get('id') == 'create:schematic' else {}
         printer = n.get('Printer')
         return {'state':n.get('State'), 'status':n.get('Status'), 'amountPlaced':n.get('AmountPlaced'),
                 'amountToPlace':n.get('AmountToPlace'), 'printer':printer,
                 'flyingBlocks':n.get('FlyingBlockCount', len(n['FlyingBlocks']) if isinstance(n.get('FlyingBlocks'),list) else None),
+                'inputEmpty': not slots if valid_items and len(slots) <= 1 else None,
+                'outputItem': output.get('id'), 'outputCount': output_count,
                 'item':item.get('id'), 'components':components, 'options': ({'replace_mode':n['Options'].get('replace_mode'), 'skip_missing':bool(n['Options'].get('skip_missing')), 'replace_block_entities':bool(n['Options'].get('replace_block_entities'))} if isinstance(n.get('Options'),dict) else None), 'at':time.time(),
                 'fileHash':self.file_hash(b['owner'], components.get('create:schematic_file'))}
 

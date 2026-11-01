@@ -139,8 +139,10 @@ export function registerStationRoutes(app, campus, mat, alignment, schematics) {
     const status = JSON.parse(row.status_json || 'null');
     const alignmentView = await alignment.view(row.name);
     const blocked = alignmentView.enabled && alignmentView.state !== 'aligned';
+    if(alignmentView.completed&&!blocked)plan={...plan,state:'done',message:alignmentView.message,done:true,items:[],totals:{...plan.totals,needed:0,kinds:0}};
     return {
       name: row.name, assignment: row.assignment, alignment: alignmentView, createdAt: row.created_at, updatedAt: row.updated_at, lastSeenAt: row.last_seen_at,
+      nativeProgress:alignmentView.nativeProgress??null,
       online: !!row.last_seen_at && Date.now() - new Date(row.last_seen_at) < ONLINE_MS,
       options: normalizeOptions(JSON.parse(row.options_json || '{}')),
       blueprint: plan.blueprint ?? null, state: plan.state === 'outofrange' ? 'outofrange' : blocked ? 'alignment' : plan.state, message: plan.state === 'outofrange' ? plan.message : blocked ? alignmentView.message : plan.message ?? null, totals: plan.totals ?? null, done: !blocked && !!plan.done,
@@ -241,6 +243,8 @@ export function registerStationRoutes(app, campus, mat, alignment, schematics) {
         throw new HttpError(409, 'Auftrag, Position oder Baustand wurde geändert. Auswahl verwerfen und neu wählen.');
       const choice = catalog.items.find(item => item.id === b.blueprint && item.version === selected.version);
       if (!choice) throw new HttpError(409, 'Dieser Bauplan ist inzwischen fertig, vergeben, geändert oder nicht baubar. Auswahl verwerfen und neu wählen.');
+      if(alignment.progress.forVersion(b.blueprint,selected.version)?.state==='completed')
+        throw new HttpError(409,'Dieser Kanonen-Auftrag ist inzwischen abgeschlossen. Einen anderen Bauplan wählen.');
       if (db.prepare('SELECT 1 FROM cannons WHERE name<>? COLLATE NOCASE AND blueprint_id=?').get(name, b.blueprint))
         throw new HttpError(409, 'Dieser Bauplan wurde gerade einer anderen Kanone zugewiesen. Auswahl verwerfen und neu wählen.');
     }

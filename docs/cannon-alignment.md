@@ -54,7 +54,7 @@ For a deployment without explicit Schematic-preparation authorization, keep prod
 
 `POST /api/cannons/:name/start` accepts the displayed `assignment` and blueprint `version`. It requires browser-admin authentication, CSRF and same-origin checks, an existing confirmed binding and a ready automatic Schematic job. A per-station lock serializes it with preparation and transfers. The signed host `start` action verifies the exact file/hash, owner, target, options, range and live printer state before changing native execution state. Initialization is read back before continuing. Resume preserves the same verified cached plan and counters. It does not replace inventory or reset a printer. Only an explicit user start/resume action starts construction; selecting a plan, saving options and automatic preparation do not.
 
-Status inspection can read a bounded set of relevant fields when the full native block response is oversized. It must retain identity and state consistency checks and reject incomplete data. Live status is pushed through SSE, while feeder leases retain their existing expiry rules.
+Status inspection can read a bounded set of relevant fields when the full native block response is oversized. It must retain identity and state consistency checks and reject incomplete data. The browser polls every 30 seconds and offers an explicit refresh. Concurrent reads of one job share an in-flight probe; probes run serially without caching safety decisions. Feeder leases retain their existing expiry rules.
 
 ## Correlated RCON observations
 

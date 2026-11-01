@@ -1,9 +1,9 @@
-import { renderChoicePreview, cannonSelectionPayload } from './cannon-picker.js?v=20261101-picker-1';
+import { renderChoicePreview, cannonSelectionPayload, updateCannonPicker } from './cannon-picker.js?v=20261101-progress-1';
 'use strict';
-import { renderCannon, cannonSettingsPayload, cannonStartState } from './cannon-ui.js?v=20261101-picker-1';
-import { coordinateFields, placementCard, placementValues, coordinateListText } from './placement.js?v=20261101-picker-1';
-import { blueprintPreview, installPreviewFallbacks } from './blueprint-preview.js?v=20261101-picker-1';
-import { connectLiveUpdates, createRefreshQueue } from './live-updates.js?v=20261101-picker-1';
+import { renderCannon, cannonSettingsPayload, cannonStartState, updateCannonLive } from './cannon-ui.js?v=20261101-progress-1';
+import { coordinateFields, placementCard, placementValues, coordinateListText } from './placement.js?v=20261101-progress-1';
+import { blueprintPreview, installPreviewFallbacks } from './blueprint-preview.js?v=20261101-progress-1';
+import { connectPolling, createRefreshQueue } from './live-updates.js?v=20261101-progress-1';
 installPreviewFallbacks();
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -37,7 +37,7 @@ function toast(msg, err) {
 }
 const guard = fn => async (...a) => { try { await fn(...a); } catch (e) { toast(e.message, true); } };
 
-let me = null, status = null, activeTab = 'overview', liveUpdates = null;
+let me = null, status = null, activeTab = 'overview', polling = null;
 
 // ---------- tabs ----------
 document.querySelectorAll('nav.tabs [data-tab]').forEach(b => b.addEventListener('click', e => {
@@ -54,8 +54,7 @@ function showTab(tab) {
   $('moreMenu').classList.toggle('active', !!extra[tab]);
   $('moreLabel').textContent = extra[tab] || 'Mehr';
   document.querySelectorAll('.menu[open]').forEach(d => d.open = false);
-  const loader = { overview: loadStatus, coordinates: loadStatus, snapshots: loadSnapshots, cannons: loadCannons, agent: loadTokens, activity: loadActivity, admin: loadAdmin }[tab];
-  loader?.().catch(e => toast(e.message, true));
+  polling?.refreshNow('navigation');
   history.replaceState(null, '', '#' + tab);
   refreshQueue.resume();
 }
@@ -248,6 +247,8 @@ $('snapNow').onclick = guard(async () => {
 // ---------- cannons ----------
 let cannonLoad = null, cannonRevision = 0, cannonReadSequence = 0, stockReadSequence = 0;
 const cannonBaseline = new Map();
+const cannonLatest = new Map();
+const cannonPending = new Map();
 const cannonPaintSequence = new Map();
 const busyCannons = new Set();
 const isAdmin = () => me?.user?.role === 'admin';
@@ -267,7 +268,15 @@ function cannonParent() {
 function renderCannonCard(c, sequence) {
   if ((cannonPaintSequence.get(c.name.toLowerCase()) || 0) > sequence) return true;
   const old = cannonCard(c.name);
-  if (cardProtected(c.name, old)) return false;
+  cannonLatest.set(c.name,c);
+  cannonPaintSequence.set(c.name.toLowerCase(),sequence);
+  if (old && cardProtected(c.name, old)) {
+    const baseline=cannonBaseline.get(c.name);
+    updateCannonPicker(old,c,ago);
+    updateCannonLive(old,c,{isAdmin:isAdmin(),busy:busyCannons.has(c.name),sameAssignment:baseline?.assignment===c.assignment});
+    cannonPending.set(c.name,{c,sequence});
+    return true;
+  }
   const template = document.createElement('template');
   template.innerHTML = renderCannon(c, null, {isAdmin:isAdmin(), alignmentHtml:alignmentCard(c), ago});
   const next = template.content.firstElementChild;
@@ -281,18 +290,27 @@ function renderCannonCard(c, sequence) {
     const parent = cannonParent(); parent.querySelector('.empty-cannons')?.remove(); parent.append(next);
   }
   cannonBaseline.set(c.name, c);
+  cannonPending.delete(c.name);
   cannonPaintSequence.set(c.name.toLowerCase(), sequence);
   return true;
 }
 function removeCannonCard(name, sequence) {
   if ((cannonPaintSequence.get(name.toLowerCase()) || 0) > sequence) return true;
-  if (cardProtected(name)) return false;
+  cannonPaintSequence.set(name.toLowerCase(), sequence);
+  if (cardProtected(name)) { cannonPending.set(name,{c:null,sequence});return true; }
   const old = cannonCard(name);
   cannonBaseline.delete(old?.dataset.cannon || name); old?.remove();
+  cannonLatest.delete(old?.dataset.cannon || name);cannonPending.delete(name);
   cannonPaintSequence.set(name.toLowerCase(), sequence);
   const parent = cannonParent();
   if (!parent.querySelector('[data-cannon]')) { parent.innerHTML = '<p class="muted empty-cannons">Noch keine Kanone gemeldet. Sobald ein Computer das Script startet, erscheint er hier.</p>'; $('ccSetup').open = true; }
   return true;
+}
+function flushPendingCannons() {
+  for(const [name,{c,sequence}] of cannonPending) {
+    if(cardProtected(name))continue;
+    if(c)renderCannonCard(c,sequence);else removeCannonCard(name,sequence);
+  }
 }
 async function loadCannons(force = false) {
   if (cannonLoad) {
@@ -322,7 +340,6 @@ async function refreshCannons() {
 }
 async function refreshOneCannon(name) {
   if (cannonLoad) await cannonLoad;
-  if (cardProtected(name)) return false;
   const revision = cannonRevision;
   const sequence = ++cannonReadSequence;
   try {
@@ -357,15 +374,18 @@ $('cannonList').addEventListener('input', e => {
 });
 $('cannonList').addEventListener('reset', e => {
   const form = e.target; delete form.dataset.dirty;
+  delete form.dataset.choiceInvalid;
+  const warning=form.querySelector('[data-choice-warning]');if(warning)warning.textContent='';
   form.querySelector('.draft-note').textContent = '';
   form.querySelector('.form-error').textContent = '';
   setTimeout(() => { document.activeElement?.blur(); refreshQueue.request('cannon:' + form.closest('[data-cannon]').dataset.cannon); refreshQueue.resume(); }, 0);
 });
 $('cannonList').addEventListener('change',e=>{
   if(!e.target.matches('.assignment-form select[name="blueprint"]'))return;
-  const c=cannonBaseline.get(e.target.closest('[data-cannon]').dataset.cannon);
-  const choice=c?.blueprintChoices?.items.find(b=>b.id===e.target.value);
-  e.target.closest('form').querySelector('[data-choice-preview]').innerHTML=renderChoicePreview(choice);
+  const c=cannonLatest.get(e.target.closest('[data-cannon]').dataset.cannon),form=e.target.closest('form');
+  const choice=c?.blueprintChoices?.items.find(b=>b.id===e.target.value&&String(b.version)===e.target.selectedOptions[0]?.dataset.version);
+  if(choice||e.target.value===''){delete form.dataset.choiceInvalid;form.querySelector('[data-choice-warning]').textContent='';}
+  form.querySelector('[data-choice-preview]').innerHTML=renderChoicePreview(choice);
 });
 $('cannonList').addEventListener('reset',e=>{
   if(!e.target.matches('.assignment-form'))return;
@@ -388,7 +408,8 @@ $('cannonList').addEventListener('submit', async e => {
     }
     else {
       if (card.querySelector('.cannon-settings[data-dirty]')) throw new Error('Einstellungen zuerst speichern oder verwerfen.');
-      body = cannonSelectionPayload(data,current);
+      if(form.dataset.choiceInvalid)throw new Error('Der gewählte Bauplan ist nicht mehr baubar. Bitte neu wählen oder verwerfen.');
+      body = cannonSelectionPayload(data,current,{catalog:cannonLatest.get(name)?.blueprintChoices,version:form.querySelector('select').selectedOptions[0]?.dataset.version??null});
       if (!Object.keys(body).length) { form.reset(); return; }
       const blueprint = body.blueprint;
       if (!confirm(blueprint ? `${name} den gewählten Bauplan zuweisen? Reste des alten Auftrags gehen zurück ins ME.` : `${name} keinen Bauplan mehr zuweisen?`)) return;
@@ -549,7 +570,9 @@ async function loadActivity() {
 // ---------- admin ----------
 async function loadAdmin() {
   const [inv, users, snaps] = await Promise.all([api('/api/invites'), api('/api/users'), api('/api/snapshots')]);
+  const selectedBase=$('impBase').value;
   $('impBase').innerHTML = '<option value="">Planungsstand: neuester Live-Snapshot</option>' + snaps.snapshots.map(s => `<option value="${s.id}">Planungsstand: #${s.id} ${esc(s.source === 'live' ? 'Live' : s.label)} (${esc(when(s.worldTime))})</option>`).join('');
+  if([...$('impBase').options].some(option=>option.value===selectedBase))$('impBase').value=selectedBase;
   $('invRows').innerHTML = inv.map(i => `<tr><td>${esc(i.note || '–')}</td><td>${esc(i.role)}</td><td>${esc(when(i.createdAt))}</td><td>${esc(when(i.expiresAt))}</td><td>${esc(i.usedBy || '–')}</td>
     <td>${!i.usedAt && new Date(i.expiresAt) > new Date() ? `<button class="small danger" data-inv="${i.id}">Zurückziehen</button>` : ''}</td></tr>`).join('') || '<tr><td colspan="6" class="muted">Noch keine Einladungen.</td></tr>';
   $('invRows').querySelectorAll('[data-inv]').forEach(b => b.onclick = guard(async () => { await api('/api/invites/' + b.dataset.inv, { method: 'DELETE' }); loadAdmin(); }));
@@ -587,7 +610,7 @@ const refreshQueue = createRefreshQueue({
     if (key === 'snapshots') return activeTab === 'snapshots' && !document.activeElement?.closest('[data-pane="snapshots"] input,[data-pane="snapshots"] select');
     if (key === 'activity') return activeTab === 'activity';
     if (activeTab !== 'cannons') return false;
-    return !key.startsWith('cannon:') || !cardProtected(key.slice(7));
+    return true;
   },
   async run(key) {
     if (key === 'status') return loadStatus();
@@ -598,29 +621,31 @@ const refreshQueue = createRefreshQueue({
     if (key.startsWith('cannon:')) return refreshOneCannon(key.slice(7));
   },
 });
-function queueChanges(change) {
-  const topics = new Set(change?.topics || []);
-  if (topics.has('blueprints') || topics.has('snapshots')) { refreshQueue.request('status'); refreshQueue.request('cannons'); }
-  if (topics.has('snapshots')) refreshQueue.request('snapshots');
-  if (topics.has('stock')) refreshQueue.request('stock');
-  if (topics.has('activity')) refreshQueue.request('activity');
-  if (topics.has('cannons')) {
-    if (Array.isArray(change.cannons) && change.cannons.length) change.cannons.forEach(name => refreshQueue.request('cannon:' + name));
-    else refreshQueue.request('cannons');
-  }
+async function refreshVisible() {
+  if(document.hidden||!me||$('editDialog').open)return false;
+  if(['overview','coordinates'].includes(activeTab)&&($('drawer').open||document.activeElement?.closest('#bpRows,#coordinateRows')))return false;
+  if(['snapshots','admin'].includes(activeTab)&&document.activeElement?.closest(`[data-pane="${activeTab}"] input,[data-pane="${activeTab}"] select`))return false;
+  const loader={overview:loadStatus,coordinates:loadStatus,snapshots:loadSnapshots,cannons:loadCannons,agent:loadTokens,activity:loadActivity,admin:loadAdmin}[activeTab];
+  return loader?loader():false;
 }
-function syncVisible() {
-  if (activeTab === 'cannons') ['cannons','stock'].forEach(key => refreshQueue.request(key));
-  else if (['overview','coordinates'].includes(activeTab)) refreshQueue.request('status');
-  else if (['activity','snapshots'].includes(activeTab)) refreshQueue.request(activeTab);
-  refreshQueue.resume();
+function renderPollingState({phase,remainingSeconds,progress,lastUpdatedAt,error}) {
+  const loading=phase==='refreshing';
+  $('refreshLabel').textContent=loading?'Wird aktualisiert …':phase==='paused'?'Aktualisierung pausiert':phase==='deferred'?`Bearbeitung offen · Aktualisierung in ${remainingSeconds} s`:phase==='error'?`Fehlgeschlagen · neuer Versuch in ${remainingSeconds} s`:`Aktualisierung in ${remainingSeconds} s`;
+  const last=lastUpdatedAt?`Zuletzt ${new Date(lastUpdatedAt).toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit',second:'2-digit'})}`:'Noch nicht aktualisiert';
+  const detail=error?`${error} · ${last}`:last;
+  if($('refreshLast').textContent!==detail)$('refreshLast').textContent=detail;
+  $('refreshStatus').classList.toggle('error',phase==='error');
+  $('refreshStatus').setAttribute('aria-busy',String(loading));
+  $('refreshNow').disabled=loading;
+  if(loading)$('refreshProgress').removeAttribute('value');else $('refreshProgress').value=progress;
 }
-document.addEventListener('focusout', () => setTimeout(() => refreshQueue.resume(),0));
+$('refreshNow').onclick=()=>polling?.refreshNow();
+document.addEventListener('focusout', () => setTimeout(() => {flushPendingCannons();refreshQueue.resume();},0));
 document.addEventListener('visibilitychange', () => refreshQueue.resume());
 $('drawer').addEventListener('close', () => refreshQueue.resume());
 $('editDialog').addEventListener('close', () => refreshQueue.resume());
 
-$('logout').onclick = guard(async () => { await api('/api/auth/logout', { method: 'POST' }); liveUpdates?.close(); location.href = '/login'; });
+$('logout').onclick = guard(async () => { await api('/api/auth/logout', { method: 'POST' }); polling?.close(); location.href = '/login'; });
 
 function routeFromHash() {
   const tab = location.hash.slice(1), bpLink = /^bp=(.+)$/.exec(tab);
@@ -635,8 +660,8 @@ window.addEventListener('hashchange', () => { if (me) routeFromHash(); });
     me = await api('/api/me');
     $('who').textContent = me.user.username;
     if (me.user.role === 'admin') $('adminTab').classList.remove('hide');
+    polling=connectPolling({refresh:refreshVisible,onState:renderPollingState,immediate:false});
     routeFromHash();
-    if (!['#overview','#coordinates'].includes(location.hash)) loadStatus().catch(() => {});
-    liveUpdates = connectLiveUpdates({onChange:queueChanges,onSync:syncVisible,onState:connected => { $('liveConnection').textContent = connected ? 'Live verbunden' : 'Verbindung wird hergestellt'; $('liveConnection').classList.toggle('connected',connected); },onAuth:() => { location.href = '/login'; }});
+    if (!['#overview','#coordinates'].includes(location.hash)) $('liveLine').textContent='Gespeicherter Weltbestand im Reiter Live-Bestand.';
   } catch (e) { toast(e.message, true); }
 })();

@@ -1,7 +1,7 @@
-import { renderCannonPicker } from './cannon-picker.js?v=20261101-picker-1';
-import { cannonRangeCard, distanceText } from './cannon-range.js?v=20261101-picker-1';
-import { coordinateFields, placementValues } from './placement.js?v=20261101-picker-1';
-import { blueprintPreview } from './blueprint-preview.js?v=20261101-picker-1';
+import { renderCannonPicker, renderNativeProgress, nativeProgressLabel } from './cannon-picker.js?v=20261101-progress-1';
+import { cannonRangeCard, distanceText } from './cannon-range.js?v=20261101-progress-1';
+import { coordinateFields, placementValues } from './placement.js?v=20261101-progress-1';
+import { blueprintPreview } from './blueprint-preview.js?v=20261101-progress-1';
 
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
 const fmt = n => n == null ? '–' : Number(n).toLocaleString('de-DE');
@@ -9,6 +9,7 @@ const checked = value => value ? ' checked' : '';
 const states = { outofrange:'Außer Reichweite', alignment:'Material gesperrt', offline:'Computer offline', nocomputer:'Kein Computer', feeding:'Aktiv', preparing:'Wartet auf Schematic', waiting:'Wartet auf Material', full:'Kiste voll', done:'Fertig', paused:'Pausiert', unassigned:'Kein Bauplan', missing:'Bauplan fehlt', nosnapshot:'Kein Live-Bestand', error:'Fehler', start:'Startet', unknown:'Status ausstehend' };
 const jobs = { outofrange:'Außer Reichweite', queued:'Wartet auf Vorbereitung', applying:'Wird eingesetzt', waiting:'Wartet auf Kanone', ready:'Vorbereitet', empty:'Kein Rest zu bauen', error:'Vorbereitung fehlgeschlagen' };
 const discoveryUnresolved = d => !!(d?.automatic && d.state && !['bound','found','disabled'].includes(d.state));
+const supplyState = c => !c.online && c.blueprint && !['done','paused','outofrange'].includes(c.state) ? 'offline' : c.state === 'feeding' && c.online && c.status && !c.status.stale ? c.status.state : c.state;
 
 export function canEditCannon(c, isAdmin) { return isAdmin || !c.alignment?.enabled; }
 
@@ -31,7 +32,7 @@ export function cannonLocation(c) {
 export function cannonStartState(c, isAdmin) {
   const native = c?.alignment?.observed?.state;
   const visible = !!(isAdmin && c?.alignment?.enabled && c?.schematic?.settings?.enabled && c?.blueprint);
-  const label = native === 'RUNNING' ? 'Läuft' : native === 'PAUSED' ? 'Fortsetzen' : 'Kanone starten';
+  const label = c?.done ? 'Fertig' : native === 'RUNNING' ? 'Läuft' : native === 'PAUSED' ? 'Fortsetzen' : 'Kanone starten';
   const reason = !visible ? 'Automatische Vorbereitung und erkannte Kanonen-Position erforderlich.'
     : !c.online ? 'Der Minecraft-Computer ist offline.'
     : discoveryUnresolved(c.alignment.discovery) ? c.alignment.discovery.message || 'Die Kanonen-Position ist noch nicht eindeutig erkannt.'
@@ -44,6 +45,40 @@ export function cannonStartState(c, isAdmin) {
     : !['STOPPED','PAUSED'].includes(native) ? 'Der Zustand der Kanone ist noch nicht bestätigt.'
     : '';
   return {visible, enabled:visible && !reason, label, reason};
+}
+
+export function renderCannonProgress(c) {
+  if(!c.blueprint)return '';
+  const native=c.nativeProgress, t=c.totals;
+  if(native?.fresh)return `<div class="cannon-progress">${renderNativeProgress(native)}</div>`;
+  const pct=t?.start?Math.max(0,Math.min(100,Math.round((t.start-t.needed)/t.start*1000)/10)):null;
+  return `<div class="cannon-progress"><div class="bar" role="progressbar" aria-label="Materialfortschritt aus Weltabgleich" aria-valuemin="0" aria-valuemax="100"${pct==null?'':` aria-valuenow="${pct}"`}><i style="width:${pct??0}%"></i></div><p>Weltabgleich: ${pct==null?'Fortschritt noch unbekannt':fmt(pct)+' %'}${t?` · noch ${fmt(t.needed)} Items in ${fmt(t.kinds)} Sorten`:''}</p>${native?`<p class="muted">${esc(nativeProgressLabel(native))}, nicht live.${native.state==='completed'?' Auftrag abgeschlossen.':''}</p>`:''}</div>`;
+}
+
+function renderCannonStart(c,isAdmin) {
+  const start=cannonStartState(c,isAdmin),bp=c.blueprint;
+  return start.visible?`<div class="cannon-start"><button class="primary" data-act="start"${start.enabled?'':' disabled'} title="${esc(start.reason||'Bauplan und Kanone werden vor dem Start live geprüft.')}">${start.label}</button><span class="muted">${esc(start.reason||`Baut v${bp.version} an ${bp.origin.join(' ')}. Die Kanone wird vor dem Start live geprüft.`)}</span></div>`:'';
+}
+
+// Live status must keep moving while editable form nodes and their baselines stay intact.
+export function updateCannonLive(card,c,{isAdmin,busy=false,sameAssignment=true}) {
+  const progress=card.querySelector('[data-cannon-progress]');
+  if(progress)progress.innerHTML=(sameAssignment?'':`<p class="notice">Der Auftrag wurde geändert.${c.blueprint?` Live-Fortschritt für ${esc(c.blueprint.name)} · v${esc(c.blueprint.version)}.`:''} Deine Eingaben bleiben erhalten.</p>`)+renderCannonProgress(c);
+  const supply=card.querySelector('[data-cannon-state]');
+  const state=supplyState(c);
+  if(supply){supply.textContent=states[state]||state;supply.className=`badge ${['alignment','outofrange','error','missing','nosnapshot'].includes(c.state)?'warning':state==='done'?'built':'ok'}`;}
+  if(c.nativeProgress?.state==='completed') {
+    const schematic=card.querySelector('[data-cannon-schematic]');
+    if(schematic)schematic.textContent=`Auftrag abgeschlossen${c.blueprint?.version?' · v'+c.blueprint.version:''}`;
+  }
+  if(!busy) {
+    const start=card.querySelector('[data-cannon-start]');
+    if(start) {
+      start.innerHTML=renderCannonStart(c,isAdmin);
+      const button=start.querySelector('button');
+      if(button&&!sameAssignment){button.disabled=true;button.title='Der Auftrag hat sich geändert. Eingaben zuerst speichern oder verwerfen.';}
+    }
+  }
 }
 
 // Submit only edits. In particular, changing the feeder must not re-apply an unchanged schematic.
@@ -73,16 +108,14 @@ export function cannonSettingsPayload(data, c, isAdmin) {
 }
 
 export function renderCannon(c, bpOptions, { isAdmin, alignmentHtml, ago }) {
-  const o = c.options, bp = c.blueprint, t = c.totals;
+  const o = c.options, bp = c.blueprint;
   const sc = c.schematic?.settings || {}, job = c.schematic?.job;
   const live = c.online && !c.status?.stale ? c.status : null;
   const canEdit = canEditCannon(c, isAdmin), canSchematic = isAdmin && c.alignment?.enabled;
-  const start = cannonStartState(c, isAdmin);
   const location = cannonLocation(c);
   // A fresh computer report may refine feeding, but never override a server-side safety gate.
-  const state = !c.online && bp && !['done','paused','outofrange'].includes(c.state) ? 'offline' : c.state === 'feeding' && live ? live.state : c.state;
+  const state = supplyState(c);
   const blocked = ['alignment','outofrange','error','missing','nosnapshot'].includes(c.state);
-  const pct = t?.start ? Math.max(0, Math.min(100, Math.round((t.start - t.needed) / t.start * 1000) / 10)) : null;
   const r = c.range, origin = placementValues(bp);
   const rangeText = r?.distance != null ? `${esc(distanceText(r.distance))} von ${esc(r.limit)} Blöcken` : 'Noch nicht geprüft';
   const checkbox = (key, label, value) => `<label class="check"><input type="checkbox" name="${key}"${checked(value)}> ${label}</label>`;
@@ -96,11 +129,11 @@ export function renderCannon(c, bpOptions, { isAdmin, alignmentHtml, ago }) {
       ${bp ? `<dt>Zielkoordinaten</dt><dd>${coordinateFields(bp)}${origin ? `<button class="text-button small" data-copy-coordinate="${origin.join(' ')}">Kopieren</button>` : ''}</dd>` : ''}
       <dt>Kanonen-Position</dt><dd><span>${esc(location.label)}</span>${location.binding ? `<span class="mono">X ${location.binding.x} · Y ${location.binding.y} · Z ${location.binding.z}</span>` : isAdmin && location.retry ? '<button class="text-button small" data-act="discover">Erneut suchen</button>' : ''}</dd>
       ${r?.state !== 'unbound' ? `<dt>Reichweite</dt><dd><span class="muted" title="Weniger als 256 Blöcke Luftlinie, Höhe eingeschlossen">${rangeText}</span><span class="badge ${r?.state === 'inrange' ? 'built' : 'warning'}">${r?.state === 'inrange' ? 'Erreichbar' : r?.state === 'outofrange' ? 'Außer Reichweite' : r?.state === 'dimension' ? 'Andere Dimension' : 'Kein Ziel'}</span>${bp && r?.version && r.version !== bp.version ? `<span class="muted">Für v${esc(r.version)}: ${esc(r.origin?.join(' '))}</span>` : ''}</dd>` : ''}
-      <dt>Materialversorgung</dt><dd><span class="badge ${blocked ? 'warning' : state === 'done' ? 'built' : 'ok'}">${esc(states[state] || state)}</span>${live?.chest ? `<span class="muted">Kiste ${fmt(live.chest.used)}/${fmt(live.chest.slots)}</span>` : ''}</dd>
-      <dt>Schematic</dt><dd>${esc(sc.enabled ? jobs[job?.state] || (bp ? 'Wartet auf Vorbereitung' : 'Bauplan auswählen') : c.alignment?.enabled ? 'Automatische Vorbereitung ist aus' : 'Wartet auf Kanonen-Position')}${job?.version ? ` <span class="muted">v${esc(job.version)}</span>` : ''}${!sc.enabled && c.alignment?.enabled && isAdmin ? '<button class="text-button small" data-act="open-settings">Automatik einrichten</button>' : ''}</dd>
+      <dt>Materialversorgung</dt><dd><span data-cannon-state class="badge ${blocked ? 'warning' : state === 'done' ? 'built' : 'ok'}">${esc(states[state] || state)}</span>${live?.chest ? `<span class="muted">Kiste ${fmt(live.chest.used)}/${fmt(live.chest.slots)}</span>` : ''}</dd>
+      <dt>Schematic</dt><dd data-cannon-schematic>${esc(c.nativeProgress?.state==='completed'?'Auftrag abgeschlossen':sc.enabled ? jobs[job?.state] || (bp ? 'Wartet auf Vorbereitung' : 'Bauplan auswählen') : c.alignment?.enabled ? 'Automatische Vorbereitung ist aus' : 'Wartet auf Kanonen-Position')}${job?.version ? ` <span class="muted">v${esc(job.version)}</span>` : ''}${!sc.enabled && c.alignment?.enabled && isAdmin ? '<button class="text-button small" data-act="open-settings">Automatik einrichten</button>' : ''}</dd>
     </dl>
-    ${start.visible ? `<div class="cannon-start"><button class="primary" data-act="start"${start.enabled ? '' : ' disabled'} title="${esc(start.reason || 'Bauplan und Kanone werden vor dem Start live geprüft.')}">${start.label}</button><span class="muted">${esc(start.reason || `Baut v${bp.version} an ${bp.origin.join(' ')}. Die Kanone wird vor dem Start live geprüft.`)}</span></div>` : ''}
-    ${bp && t ? `<div class="cannon-progress"><div class="bar"><i style="width:${pct ?? 0}%"></i></div><p>${pct == null ? 'Fortschritt noch unbekannt' : fmt(pct) + ' %'} · noch ${fmt(t.needed)} Items in ${fmt(t.kinds)} Sorten</p></div>` : ''}
+    <div data-cannon-start>${renderCannonStart(c,isAdmin)}</div>
+    <div data-cannon-progress>${renderCannonProgress(c)}</div>
     ${r && ['outofrange','dimension'].includes(r.state) ? cannonRangeCard(c, isAdmin) : ''}
     ${c.message && c.state !== 'outofrange' ? `<p class="notice${c.state === 'error' ? ' error' : ''}" role="status">${esc(c.message)}</p>` : ''}
     ${sc.enabled && job && !['ready','empty','outofrange'].includes(job.state) ? `<p class="notice" role="status">${esc(job.message || jobs[job.state])}</p>` : ''}

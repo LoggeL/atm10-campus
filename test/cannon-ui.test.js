@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { renderCannon, cannonSettingsPayload, cannonStartState, cannonLocation } from '../public/assets/cannon-ui.js';
+import { renderCannon, cannonSettingsPayload, cannonStartState, cannonLocation, renderCannonProgress, updateCannonLive } from '../public/assets/cannon-ui.js';
 import { DEFAULT_OPTIONS } from '../src/api-stations.js';
 
 const station = () => ({ name:'kanone-11', assignment:17, online:true, state:'feeding', options:{...DEFAULT_OPTIONS},
@@ -112,4 +112,31 @@ test('pending discovery stays quiet; unresolved reasons are escaped and retriabl
     assert.match(render(c),/Kein Treffer &lt;script&gt;/);assert.match(render(c),/data-act="discover"/);
     assert.doesNotMatch(render(c,false),/data-act="discover"/);assert.doesNotMatch(render(c),/Automatisch erkannt/);
   }
+});
+
+test('native shots drive live progress without adding them to world snapshot material totals',()=>{
+  const c=station();c.nativeProgress={state:'active',sent:1,total:4,percent:25,fresh:true};
+  assert.match(renderCannonProgress(c),/Auftrag 25 % · Kanone · 1 \/ 4 Schüsse gesendet/);
+  assert.doesNotMatch(renderCannonProgress(c),/50 %|75 %|Items/);
+  c.nativeProgress={...c.nativeProgress,state:'finishing',percent:100,sent:4};
+  assert.match(renderCannonProgress(c),/Auftrag 99,9 % · Kanone/);assert.match(renderCannonProgress(c),/noch unterwegs/);
+  c.nativeProgress={...c.nativeProgress,state:'completed',sent:3};c.done=true;
+  assert.match(renderCannonProgress(c),/Auftrag 100 % · Kanone/);assert.equal(cannonStartState(c,true).label,'Fertig');
+  assert.doesNotMatch(renderCannonProgress(c),/3 \/ 4|Schüsse gesendet/,'the last pre-reset sample is not a final sent count');
+  c.nativeProgress.fresh=false;
+  assert.match(renderCannonProgress(c),/Weltabgleich: 50 % · noch 50 Items/);
+  assert.match(renderCannonProgress(c),/Auftrag 100 % · letzter Stand, nicht live/);
+  c.nativeProgress={state:'active',sent:0,total:null,percent:null,fresh:true};
+  assert.match(renderCannonProgress(c),/Fortschritt unbekannt/);assert.doesNotMatch(renderCannonProgress(c),/aria-valuenow|NaN/);
+});
+
+test('partial live rendering touches status slots only, including during an in-flight mutation',()=>{
+  const c=station();c.state='done';c.done=true;c.nativeProgress={state:'completed',sent:4,total:4,percent:100,fresh:true};
+  const progress={},supply={},start={innerHTML:'in-flight button',querySelector:()=>null};
+  const schematic={};
+  const slots={'[data-cannon-progress]':progress,'[data-cannon-state]':supply,'[data-cannon-start]':start,'[data-cannon-schematic]':schematic};
+  const card={querySelector:key=>{assert.ok(key in slots,'forms and editable controls are never replaced');return slots[key];}};
+  updateCannonLive(card,c,{isAdmin:true,busy:true});
+  assert.match(progress.innerHTML,/100 % · Kanone/);assert.equal(supply.textContent,'Fertig');assert.equal(schematic.textContent,'Auftrag abgeschlossen · v2');assert.equal(start.innerHTML,'in-flight button');
+  updateCannonLive(card,c,{isAdmin:true});assert.match(start.innerHTML,/data-act="start" disabled/);
 });

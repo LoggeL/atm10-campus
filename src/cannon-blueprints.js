@@ -90,6 +90,8 @@ export function createCannonBlueprints(campus, alignment, schematics, app) {
     const assigned=new Set(campus.db.prepare('SELECT blueprint_id FROM cannons WHERE name<>? COLLATE NOCASE AND blueprint_id IS NOT NULL').all(row.name).map(r=>r.blueprint_id));
     for(const bp of plans) {
       const v=bp.current;
+      const nativeProgress=alignment.progress?.forVersion(bp.id,v.version);
+      if(nativeProgress?.state==='completed'){result.excluded.finished++;continue;}
       if(assigned.has(bp.id)){result.excluded.assigned++;continue;}
       const range=cannonRange(binding,v.origin);
       if(range.state!=='inrange'){result.excluded.range++;continue;}
@@ -97,7 +99,7 @@ export function createCannonBlueprints(campus, alignment, schematics, app) {
       if(!progress || progress.unknown){result.excluded.unknown++;continue;}
       if(!progress.total || progress.built===progress.total){result.excluded.finished++;continue;}
       if(!progress.remaining){result.excluded.blocked++;continue;}
-      result.items.push({id:bp.id,name:bp.name,version:v.version,origin:v.origin,distance:range.distance,...progress});
+      result.items.push({id:bp.id,name:bp.name,version:v.version,origin:v.origin,distance:range.distance,...progress,...(nativeProgress?{nativeProgress}:{})});
     }
     result.items.sort((a,b)=>b.progress-a.progress || a.distance-b.distance || a.name.localeCompare(b.name,'de'));
     if(!result.items.length)result.message='Kein freier Bauplan mit baubaren Restblöcken in Reichweite.';
