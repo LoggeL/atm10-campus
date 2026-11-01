@@ -47,6 +47,11 @@ export function createSchematics(campus, mat) {
       ON CONFLICT(cannon) DO UPDATE SET settings_json = excluded.settings_json`).run(name, JSON.stringify(settings));
     return settings;
   };
+  const enableDefault = name => {
+    // A stored false is an explicit user choice, including a later opt-out.
+    if (!rowFor(name)) configure(name,{enabled:true});
+    return settingsFor(name);
+  };
   const sync = (row, snap, binding, force = false) => {
     const settings = settingsFor(row.name);
     if (!settings.enabled || !row.blueprint_id || !snap) return view(row.name);
@@ -88,5 +93,5 @@ export function createSchematics(campus, mat) {
     const job = jobFor(name);
     if (job?.id === id) saveJob(name, { ...job, state: 'waiting', message: String(message).slice(0, 400), updatedAt: now() });
   };
-  return { view, configure, sync, ready, waiting, settingsFor, clear: name => saveJob(name, null), bytes: job => readFileSync(join(dir, job.fileName)) };
+  return { view, configure, enableDefault, sync, ready, waiting, settingsFor, clear: name => saveJob(name, null), bytes: job => readFileSync(join(dir, job.fileName)) };
 }

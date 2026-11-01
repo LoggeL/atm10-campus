@@ -32,5 +32,7 @@ export const config = {
   cookieSecure: process.env.COOKIE_SECURE ? process.env.COOKIE_SECURE === 'true' : process.env.NODE_ENV === 'production',
   cannonBridgeUrl: process.env.CANNON_BRIDGE_URL || '',
   cannonBridgeSecret: process.env.CANNON_BRIDGE_SECRET || '',
+  cannonDiscoveryEnabled: process.env.CANNON_DISCOVERY_ENABLED !== 'false',
+  cannonSchematicOwner: process.env.CANNON_SCHEMATIC_OWNER || 'Campus',
   maxUploadBytes: Number(process.env.MAX_UPLOAD_MB || 64) * 1024 * 1024,
 };

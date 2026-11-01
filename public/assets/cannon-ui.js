@@ -1,21 +1,39 @@
-import { cannonRangeCard, distanceText } from './cannon-range.js?v=20261101-live-1';
-import { coordinateFields, placementValues } from './placement.js?v=20261101-live-1';
-import { blueprintPreview } from './blueprint-preview.js?v=20261101-live-1';
+import { cannonRangeCard, distanceText } from './cannon-range.js?v=20261101-discovery-1';
+import { coordinateFields, placementValues } from './placement.js?v=20261101-discovery-1';
+import { blueprintPreview } from './blueprint-preview.js?v=20261101-discovery-1';
 
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
 const fmt = n => n == null ? '–' : Number(n).toLocaleString('de-DE');
 const checked = value => value ? ' checked' : '';
 const states = { outofrange:'Außer Reichweite', alignment:'Material gesperrt', offline:'Computer offline', nocomputer:'Kein Computer', feeding:'Aktiv', preparing:'Wartet auf Schematic', waiting:'Wartet auf Material', full:'Kiste voll', done:'Fertig', paused:'Pausiert', unassigned:'Kein Bauplan', missing:'Bauplan fehlt', nosnapshot:'Kein Live-Bestand', error:'Fehler', start:'Startet', unknown:'Status ausstehend' };
 const jobs = { outofrange:'Außer Reichweite', queued:'Wartet auf Vorbereitung', applying:'Wird eingesetzt', waiting:'Wartet auf Kanone', ready:'Vorbereitet', empty:'Kein Rest zu bauen', error:'Vorbereitung fehlgeschlagen' };
+const discoveryUnresolved = d => !!(d?.automatic && d.state && !['bound','found','disabled'].includes(d.state));
 
 export function canEditCannon(c, isAdmin) { return isAdmin || !c.alignment?.enabled; }
+
+export function cannonLocation(c) {
+  const alignment = c.alignment || {}, discovery = alignment.discovery || {}, binding = alignment.binding;
+  const bound = alignment.enabled && binding && ['x','y','z'].every(key => Number.isSafeInteger(binding[key]));
+  if (bound && !discoveryUnresolved(discovery)) return {label:discovery.automatic && ['bound','found'].includes(discovery.state) ? 'Automatisch erkannt' : 'Position gespeichert', binding, retry:false};
+  const pending = ['searching','pending','queued'].includes(discovery.state);
+  const labels = {
+    searching:'Kanonen-Position wird automatisch gesucht …', pending:'Kanonen-Position wird automatisch gesucht …', queued:'Kanonen-Position wird automatisch gesucht …',
+    found:'Kanone gefunden. Die Verbindung wird noch geprüft.', bound:'Die Kanonen-Position wird noch geprüft.',
+    missing:'Noch keine passende Kanone gefunden.', ambiguous:'Die Kanone lässt sich noch nicht eindeutig zuordnen.',
+    unsupported:'Dieser Aufbau kann noch nicht automatisch zugeordnet werden.', offline:'Der Minecraft-Computer ist offline.',
+    blocked:'Die automatische Zuordnung wartet auf eine Prüfung.', disabled:'Die automatische Positionssuche ist deaktiviert.',
+    error:'Die Kanonen-Position konnte gerade nicht ermittelt werden.',
+  };
+  return {label:discovery.message || labels[discovery.state] || 'Kanonen-Position noch nicht ermittelt.', binding:null, retry:!pending};
+}
 
 export function cannonStartState(c, isAdmin) {
   const native = c?.alignment?.observed?.state;
   const visible = !!(isAdmin && c?.alignment?.enabled && c?.schematic?.settings?.enabled && c?.blueprint);
   const label = native === 'RUNNING' ? 'Läuft' : native === 'PAUSED' ? 'Fortsetzen' : 'Kanone starten';
-  const reason = !visible ? 'Automatische Vorbereitung und bestätigte Kanonen-Position erforderlich.'
+  const reason = !visible ? 'Automatische Vorbereitung und erkannte Kanonen-Position erforderlich.'
     : !c.online ? 'Der Minecraft-Computer ist offline.'
+    : discoveryUnresolved(c.alignment.discovery) ? c.alignment.discovery.message || 'Die Kanonen-Position ist noch nicht eindeutig erkannt.'
     : c.range?.state !== 'inrange' ? 'Das Bauziel ist nicht als erreichbar bestätigt.'
     : c.schematic.job?.state !== 'ready' || c.schematic.job?.version !== c.blueprint.version ? 'Der gewählte Bauplan ist noch nicht eingesetzt.'
     : c.alignment.state !== 'aligned' ? c.alignment.message || 'Die Live-Prüfung der Kanone fehlt.'
@@ -59,6 +77,7 @@ export function renderCannon(c, bpOptions, { isAdmin, alignmentHtml, ago }) {
   const live = c.online && !c.status?.stale ? c.status : null;
   const canEdit = canEditCannon(c, isAdmin), canSchematic = isAdmin && c.alignment?.enabled;
   const start = cannonStartState(c, isAdmin);
+  const location = cannonLocation(c);
   // A fresh computer report may refine feeding, but never override a server-side safety gate.
   const state = !c.online && bp && !['done','paused','outofrange'].includes(c.state) ? 'offline' : c.state === 'feeding' && live ? live.state : c.state;
   const blocked = ['alignment','outofrange','error','missing','nosnapshot'].includes(c.state);
@@ -75,9 +94,10 @@ export function renderCannon(c, bpOptions, { isAdmin, alignmentHtml, ago }) {
         ${canEdit ? `<details data-section="assignment" class="assignment"><summary>Ändern</summary><form class="assignment-form"><label class="setting">Bauplan<select name="blueprint"><option value="">Kein Bauplan</option>${opts.map(([id,name]) => `<option value="${esc(id)}"${bp?.id === id ? ' selected' : ''}>${esc(name)}</option>`).join('')}</select></label><div class="form-actions"><button class="small" type="submit">Zuweisen</button><button class="small" type="reset">Verwerfen</button><span class="draft-note" role="status"></span></div><p class="form-error" role="alert"></p></form></details>` : ''}
         ${canEdit && bp && bp.version !== bp.currentVersion ? `<button class="small" data-act="upgrade" data-bp="${esc(bp.id)}">Auf v${esc(bp.currentVersion)} aktualisieren</button>` : ''}</dd>
       ${bp ? `<dt>Zielkoordinaten</dt><dd>${coordinateFields(bp)}${origin ? `<button class="text-button small" data-copy-coordinate="${origin.join(' ')}">Kopieren</button>` : ''}</dd>` : ''}
-      <dt>Reichweite</dt><dd><span class="muted" title="Weniger als 256 Blöcke Luftlinie, Höhe eingeschlossen">${rangeText}</span><span class="badge ${r?.state === 'inrange' ? 'built' : 'warning'}">${r?.state === 'inrange' ? 'Erreichbar' : r?.state === 'outofrange' ? 'Außer Reichweite' : r?.state === 'dimension' ? 'Andere Dimension' : r?.state === 'unbound' ? 'Kanone noch nicht verbunden' : 'Kein Ziel'}</span>${bp && r?.version && r.version !== bp.version ? `<span class="muted">Für v${esc(r.version)}: ${esc(r.origin?.join(' '))}</span>` : ''}</dd>
+      <dt>Kanonen-Position</dt><dd><span>${esc(location.label)}</span>${location.binding ? `<span class="mono">X ${location.binding.x} · Y ${location.binding.y} · Z ${location.binding.z}</span>` : isAdmin && location.retry ? '<button class="text-button small" data-act="discover">Erneut suchen</button>' : ''}</dd>
+      ${r?.state !== 'unbound' ? `<dt>Reichweite</dt><dd><span class="muted" title="Weniger als 256 Blöcke Luftlinie, Höhe eingeschlossen">${rangeText}</span><span class="badge ${r?.state === 'inrange' ? 'built' : 'warning'}">${r?.state === 'inrange' ? 'Erreichbar' : r?.state === 'outofrange' ? 'Außer Reichweite' : r?.state === 'dimension' ? 'Andere Dimension' : 'Kein Ziel'}</span>${bp && r?.version && r.version !== bp.version ? `<span class="muted">Für v${esc(r.version)}: ${esc(r.origin?.join(' '))}</span>` : ''}</dd>` : ''}
       <dt>Materialversorgung</dt><dd><span class="badge ${blocked ? 'warning' : state === 'done' ? 'built' : 'ok'}">${esc(states[state] || state)}</span>${live?.chest ? `<span class="muted">Kiste ${fmt(live.chest.used)}/${fmt(live.chest.slots)}</span>` : ''}</dd>
-      <dt>Schematic</dt><dd>${esc(sc.enabled ? jobs[job?.state] || 'Wartet auf Bauplan' : c.alignment?.enabled ? 'Automatische Vorbereitung ist aus' : 'Kanonen-Position noch nicht bestätigt')}${job?.version ? ` <span class="muted">v${esc(job.version)}</span>` : ''}${!sc.enabled && isAdmin ? `<button class="text-button small" data-act="${c.alignment?.enabled ? 'open-settings' : 'open-binding'}">${c.alignment?.enabled ? 'Automatik einrichten' : 'Position bestätigen'}</button>` : ''}</dd>
+      <dt>Schematic</dt><dd>${esc(sc.enabled ? jobs[job?.state] || (bp ? 'Wartet auf Vorbereitung' : 'Bauplan auswählen') : c.alignment?.enabled ? 'Automatische Vorbereitung ist aus' : 'Wartet auf Kanonen-Position')}${job?.version ? ` <span class="muted">v${esc(job.version)}</span>` : ''}${!sc.enabled && c.alignment?.enabled && isAdmin ? '<button class="text-button small" data-act="open-settings">Automatik einrichten</button>' : ''}</dd>
     </dl>
     ${start.visible ? `<div class="cannon-start"><button class="primary" data-act="start"${start.enabled ? '' : ' disabled'} title="${esc(start.reason || 'Bauplan und Kanone werden vor dem Start live geprüft.')}">${start.label}</button><span class="muted">${esc(start.reason || `Baut v${bp.version} an ${bp.origin.join(' ')}. Die Kanone wird vor dem Start live geprüft.`)}</span></div>` : ''}
     ${bp && t ? `<div class="cannon-progress"><div class="bar"><i style="width:${pct ?? 0}%"></i></div><p>${pct == null ? 'Fortschritt noch unbekannt' : fmt(pct) + ' %'} · noch ${fmt(t.needed)} Items in ${fmt(t.kinds)} Sorten</p></div>` : ''}
@@ -92,7 +112,7 @@ export function renderCannon(c, bpOptions, { isAdmin, alignmentHtml, ago }) {
         ${checkbox('o_autoCraft', 'Fehlendes automatisch craften', o.autoCraft)}
         ${checkbox('o_returnLeftovers', 'Reste ins ME zurückgeben', o.returnLeftovers)}
         <fieldset${canSchematic ? '' : ' disabled'}>${checkbox('s_enabled', 'Schematic automatisch vorbereiten', sc.enabled)}</fieldset>
-        ${isAdmin && !c.alignment?.enabled ? '<p class="footnote">Zuerst unter „Verbindung und Diagnose“ den Kanonen-Block bestätigen.</p>' : !isAdmin && canEdit ? '<p class="footnote">Die automatische Vorbereitung richtet ein Admin ein.</p>' : ''}
+        ${!c.alignment?.enabled ? '<p class="footnote">Die automatische Vorbereitung braucht eine eindeutig erkannte Kanone.</p>' : !isAdmin ? '<p class="footnote">Die automatische Vorbereitung kann ein Admin ändern.</p>' : ''}
         <details data-section="advanced"><summary>Weitere Einstellungen</summary>
           ${checkbox('o_paused', 'Materialzufuhr pausieren', o.paused)}
           <p class="footnote">Pausiert die Lieferung aus dem ME. Einen laufenden Bau hältst du an der Kanone im Spiel an.</p>

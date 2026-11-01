@@ -25,7 +25,7 @@ export function reachableCannons(rows, source, origin, bindingFor, busy, clock =
     if (range.state !== 'inrange') return [];
     const online = !!r.last_seen_at && clock - Date.parse(r.last_seen_at) < 180000;
     const status = JSON.parse(r.status_json || 'null');
-    const fresh = ['1.1.0','1.2.0','1.3.0'].includes(status?.script) && Number.isFinite(Date.parse(status?.at)) && clock - Date.parse(status.at) < 180000;
+    const fresh = ['1.1.0','1.2.0','1.3.0','1.4.0'].includes(status?.script) && Number.isFinite(Date.parse(status?.at)) && clock - Date.parse(status.at) < 180000;
     const availability = r.blueprint_id ? 'assigned' : busy(r.name) ? 'applying' : !online ? 'offline' : !fresh ? 'outdated' : 'free';
     return [{ name: r.name, assignment: r.assignment, distance: range.distance, position: range.position, online, availability, blueprint: r.blueprint_id }];
   }).sort((a, b) => Number(b.availability === 'free') - Number(a.availability === 'free') || a.distance - b.distance || a.name.localeCompare(b.name));

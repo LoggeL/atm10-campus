@@ -97,6 +97,17 @@ class CannonBridge:
     def registry(self):
         return json.loads(self.path.read_text()) if self.path.exists() else {}
 
+    def save_registry(self, registry):
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        tmp = self.path.with_name('.cannon-registry-' + secrets.token_hex(16) + '.tmp')
+        try:
+            fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+            with os.fdopen(fd, 'w') as f:
+                json.dump(registry, f); f.flush(); os.fsync(f.fileno())
+            os.replace(tmp, self.path)
+        finally:
+            tmp.unlink(missing_ok=True)
+
     def prefix(self, b):
         return f"execute in {b['dimension']} run data get block {b['x']} {b['y']} {b['z']}"
 
@@ -138,7 +149,7 @@ class CannonBridge:
 
     def handle(self, action, obj):
         with self.lock:
-            expected = {'probe':{'binding'}, 'bind':{'station','binding','nonce'}, 'inspect':{'station'}, 'apply':{'station','desired'}, 'prepare':{'station','desired','nbtBase64','options','size'}, 'start':{'station','desired','options'}}
+            expected = {'probe':{'binding'}, 'bind':{'station','binding','nonce'}, 'discover':{'station','candidate'}, 'inspect':{'station'}, 'apply':{'station','desired'}, 'prepare':{'station','desired','nbtBase64','options','size'}, 'start':{'station','desired','options'}}
             if action not in expected or not isinstance(obj, dict) or set(obj) != expected[action]:
                 raise ValueError('Ungültiger Bridge-Auftrag.')
             if action == 'probe':
@@ -153,6 +164,9 @@ class CannonBridge:
                 raise ValueError('Ungültiger Stationsname.')
             station = station.lower()
             registry = self.registry()
+            if action == 'discover':
+                from campus_discovery import discover
+                return discover(self, station, obj['candidate'], registry)
             if action == 'bind':
                 b = validate_binding(obj['binding'])
                 entry = self.pending.pop(obj['nonce'], None)
@@ -162,12 +176,7 @@ class CannonBridge:
                 if any(k != station and all(v.get(field) == b[field] for field in ('dimension','x','y','z')) for k,v in registry.items()):
                     raise ValueError('Block bereits einer anderen Station zugeordnet.')
                 registry[station] = b
-                self.path.parent.mkdir(parents=True, exist_ok=True)
-                tmp = self.path.with_suffix('.tmp')
-                fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-                with os.fdopen(fd, 'w') as f:
-                    json.dump(registry, f); f.flush(); os.fsync(f.fileno())
-                os.replace(tmp, self.path)
+                self.save_registry(registry)
                 return {'binding':b, 'observed':observed}
             if station not in registry: raise ValueError('Station nicht gebunden. Admin muss Block bestätigen.')
             b = validate_binding(registry[station]); observed = self.inspect(b)
@@ -244,7 +253,7 @@ class RequestAuth:
 
 def serve_campus(handler, controller, bridge, auth):
     """Only POSTs here; original controller bearer grants no Campus authority."""
-    if handler.path not in ('/campus/probe','/campus/bind','/campus/inspect','/campus/apply','/campus/prepare','/campus/start'):
+    if handler.path not in ('/campus/probe','/campus/bind','/campus/discover','/campus/inspect','/campus/apply','/campus/prepare','/campus/start'):
         return handler.reply(404, {'error':'Unbekannter Endpunkt.'})
     try:
         length = int(handler.headers.get('Content-Length','0'))

@@ -1,8 +1,8 @@
 'use strict';
-import { renderCannon, cannonSettingsPayload, cannonStartState } from './cannon-ui.js?v=20261101-live-1';
-import { coordinateFields, placementCard, placementValues, coordinateListText } from './placement.js?v=20261101-live-1';
-import { blueprintPreview, installPreviewFallbacks } from './blueprint-preview.js?v=20261101-live-1';
-import { connectLiveUpdates, createRefreshQueue } from './live-updates.js?v=20261101-live-1';
+import { renderCannon, cannonSettingsPayload, cannonStartState } from './cannon-ui.js?v=20261101-discovery-1';
+import { coordinateFields, placementCard, placementValues, coordinateListText } from './placement.js?v=20261101-discovery-1';
+import { blueprintPreview, installPreviewFallbacks } from './blueprint-preview.js?v=20261101-discovery-1';
+import { connectLiveUpdates, createRefreshQueue } from './live-updates.js?v=20261101-discovery-1';
 installPreviewFallbacks();
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -344,17 +344,17 @@ window.addEventListener('beforeunload', e => { if (dirtyCannons()) { e.preventDe
 
 function alignmentCard(c) {
   const a=c.alignment || {state:'disabled',message:'Ausrichtung deaktiviert: keine bestätigte Blockbindung.'}, b=a.binding, d=a.desired, o=a.observed;
-  return `<details class="alignment" data-section="binding"><summary>Ausrichtung: ${esc(a.state==='aligned'?'Live bestätigt':a.state==='disabled'?'Deaktiviert / nicht gebunden':'Material gesperrt · '+a.state)}</summary>
+  return `<details class="alignment" data-section="binding"><summary>Erweitert: Position und Ausrichtung</summary>
     <p class="${a.state==='aligned'?'muted':'warn'}">${esc(a.message)}</p>
     ${b?`<p>Bestätigter Block: <span class="mono">${esc(b.dimension)} ${esc(b.x)} ${esc(b.y)} ${esc(b.z)}</span> · Owner ${esc(b.owner)}</p>`:''}
     ${d?`<p>Soll: ${esc(d.file)} · v${esc(d.version)} · Anker ${esc(d.anchor.join(' '))} · Rotation none / Spiegelung none<br><small class="mono">SHA256 ${esc(d.sha256)}</small></p>`:''}
     ${o?`<p>Ist (Live): ${esc(o.state)} · AmountPlaced ${esc(o.amountPlaced)} · Datei ${esc(o.components?.['create:schematic_file'])} · Owner ${esc(o.components?.['create:schematic_owner'])}<br>Anker ${esc(o.components?.['create:schematic_anchor']?.join(' '))} · Rotation ${esc(o.components?.['create:schematic_rotation'])} · Spiegelung ${esc(o.components?.['create:schematic_mirror'])}<br>Printer-Anker ${esc(o.printer?.Anchor?.join(' ') || 'kein Cache-Anker')}<br><small>Live-Dateihash ${esc(o.fileHash || 'Datei fehlt / nicht prüfbar')}</small></p>`:''}
     <p class="warn">Nur Campus-Materialfreigabe, kein unveränderlicher Baulock: Die native Create-GUI und manuell bereitgestellte Materialien können das umgehen. Bestehender Kisteninhalt bleibt verfügbar. Während Apply niemand im Spiel die Kanone bedienen; Readback ist keine dauerhafte GUI-Sperre.</p>
-    ${me?.user?.role==='admin'?`<p>Blockbindung manuell eingeben. Beispiel (nicht vorausgefüllt): minecraft:overworld 94 64 21, Owner KGZJonny. Erst am richtigen Block prüfen, dann ausdrücklich binden. Die Probe schreibt keine Welt-NBT.</p>
+    ${me?.user?.role==='admin'?`<p>Die Position wird normalerweise automatisch erkannt. Falls die Zuordnung nicht gelingt, kannst du hier den Kanonenblock manuell angeben. Beispiel (nicht vorausgefüllt): minecraft:overworld 94 64 21, Owner Campus. Erst den richtigen Block prüfen, dann ausdrücklich binden. Die Probe schreibt keine Welt-NBT.</p>
       <div class="row"><label>Dimension <select data-bind="dimension">${['minecraft:overworld','minecraft:the_nether','minecraft:the_end'].map(dim=>`<option${b?.dimension===dim?' selected':''}>${dim}</option>`).join('')}</select></label>${['x','y','z'].map(k=>`<label>${k} <input data-bind="${k}" type="number" step="1" value="${esc(b?.[k]??'')}" required></label>`).join('')}<label>Schematic-Owner <input data-bind="owner" value="${esc(b?.owner??'')}" autocomplete="off" maxlength="16" required></label></div>
       <button class="small" data-act="alignment-probe">Block prüfen / Bindung bestätigen</button><button class="small" data-act="binding-reset">Eingaben verwerfen</button>
       ${b?'<button class="small primary" data-act="alignment-apply">Nach Stop/Reset: Ausrichtung anwenden / erneut versuchen</button>':''}
-      <p class="muted">Aktivierung benötigt Feeder 1.1.0, 1.2.0 oder 1.3.0 mit frischer Statusmeldung. Apply nur STOPPED, AmountPlaced=0, AmountToPlace=0, ohne Printer-Cache; sonst im Spiel bewusst stoppen/zurücksetzen bzw. Schematic entnehmen. Es gibt keinen automatischen Reset. Bei automatischer Vorbereitung wird das Schematic direkt eingesetzt. Sonst die exakte gewählte NBT-Version am Schematic Table hochladen und einlegen. Bauplanwechsel stellt den neuen Anker bereit und versucht sicheres Apply; bei laufender/gecachter Kanone bleibt er ausstehend.</p>`:''}
+      <p class="muted">Die manuelle Bindung benötigt einen aktuellen Feeder mit frischer Statusmeldung. Apply nur STOPPED, AmountPlaced=0, AmountToPlace=0, ohne Printer-Cache; sonst im Spiel bewusst stoppen/zurücksetzen bzw. Schematic entnehmen. Es gibt keinen automatischen Reset. Bei automatischer Vorbereitung wird das Schematic direkt eingesetzt. Bei bewusst ausgeschalteter Automatik die gewählte NBT-Version am Schematic Table hochladen und einlegen. Ein Bauplanwechsel wartet bei einer laufenden Kanone auf einen sicheren Stopp.</p>`:''}
   </details>`;
 }
 // alignment-card-end
@@ -451,6 +451,11 @@ $('cannonList').addEventListener('click', guard(async e => {
   if (b.dataset.act === 'position') { openBlueprint(b.dataset.bp); return; }
   busyCannons.add(name); b.disabled = true;
   try {
+    if (b.dataset.act === 'discover') {
+      if (card.dataset.bindingDirty) throw new Error('Die manuellen Positionseingaben zuerst bestätigen oder verwerfen.');
+      const result = await api('/api/cannons/' + encodeURIComponent(name) + '/discover', {method:'POST',body:{}});
+      toast(result.discovery?.message || result.alignment?.discovery?.message || result.message || 'Positionssuche wurde angefordert.');
+    }
     if(b.dataset.act==='alignment-probe') {
       const binding={};
       for(const k of ['dimension','x','y','z','owner']) {

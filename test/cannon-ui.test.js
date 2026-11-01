@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { renderCannon, cannonSettingsPayload, cannonStartState } from '../public/assets/cannon-ui.js';
+import { renderCannon, cannonSettingsPayload, cannonStartState, cannonLocation } from '../public/assets/cannon-ui.js';
 import { DEFAULT_OPTIONS } from '../src/api-stations.js';
 
 const station = () => ({ name:'kanone-11', assignment:17, online:true, state:'feeding', options:{...DEFAULT_OPTIONS},
@@ -83,9 +83,33 @@ test('web start requires a live verified automatic plan and distinguishes runnin
   }
 });
 
-test('manual schematic copy explains the missing setup and provides the appropriate action', () => {
+test('automatic location failures show a retry while explicit schematic auto-off stays optional', () => {
   const c=station();c.schematic.settings.enabled=false;c.alignment={enabled:false};
-  assert.match(render(c),/Kanonen-Position noch nicht bestätigt/);assert.match(render(c),/data-act="open-binding"/);
-  assert.doesNotMatch(render(c),/Manuell einsetzen|data-act="start"/);
+  assert.match(render(c),/Kanonen-Position noch nicht ermittelt/);assert.match(render(c),/data-act="discover"/);
+  assert.doesNotMatch(render(c),/Manuell einsetzen|data-act="start"|data-act="open-binding"/);
   c.alignment.enabled=true;assert.match(render(c),/Automatische Vorbereitung ist aus/);assert.match(render(c),/data-act="open-settings"/);
+});
+
+test('automatic detection is only claimed for an actual verified binding and does not enable start by itself', () => {
+  const c=station();c.alignment={enabled:false,binding:null,discovery:{automatic:true,state:'found'}};
+  assert.doesNotMatch(render(c),/Automatisch erkannt/);
+  assert.equal(cannonStartState(c,true).enabled,false);
+  c.alignment={enabled:true,state:'aligned',observed:{state:'STOPPED'},binding:{x:94,y:64,z:21},discovery:{automatic:true,state:'bound'}};
+  assert.match(render(c),/Automatisch erkannt/);assert.match(render(c),/X 94 · Y 64 · Z 21/);
+  assert.equal(cannonStartState(c,true).enabled,true);
+  c.alignment.discovery={automatic:true,state:'ambiguous',message:'Zuordnung inzwischen unklar.'};
+  assert.match(render(c),/Zuordnung inzwischen unklar/);assert.match(render(c),/data-act="discover"/);assert.doesNotMatch(render(c),/Automatisch erkannt/);
+  assert.equal(cannonStartState(c,true).enabled,false);
+  delete c.alignment.discovery;assert.equal(cannonLocation(c).label,'Position gespeichert');
+  c.alignment.binding.x='94';assert.equal(cannonLocation(c).binding,null);
+});
+
+test('pending discovery stays quiet; unresolved reasons are escaped and retriable only by admins', () => {
+  const c=station();c.alignment={enabled:false,discovery:{automatic:true,state:'pending'}};c.range.state='unbound';
+  assert.match(render(c),/automatisch gesucht/);assert.doesNotMatch(render(c),/data-act="discover"|<dt>Reichweite/);
+  for(const state of ['missing','ambiguous','unsupported','offline','blocked','error']) {
+    c.alignment.discovery={automatic:true,state,message:'Kein Treffer <script>'};
+    assert.match(render(c),/Kein Treffer &lt;script&gt;/);assert.match(render(c),/data-act="discover"/);
+    assert.doesNotMatch(render(c,false),/data-act="discover"/);assert.doesNotMatch(render(c),/Automatisch erkannt/);
+  }
 });

@@ -41,6 +41,72 @@ class FeederTests(unittest.TestCase):
         ''')
         return lua
 
+    def test_report_payload_uses_native_computer_id_and_keeps_local_chest_side(self):
+        code=(Path(__file__).resolve().parents[1]/'public/cc/campus.lua').read_text()
+        helper='local function reportStatus()'+code.split('local function reportStatus()',1)[1].split('local function selfUpdate',1)[0]
+        lua=LuaRuntime(unpack_returned_tuples=True)
+        report=lua.execute('''
+          local VERSION="1.4.0"
+          local view={state="feeding",chest={name="left",slots=27,used=2},shortages={}}
+          local state={delivered={}}
+          plan={assignment=17,intervals={status=30}}
+          local chestName="left"
+          setChest=function(name) chestName=name; view.chest=nil end
+          computerId=0
+          os.getComputerID=function() return computerId end
+          local sendStatus=function(payload,heartbeat) return payload,heartbeat end
+        '''+helper+'\nreturn reportStatus')
+        for computer_id in [0,11,2147483647]:
+            lua.globals().computerId=computer_id
+            payload, heartbeat=report()
+            self.assertEqual(payload.computerId,computer_id)
+            self.assertEqual(payload.chest.name,'left')
+            self.assertEqual(payload.chestSide,'left')
+            self.assertEqual(payload.assignment,17)
+            self.assertEqual(heartbeat,30)
+        lua.globals().plan=None
+        lua.globals().setChest('right')
+        payload, heartbeat=report()
+        self.assertEqual(payload.chestSide,'right','discovery works before the first assigned-plan delivery')
+        self.assertIsNone(payload.chest)
+        self.assertEqual(payload.assignment,0)
+        lua.globals().setChest(None)
+        self.assertIsNone(report()[0].chestSide,'detached chests are not reported from the last view')
+
+    def test_peripheral_detection_clears_previous_chest_side_on_disconnect(self):
+        code=(Path(__file__).resolve().parents[1]/'public/cc/campus.lua').read_text()
+        helper='local function findPeripherals()'+code.split('local function findPeripherals()',1)[1].split('local function chestContents',1)[0]
+        lua=LuaRuntime(unpack_returned_tuples=True)
+        probe=lua.execute('''
+          local bridge,bridgeName,chest,chestName,api
+          local SIDES={left=true,right=true}
+          local detectApi=function() return "0.8" end
+          bridgePresent,chestPresent=true,true
+          settings={get=function(key)
+            if key=="campus.bridge" then return "right" end
+            if key=="campus.chest" then return "left" end
+          end}
+          peripheral={
+            isPresent=function() return bridgePresent end,
+            wrap=function(name)
+              if name=="right" then return {isOnline=function() return true end} end
+              if name=="left" and chestPresent then return {list=function() return {} end} end
+            end
+          }
+        '''+helper+'\nreturn {find=findPeripherals,side=function() return chestName end}')
+        self.assertIsNone(probe.side())
+        self.assertTrue(probe.find())
+        self.assertEqual(probe.side(),'left')
+        lua.globals().bridgePresent=False
+        self.assertFalse(probe.find()[0])
+        self.assertIsNone(probe.side())
+        lua.globals().bridgePresent=True
+        self.assertTrue(probe.find())
+        self.assertEqual(probe.side(),'left')
+        lua.globals().chestPresent=False
+        self.assertFalse(probe.find()[0])
+        self.assertIsNone(probe.side())
+
     def test_initial_changes_and_heartbeat_are_reported(self):
         lua=self.reporter()
         lua.execute('p={state="feeding", assignment=7, chest={used=2,slots=27}, delivered={}, shortages={}}')

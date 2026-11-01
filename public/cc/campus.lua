@@ -3,7 +3,7 @@
 -- through an Advanced Peripherals ME Bridge. Which blueprint and the options are set in the web app (tab "Kanonen");
 -- this computer only knows URL, a station token and its cannon name (install: wget run <url>/cc/install.lua).
 -- Strings shown on screen use Latin-1 escapes (\228 = ae-umlaut ...), the CC font is ISO-8859-1.
-local VERSION = "1.3.0"
+local VERSION = "1.4.0"
 
 settings.define("campus.url", { description = "Campus-URL", type = "string" })
 settings.define("campus.token", { description = "API-Token mit Scope Station", type = "string" })
@@ -131,6 +131,7 @@ end
 local function findPeripherals()
   local b = settings.get("campus.bridge")
   bridge, bridgeName = nil, nil
+  chest, chestName = nil, nil
   if b and b ~= "" then
     if peripheral.isPresent(b) then bridge, bridgeName = peripheral.wrap(b), b end
   else
@@ -142,8 +143,8 @@ local function findPeripherals()
 
   local direction = settings.get("campus.direction")
   local sameSpace = function(n) return (direction and direction ~= "") or (SIDES[n] or false) == (SIDES[bridgeName] or false) end
-  chestName = settings.get("campus.chest")
-  if not chestName or chestName == "" then
+  local foundName = settings.get("campus.chest")
+  if not foundName or foundName == "" then
     local found = {}
     for _, n in ipairs(peripheral.getNames()) do
       if peripheral.hasType(n, "inventory") and not isBridge(n) and sameSpace(n) then found[#found + 1] = n end
@@ -153,16 +154,17 @@ local function findPeripherals()
       return false, (#found == 0 and "Keine Kiste gefunden (Bridge und Kiste beide direkt am Computer oder beide am Modem-Netz)"
         or ("Mehrere Inventare: " .. table.concat(found, ", ") .. " - festlegen mit: set campus.chest <name>"))
     end
-    chestName = found[1]
-  elseif not sameSpace(chestName) then
-    return false, "Kiste " .. chestName .. " ist f\252r die ME Bridge nicht erreichbar (anderes Netz). campus.direction setzen?"
+    foundName = found[1]
+  elseif not sameSpace(foundName) then
+    return false, "Kiste " .. foundName .. " ist f\252r die ME Bridge nicht erreichbar (anderes Netz). campus.direction setzen?"
   end
-  chest = peripheral.wrap(chestName)
-  if not chest or not chest.list then return false, "Kiste " .. tostring(chestName) .. " ist kein Inventar" end
+  local foundChest = peripheral.wrap(foundName)
+  if not foundChest or not foundChest.list then return false, "Kiste " .. tostring(foundName) .. " ist kein Inventar" end
   -- AP 0.7.5x resolves "left"/"back"/... relative to the bridge block, not the computer
-  if api == "0.7" and SIDES[chestName] and not (direction and direction ~= "") then
+  if api == "0.7" and SIDES[foundName] and not (direction and direction ~= "") then
     return false, "AP 0.7: Richtung von der Bridge zur Kiste setzen: set campus.direction <north|south|east|west|up|down>"
   end
+  chest, chestName = foundChest, foundName
   return true
 end
 
@@ -385,9 +387,9 @@ local sendStatus = statusReporter(now, function(payload)
 end)
 local function reportStatus()
   return sendStatus({
-    assignment = plan and plan.assignment or 0, state = view.state, script = VERSION, api = api,
+    assignment = plan and plan.assignment or 0, state = view.state, script = VERSION, api = api, computerId = os.getComputerID(),
     message = (view.state == "error" and view.error) or view.message or view.craftError,
-    chest = view.chest, delivered = state.delivered, shortages = view.shortages,
+    chest = view.chest, chestSide = chestName, delivered = state.delivered, shortages = view.shortages,
   }, plan and plan.intervals and plan.intervals.status or 30)
 end
 

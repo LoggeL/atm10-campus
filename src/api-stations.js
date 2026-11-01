@@ -46,6 +46,8 @@ export function normalizeStatus(b = {}) {
   for (const [k, v] of Object.entries(b.delivered && typeof b.delivered === 'object' ? b.delivered : {}).slice(0, 300)) delivered[clip(k, 120)] = int(v);
   return {
     at: now(), state: clip(b.state, 20) || 'unknown', message: clip(b.message, 300), assignment: int(b.assignment), script: clip(b.script, 20),
+    computerId: Number.isSafeInteger(b.computerId) && b.computerId >= 0 && b.computerId <= 2147483647 ? b.computerId : null,
+    chestSide: typeof b.chestSide === 'string' && b.chestSide.trim() ? b.chestSide.trim().slice(0,60) : null,
     chest: b.chest && typeof b.chest === 'object' ? { slots: int(b.chest.slots), used: int(b.chest.used), name: clip(b.chest.name, 60) } : null,
     delivered,
     shortages: asList(b.shortages).slice(0, 100).filter(s => s && typeof s === 'object').map(s => ({
@@ -177,7 +179,7 @@ export function registerStationRoutes(app, campus, mat, alignment, schematics) {
       if (!bp || bp.version !== b.baseVersion) throw new HttpError(409, 'Bauplanversion wurde geändert. Bitte neu laden.');
       if (t.blueprint_id) throw new HttpError(409, 'Die Zielkanone hat bereits einen Auftrag.');
       const status = JSON.parse(t.status_json || 'null');
-      if (!Number.isFinite(Date.parse(t.last_seen_at)) || Date.now() - Date.parse(t.last_seen_at) >= ONLINE_MS || !['1.1.0','1.2.0','1.3.0'].includes(status?.script) || !Number.isFinite(Date.parse(status?.at)) || Date.now() - Date.parse(status.at) >= ONLINE_MS) throw new HttpError(409, 'Ziel-Computer ist offline oder sein Status ist veraltet.');
+      if (!Number.isFinite(Date.parse(t.last_seen_at)) || Date.now() - Date.parse(t.last_seen_at) >= ONLINE_MS || !['1.1.0','1.2.0','1.3.0','1.4.0'].includes(status?.script) || !Number.isFinite(Date.parse(status?.at)) || Date.now() - Date.parse(status.at) >= ONLINE_MS) throw new HttpError(409, 'Ziel-Computer ist offline oder sein Status ist veraltet.');
       if (!alignment.binding(s.name) || cannonRange(alignment.binding(t.name), bp.origin).state !== 'inrange') throw new HttpError(409, 'Bestätigte Kanonen in der Oberwelt und ein Ziel in Reichweite sind erforderlich.');
       return { s, t, bp };
     };
@@ -217,7 +219,7 @@ export function registerStationRoutes(app, campus, mat, alignment, schematics) {
     const a = requireActor(req, 'write');
     const name = checkName(req.params.name), b = req.body || {};
     const row = getRow(name) || ensureRow(name);
-    if (alignment.enabled(name)) alignment.admin(req);
+    if (alignment.enabled(name) || alignment.managed(name)) alignment.admin(req);
     if (b.schematic !== undefined) {
       alignment.admin(req);
       if (b.schematic.enabled && !alignment.enabled(name)) throw new HttpError(400, 'Zuerst unter Ausrichtung den Kanonen-Block bestätigen.');
@@ -256,6 +258,8 @@ export function registerStationRoutes(app, campus, mat, alignment, schematics) {
 
   app.delete('/api/cannons/:name', async req => {
     const a = requireActor(req, 'write');
+    if (alignment.managed(req.params.name)) alignment.admin(req);
+    if (alignment.busy(req.params.name)) throw new HttpError(409, 'Kanone wird gerade geprüft oder vorbereitet.');
     if (alignment.enabled(req.params.name)) throw new HttpError(409, 'Gebundene Station kann nicht gelöscht werden; Materialschutz bleibt aktiv.');
     const r = db.prepare('DELETE FROM cannons WHERE name = ?').run(req.params.name);
     if (!r.changes) throw new HttpError(404, 'Kanone nicht gefunden.');
