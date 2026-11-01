@@ -11,7 +11,7 @@ from pathlib import Path
 from types import SimpleNamespace
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'controller'))
 from campus_cannon import CannonBridge, RequestAuth, serve_campus
-from campus_discovery import validate_candidate, side_offset, proof_command, parse_settings
+from campus_discovery import validate_candidate, side_offset, proof_command, parse_settings, condition
 
 CANDIDATE = {
     'computer': {'id': 4, 'x': 96, 'y': 64, 'z': 23, 'block': 'computercraft:computer_advanced', 'facing': 'south'},
@@ -47,7 +47,10 @@ class World:
         self.calls.append(command)
         parts = command.split()
         assert parts[:3] == ['execute', 'in', 'minecraft:overworld'], command
-        assert 'run' not in parts, 'discovery cannot mutate game data'
+        assert parts[-5:-1] == ['run', 'data', 'get', 'storage'], 'only read-only storage proof allowed'
+        marker = parts[-1]
+        assert re.fullmatch(r'campus:discovery_[0-9a-f]{32}', marker)
+        parts = parts[:-5]
         i = 3
         while i < len(parts):
             mode, kind = parts[i:i+2]; p = tuple(map(int, parts[i+2:i+5]));i += 5
@@ -66,8 +69,8 @@ class World:
                 if computer_id:
                     match = match and nbt.get('ComputerId') == int(computer_id)
             if match != (mode == 'if'):
-                return 'Test failed\n\x1b[0m\n'
-        return 'Test passed\n\x1b[0m\n'
+                return '\n'
+        return f'Storage {marker} has the following contents: {{}}\n\x1b[0m\n'
 
 
 class DiscoveryTests(unittest.TestCase):
@@ -98,6 +101,38 @@ class DiscoveryTests(unittest.TestCase):
         self.world.observed[pos(BINDING)] = {**idle(), 'state': 'RUNNING', 'amountPlaced': 300, 'flyingBlocks': 7}
         self.assertEqual(self.discover()['observed']['state'], 'RUNNING')
         self.assertEqual((self.bridge.path.stat().st_mtime_ns, self.bridge.path.read_bytes()), before)
+
+    def test_condition_correlates_its_own_reply_and_retries_only_once(self):
+        calls = []
+        def mixed_then_clean(command):
+            calls.append(command)
+            marker = command.rsplit(' ', 1)[1]
+            own = f'Storage {marker} has the following contents: {{}}'
+            return 'Test failed\n' + own if len(calls) == 1 else own
+        bridge = SimpleNamespace(run=mixed_then_clean)
+        self.assertTrue(condition(bridge, proof_command(CANDIDATE)))
+        self.assertEqual(len(calls), 2)
+        self.assertNotEqual(calls[0], calls[1], 'each attempt needs a fresh correlation marker')
+        for reply in ['Test passed', 'Test passed, count: 1', 'Test failed',
+                      'Storage campus:discovery_' + '0'*32 + ' has the following contents: {}',
+                      'Test passed\nTest failed']:
+            with self.subTest(reply=reply):
+                calls.clear()
+                def unrelated(command):calls.append(command);return reply
+                with self.assertRaisesRegex(ValueError, 'keine eindeutige RCON-Antwort'):
+                    condition(SimpleNamespace(run=unrelated), proof_command(CANDIDATE))
+                self.assertEqual(len(calls), 2)
+        calls.clear()
+        def empty(command):calls.append(command);return '\n'
+        self.assertFalse(condition(SimpleNamespace(run=empty), proof_command(CANDIDATE)))
+        self.assertEqual(len(calls), 2)
+
+    def test_mixed_or_missing_proof_never_persists_a_binding(self):
+        for reply in ['Test passed\nTest failed', '\n']:
+            with self.subTest(reply=reply):
+                self.bridge.run = lambda _: reply
+                with self.assertRaises(ValueError):self.discover()
+                self.assertFalse(self.bridge.path.exists())
 
     def test_wrong_computer_chest_ambiguity_and_unloaded_neighbors_never_bind(self):
         mutations = [lambda w: w.blocks.__setitem__((96,64,23), ('computercraft:computer_advanced', {'facing':'south'}, {'ComputerId':5})),

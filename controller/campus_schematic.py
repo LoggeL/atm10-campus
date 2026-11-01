@@ -183,11 +183,8 @@ def prepare_schematic(bridge, binding, desired, encoded, cannon_options, size):
         raise ValueError('Schematic-Hash oder Dateiformat stimmt nicht.')
 
     def read():
-        raw = re.sub(r'\x1b\[[0-9;]*m|§.', '', bridge.run(bridge.prefix(binding)))
-        marker = 'has the following block data: '
-        if marker not in raw:
-            raise ValueError('Kanone nicht geladen.')
-        return loads(raw.split(marker, 1)[1].strip())
+        from campus_probe import block_payload
+        return loads(block_payload(bridge.run(bridge.prefix(binding)), binding))
 
     block = read()
     root = (bridge.base / 'data/schematics/uploaded').resolve()

@@ -90,7 +90,10 @@ export function registerAlignment(app, campus, schematics) {
       if(!same(binding,result.binding))throw new HttpError(409,'Host-Registry weicht von bestätigter Campus-Bindung ab.');
       if(row(name)?.assignment!==r.assignment || record(name)?.binding_json!==rec.binding_json)throw new HttpError(409,'Auftrag während Live-Probe geändert.');
       const rangeJob=schematics.view(name).job;
-      const message=rangeJob?.state==='outofrange' && schematics.settingsFor(name).enabled ? rangeJob.message : desired?(rec.last_error || verifyAlignment(desired,result.observed,JSON.parse(rec.applied_json||'null'))):'Kein Bauplan gewählt.';
+      const mismatch=desired?verifyAlignment(desired,result.observed,JSON.parse(rec.applied_json||'null')):'Kein Bauplan gewählt.';
+      // A transient discovery/transport failure must not mask a later complete
+      // native proof. Keep its diagnosis only while the actual alignment fails.
+      const message=rangeJob?.state==='outofrange' && schematics.settingsFor(name).enabled ? rangeJob.message : mismatch ? (rec.last_error || mismatch) : null;
       return finish({enabled:true,state:message?'pending':'aligned',binding,desired,observed:result.observed,message:message||'Live geprüft: exakte Revision, Owner und Ausrichtung stimmen.'});
     }catch(e){return finish({enabled:true,state:e.statusCode===409?'mismatch':'offline',binding,desired,observed:null,message:e.message});}
   };
@@ -262,5 +265,5 @@ export function registerAlignment(app, campus, schematics) {
     try{await discovery.discover(name,actor,true);}catch{/* The persisted diagnosis is returned below. */}
     return view(name,{notify:true});
   });
-  return {view,gate,apply,prepare,admin,inspect,revoke,withStationsLocked,binding:bindingFor,busy:name=>applying.has(name.toLowerCase()),enabled:name=>!!record(name),managed:discovery.managed};
+  return {view,gate,apply,prepare,admin,inspect,revoke,withStationsLocked,binding:bindingFor,busy:name=>applying.has(name.toLowerCase()),enabled:name=>!!record(name),managed:discovery.managed,locationReady:name=>!!record(name)&&(!discovery.managed(name)||discovery.view(name)?.state==='bound')};
 }

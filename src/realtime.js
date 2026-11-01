@@ -99,7 +99,9 @@ export function registerRealtime(app, campus, { heartbeatMs = 15_000, batchMs = 
     const route = req.routeOptions.url || '';
     if (route.startsWith('/api/cannons/')) {
       if (route.endsWith('/alignment/probe')) return;
-      publish('cannons', req.params.name);
+      const choicesChanged = route.endsWith('/transfer') || (route === '/api/cannons/:name' && (req.method === 'DELETE' || (req.method === 'PUT' && req.body?.blueprint !== undefined)));
+      // Assigning/releasing a plan changes the available choices on every cannon.
+      publish('cannons', choicesChanged ? undefined : req.params.name);
       if (route.endsWith('/transfer')) publish('cannons', req.body?.target);
       if (!route.endsWith('/status')) publish('activity');
     } else if (route === '/api/me/stock') publish('stock');

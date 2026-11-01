@@ -131,6 +131,26 @@ class ProbeTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError,'während der Statusprüfung geändert'):
             read_fields(run,BINDING,parse_snbt)
 
+    def test_another_cannons_rcon_reply_never_satisfies_inspect_or_field_probe(self):
+        run, calls = self.fixture()
+        def other_cannon(command):
+            return run(command).replace('94, 64, 21 has the following block data:', '94, 64, 25 has the following block data:')
+        with self.assertRaisesRegex(ValueError, 'keine eindeutige Antwort für diese Kanonenposition'):
+            CannonBridge('/unused', other_cannon).inspect(BINDING)
+        self.assertEqual(len(calls), 1, 'wrong coordinates must not enter the truncated-NBT fallback')
+        calls.clear()
+        with self.assertRaisesRegex(ValueError, 'keine eindeutige Antwort für diese Kanonenposition'):
+            read_fields(other_cannon, BINDING, parse_snbt)
+        self.assertEqual(len(calls), 1)
+
+    def test_unrelated_response_prefix_never_satisfies_inspect(self):
+        run, calls = self.fixture()
+        def mixed(command):
+            return 'Test passed\n' + run(command)
+        with self.assertRaisesRegex(ValueError, 'keine eindeutige Antwort für diese Kanonenposition'):
+            CannonBridge('/unused', mixed).inspect(BINDING)
+        self.assertEqual(len(calls), 1)
+
 
 class HttpTests(unittest.TestCase):
     def test_start_route_is_signed_and_not_a_general_command_endpoint(self):

@@ -112,12 +112,10 @@ class CannonBridge:
         return f"execute in {b['dimension']} run data get block {b['x']} {b['y']} {b['z']}"
 
     def inspect(self, b):
-        raw = re.sub(r'\x1b\[[0-9;]*m|§.', '', self.run(self.prefix(b)))
-        marker = 'has the following block data: '
-        if marker not in raw:
-            raise ValueError('Block nicht geladen, offline oder keine Blockdaten. Keine Änderung.')
+        from campus_probe import block_payload
+        payload = block_payload(self.run(self.prefix(b)), b)
         try:
-            n = parse_snbt(raw.split(marker, 1)[1].strip())
+            n = parse_snbt(payload)
         except ValueError:
             # Long checklist/book/flight payloads can exceed RCON's response chunk.
             # Read only the fields needed by the interlock and verify their identity twice.

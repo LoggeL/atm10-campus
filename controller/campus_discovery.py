@@ -1,6 +1,7 @@
 """Bind a station only after its saved-map candidate is independently proved live."""
 import json
 import re
+import secrets
 
 from campus_probe import clean
 
@@ -48,14 +49,22 @@ def validate_candidate(candidate):
 
 
 def condition(bridge, command):
-    if len(command.encode('utf8')) > 950:
-        raise ValueError('Live-Zuordnungsprüfung überschreitet die RCON-Grenze.')
-    raw = clean(bridge.run(command))
-    if raw in ('Test passed', 'Test passed, count: 1'):
-        return True
-    if raw == 'Test failed':
-        return False
-    raise ValueError('Live-Zuordnungsprüfung konnte nicht bestätigt werden.')
+    # Minecraft can mix replies from concurrent RCON clients. A generic "Test
+    # passed" cannot prove which request ran. Reading a fresh storage ID emits
+    # its unique name on success, without writing storage or changing the world.
+    # False intermediate execute conditions emit nothing. Retry once because an
+    # empty/mixed reply can also result from the shared RCON output buffer.
+    for attempt in range(2):
+        marker = 'campus:discovery_' + secrets.token_hex(16)
+        request = command + ' run data get storage ' + marker
+        if len(request.encode('utf8')) > 950:
+            raise ValueError('Live-Zuordnungsprüfung überschreitet die RCON-Grenze.')
+        raw = clean(bridge.run(request))
+        if raw == f'Storage {marker} has the following contents: {{}}':
+            return True
+        if attempt == 1 and raw == '':
+            return False
+    raise ValueError('Minecraft hat keine eindeutige RCON-Antwort zur Zuordnung geliefert. Die Zuordnung bleibt gesperrt; bitte erneut prüfen.')
 
 
 def proof_command(candidate):
@@ -164,7 +173,7 @@ def discover(bridge, station, candidate, registry):
     def prove():
         settings_identity(bridge, station, candidate)
         if not condition(bridge, command):
-            raise ValueError('Karte und Live-Welt stimmen nicht eindeutig überein. Computer, Kiste oder Kanone wurde verändert.')
+            raise ValueError('Die Live-Welt bestätigt die Kartenposition nicht. Der Bereich ist eventuell nicht geladen oder Computer, Kiste oder Kanone wurde verändert. Bitte erneut prüfen.')
 
     prove()
     if old == binding:

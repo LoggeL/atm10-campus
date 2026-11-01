@@ -92,6 +92,12 @@ Mit „Auftrag hierhin verschieben“ kann ein Browser-Admin eine freie Kanone a
 
 Prüfen: `LOG_LEVEL=silent npm test`, `python3 test/bridge_test.py`, `python3 test/controller_alignment_test.py` auf dem Controller-Host sowie `uv run --with lupa python test/feeder_alignment_test.py`.
 
+## Bauplanauswahl je Kanone
+
+Die Auswahl zeigt nur freie aktuelle Bauplanversionen in Reichweite, für die im letzten Weltabgleich noch baubare Blöcke fehlen. Fertige, anderweitig zugewiesene, unbekannte und vollständig blockierte Pläne bleiben ausgeblendet. Geschützte Block-Entities, fehlende Item-Entsprechungen, Flüssigkeiten und der Sicherheitsabstand zur Kanone zählen nicht als baubarer Rest. Bei den restriktiven Ersetzungsmodi werden konservativ nur sicher freie Zielzellen gezählt, da der Weltabgleich keine modabhängigen Kollisionsformen enthält. Fehlender ME-Vorrat versteckt einen baubaren Plan nicht; Nachlieferung und Crafting bleiben möglich.
+
+Jeder Eintrag zeigt Prozent gesetzt, noch baubare Blöcke und Entfernung. Die ausgewählte Version erhält eine Vorschau mit Fortschrittsbalken und Snapshot-Zeitstempel. Leere NBT-Zellen erhöhen den Baufortschritt nicht; ein unvollständiger Plan wird auch bei wenigen fehlenden Blöcken nicht auf 100 Prozent gerundet. Bestehende Aufträge bleiben erhalten, wenn sie aus der Auswahl herausfallen. Die App bindet die Auswahl an Version und Auftragsnummer und prüft sie vor der Zuweisung nochmals. Weltvergleich und NBT-Dekodierung laufen in begrenzten Workern, ohne Feeder-Abfragen zu blockieren.
+
 ## Live-Status und Web-Start
 
 Die App empfängt Änderungen über `/api/events` (SSE). Die Verbindung verwendet die vorhandene Anmeldung; Anmeldung und Berechtigung werden während der Verbindung erneut geprüft. Neue Bauplanversionen, fertige Welt-Snapshots, Kanonenmeldungen und ME-Bestand lösen gezielte Aktualisierungen aus. Nach einer Wiederverbindung wird der aktuelle Stand neu geladen. Offene Eingaben bleiben erhalten. Ohne funktionierende Verbindung fragt die App den Stand als Ersatz einmal pro Minute ab. Der Viewer meldet neue Welt- oder Planstände, ohne die gewählte Ansicht zurückzusetzen.

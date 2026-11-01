@@ -57,6 +57,8 @@ test('explicit admin binding enables fail-closed plans, selection queues safe ap
     const blocked=await req('GET','/api/cannons/one/plan');assert.equal(blocked.json().state,'alignment');assert.deepEqual(blocked.json().items,[]);assert.equal(blocked.json().options.gunpowder,0);assert.equal(blocked.json().options.paused,true);
     const applied=await req('POST','/api/cannons/one/alignment/apply',{});assert.equal(applied.statusCode,200,applied.body);assert.equal(applied.json().state,'aligned');
     assert.ok(calls.includes('apply'));assert.equal((await req('GET','/api/cannons/one/alignment')).json().desired.version,1);
+    app.campus.db.prepare('UPDATE cannon_alignment SET last_error=? WHERE name=?').run('Live-Zuordnungsprüfung konnte nicht bestätigt werden.','one');
+    assert.equal((await req('GET','/api/cannons/one/alignment')).json().state,'aligned','a full fresh native proof recovers from a stale transient error');
     offline=true;const unavailable=await req('GET','/api/cannons/one/plan');assert.equal(unavailable.json().state,'alignment');assert.equal(unavailable.json().options.paused,true);
     assert.equal((await req('DELETE','/api/cannons/one')).statusCode,409,'cannot delete/recreate to evade enabled gate');
     assert.ok(app.campus.db.prepare("SELECT count(*) n FROM activity WHERE action LIKE 'cannon.alignment.%'").get().n>=3);

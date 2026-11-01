@@ -135,6 +135,22 @@ class BridgeTest(unittest.TestCase):
                 bridge.prepare_schematic(controller, binding, desired, base64.b64encode(data).decode(), bridge.options(JOB), JOB['size'])
             self.assertFalse(bridge.installed(state, JOB))
 
+    def test_another_cannons_read_reply_cannot_prepare_files_or_game_state(self):
+        from campus_cannon import CannonBridge
+        with tempfile.TemporaryDirectory() as directory:
+            commands = []
+            def run(command):
+                commands.append(command)
+                return '1, 64, 0 has the following block data: ' + BLOCK
+            controller = CannonBridge(directory, run)
+            binding = dict(dimension='minecraft:overworld', x=0, y=64, z=0, owner='Owner')
+            data = gzip.compress(b'\x0a\x00\x00\x00')
+            desired = dict(file=JOB['fileName'], sha256=hashlib.sha256(data).hexdigest(), owner='Owner', anchor=JOB['origin'], rotation='none', mirror='none', blueprint='test', version=1)
+            with self.assertRaisesRegex(ValueError, 'keine eindeutige Antwort für diese Kanonenposition'):
+                bridge.prepare_schematic(controller, binding, desired, base64.b64encode(data).decode(), bridge.options(JOB), JOB['size'])
+            self.assertEqual(commands, [controller.prefix(binding)])
+            self.assertEqual(list(Path(directory).iterdir()), [])
+
     def test_fresh_checklist_initialization_is_acknowledged_but_progress_and_races_are_not(self):
         from campus_cannon import CannonBridge
         ready = {'State': 'PAUSED', 'Status': 'ready', 'AmountPlaced': 0, 'AmountToPlace': 400, 'FlyingBlocks': [],

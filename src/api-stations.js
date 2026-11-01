@@ -7,6 +7,7 @@ import { requireActor, HttpError } from './auth.js';
 import { now, logActivity, tx } from './db.js';
 import { normalizeStockItems, saveStock, latestStock } from './me-stock.js';
 import { cannonRange, cannonTarget, reachableCannons } from './cannon-range.js';
+import { createCannonBlueprints } from './cannon-blueprints.js';
 
 const ccDir = join(dirname(fileURLToPath(import.meta.url)), '..', 'public', 'cc');
 const NAME = /^[A-Za-z0-9_-]{1,40}$/;
@@ -68,6 +69,7 @@ export function endCannonJobs(db, bpId, actor) {
 
 export function registerStationRoutes(app, campus, mat, alignment, schematics) {
   const db = campus.db;
+  const blueprintChoices = createCannonBlueprints(campus, alignment, schematics, app);
   const getRow = name => db.prepare('SELECT * FROM cannons WHERE name = ?').get(name);
   const checkName = name => {
     if (!NAME.test(name || '')) throw new HttpError(400, 'Kanonen-Name: 1–40 Zeichen, nur Buchstaben, Zahlen, _ und -.');
@@ -145,6 +147,7 @@ export function registerStationRoutes(app, campus, mat, alignment, schematics) {
       restNbt: plan.restNbt ?? null, items: plan.items ?? [],
       schematic: plan.schematic ?? schematics.view(row.name),
       range: plan.range ?? rangeFor(row),
+      blueprintChoices: await blueprintChoices(row, snap),
       status: status && status.assignment === row.assignment ? status : status && { ...status, stale: true },
     };
   };
@@ -225,6 +228,20 @@ export function registerStationRoutes(app, campus, mat, alignment, schematics) {
       if (b.schematic.enabled && !alignment.enabled(name)) throw new HttpError(400, 'Zuerst unter Ausrichtung den Kanonen-Block bestätigen.');
     }
     if (alignment.busy(name)) throw new HttpError(409, 'Apply läuft. Auftrag bleibt unverändert; danach erneut wählen.');
+    if (b.selection !== undefined) {
+      const selected = b.selection;
+      if (!selected || !Number.isSafeInteger(selected.assignment) || !Number.isSafeInteger(selected.version) || typeof b.blueprint !== 'string' || !b.blueprint || b.version !== selected.version)
+        throw new HttpError(400, 'Bauplanversion und aktueller Auftrag für die Auswahl fehlen.');
+      if (selected.assignment !== row.assignment) throw new HttpError(409, 'Der Auftrag wurde geändert. Auswahl verwerfen und neu wählen.');
+      if (b.options !== undefined || b.schematic !== undefined) throw new HttpError(400, 'Einstellungen vor der Bauplanauswahl separat speichern.');
+      const snap = liveSnap(), originalBinding = JSON.stringify(alignment.binding(name)), originalSettings = JSON.stringify(schematics.settingsFor(name));
+      const catalog = await blueprintChoices(row, snap);
+      const current = getRow(name);
+      if (alignment.busy(name) || !current || current.assignment !== row.assignment || current.options_json !== row.options_json || JSON.stringify(alignment.binding(name)) !== originalBinding || JSON.stringify(schematics.settingsFor(name)) !== originalSettings || !alignment.locationReady(name) || liveSnap()?.id !== snap?.id || campus.getBlueprint(b.blueprint).currentVersion !== selected.version)
+        throw new HttpError(409, 'Auftrag, Position oder Baustand wurde geändert. Auswahl verwerfen und neu wählen.');
+      const choice = catalog.items.find(item => item.id === b.blueprint && item.version === selected.version);
+      if (!choice) throw new HttpError(409, 'Dieser Bauplan ist inzwischen fertig, vergeben, geändert oder nicht baubar. Auswahl verwerfen und neu wählen.');
+    }
     const options = normalizeOptions(b.options, JSON.parse(row.options_json || '{}'));
     let { blueprint_id: bpId, version, assignment, start_json: start } = row;
     const prevSkip = normalizeOptions(JSON.parse(row.options_json || '{}')).skipBlocked;

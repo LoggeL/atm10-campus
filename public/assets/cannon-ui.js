@@ -1,6 +1,7 @@
-import { cannonRangeCard, distanceText } from './cannon-range.js?v=20261101-discovery-1';
-import { coordinateFields, placementValues } from './placement.js?v=20261101-discovery-1';
-import { blueprintPreview } from './blueprint-preview.js?v=20261101-discovery-1';
+import { renderCannonPicker } from './cannon-picker.js?v=20261101-picker-1';
+import { cannonRangeCard, distanceText } from './cannon-range.js?v=20261101-picker-1';
+import { coordinateFields, placementValues } from './placement.js?v=20261101-picker-1';
+import { blueprintPreview } from './blueprint-preview.js?v=20261101-picker-1';
 
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
 const fmt = n => n == null ? '–' : Number(n).toLocaleString('de-DE');
@@ -84,14 +85,13 @@ export function renderCannon(c, bpOptions, { isAdmin, alignmentHtml, ago }) {
   const pct = t?.start ? Math.max(0, Math.min(100, Math.round((t.start - t.needed) / t.start * 1000) / 10)) : null;
   const r = c.range, origin = placementValues(bp);
   const rangeText = r?.distance != null ? `${esc(distanceText(r.distance))} von ${esc(r.limit)} Blöcken` : 'Noch nicht geprüft';
-  const opts = bp && !bpOptions.some(([id]) => id === bp.id) ? [[bp.id, bp.name], ...bpOptions] : bpOptions;
   const checkbox = (key, label, value) => `<label class="check"><input type="checkbox" name="${key}"${checked(value)}> ${label}</label>`;
   const shortages = (live?.shortages || []).map(x => `<li${x.crafting ? '' : ' class="warn"'}>${fmt(x.missing)} × ${esc(String(x.item).replace(/^minecraft:/,''))} <span class="muted">· im ME ${fmt(x.inME)}${x.crafting ? ' · wird gecraftet' : x.craftable ? ' · craftbar' : ''}</span>${x.error ? ` <span class="err">${esc(x.error)}</span>` : ''}</li>`).join('');
   return `<article class="panel cannon" data-cannon="${esc(c.name)}" aria-label="${esc(c.name)}">
     <div class="cannon-heading"><h2>${esc(c.name)}</h2><span class="connection"><span class="dot${c.online ? ' on' : ''}"></span>${c.online ? 'Online' : 'Offline'}</span><span class="last-seen">${c.lastSeenAt ? 'Meldung ' + esc(ago(c.lastSeenAt)) : 'Noch keine Meldung'}</span></div>
     <dl class="kv">
       <dt>Bauplan</dt><dd>${bp ? blueprintPreview(bp) : ''}<span>${bp ? `${esc(bp.name)} · v${esc(bp.version)}` : 'Kein Bauplan zugewiesen'}</span>
-        ${canEdit ? `<details data-section="assignment" class="assignment"><summary>Ändern</summary><form class="assignment-form"><label class="setting">Bauplan<select name="blueprint"><option value="">Kein Bauplan</option>${opts.map(([id,name]) => `<option value="${esc(id)}"${bp?.id === id ? ' selected' : ''}>${esc(name)}</option>`).join('')}</select></label><div class="form-actions"><button class="small" type="submit">Zuweisen</button><button class="small" type="reset">Verwerfen</button><span class="draft-note" role="status"></span></div><p class="form-error" role="alert"></p></form></details>` : ''}
+        ${canEdit ? renderCannonPicker(c,ago) : ''}
         ${canEdit && bp && bp.version !== bp.currentVersion ? `<button class="small" data-act="upgrade" data-bp="${esc(bp.id)}">Auf v${esc(bp.currentVersion)} aktualisieren</button>` : ''}</dd>
       ${bp ? `<dt>Zielkoordinaten</dt><dd>${coordinateFields(bp)}${origin ? `<button class="text-button small" data-copy-coordinate="${origin.join(' ')}">Kopieren</button>` : ''}</dd>` : ''}
       <dt>Kanonen-Position</dt><dd><span>${esc(location.label)}</span>${location.binding ? `<span class="mono">X ${location.binding.x} · Y ${location.binding.y} · Z ${location.binding.z}</span>` : isAdmin && location.retry ? '<button class="text-button small" data-act="discover">Erneut suchen</button>' : ''}</dd>

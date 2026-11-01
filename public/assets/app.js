@@ -1,8 +1,9 @@
+import { renderChoicePreview, cannonSelectionPayload } from './cannon-picker.js?v=20261101-picker-1';
 'use strict';
-import { renderCannon, cannonSettingsPayload, cannonStartState } from './cannon-ui.js?v=20261101-discovery-1';
-import { coordinateFields, placementCard, placementValues, coordinateListText } from './placement.js?v=20261101-discovery-1';
-import { blueprintPreview, installPreviewFallbacks } from './blueprint-preview.js?v=20261101-discovery-1';
-import { connectLiveUpdates, createRefreshQueue } from './live-updates.js?v=20261101-discovery-1';
+import { renderCannon, cannonSettingsPayload, cannonStartState } from './cannon-ui.js?v=20261101-picker-1';
+import { coordinateFields, placementCard, placementValues, coordinateListText } from './placement.js?v=20261101-picker-1';
+import { blueprintPreview, installPreviewFallbacks } from './blueprint-preview.js?v=20261101-picker-1';
+import { connectLiveUpdates, createRefreshQueue } from './live-updates.js?v=20261101-picker-1';
 installPreviewFallbacks();
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -245,7 +246,7 @@ $('snapNow').onclick = guard(async () => {
 });
 
 // ---------- cannons ----------
-let cannonLoad = null, cannonRevision = 0, cannonReadSequence = 0, optionsReadSequence = 0, stockReadSequence = 0, cannonOptions = [], cannonOptionsLoaded = false;
+let cannonLoad = null, cannonRevision = 0, cannonReadSequence = 0, stockReadSequence = 0;
 const cannonBaseline = new Map();
 const cannonPaintSequence = new Map();
 const busyCannons = new Set();
@@ -253,13 +254,6 @@ const isAdmin = () => me?.user?.role === 'admin';
 const dirtyCannons = () => !!document.querySelector('.cannon form[data-dirty], .cannon[data-binding-dirty]');
 const cannonCard = name => [...$('cannonList').querySelectorAll('[data-cannon]')].find(el => el.dataset.cannon.toLowerCase() === name.toLowerCase());
 const cardProtected = (name, card = cannonCard(name)) => busyCannons.has(card?.dataset.cannon || name) || !!(card && (card.dataset.bindingDirty || card.querySelector('form[data-dirty]') || card.contains(document.activeElement)));
-async function loadCannonOptions() {
-  const sequence = ++optionsReadSequence;
-  const bps = await api('/api/blueprints');
-  if (sequence !== optionsReadSequence) return;
-  cannonOptions = bps.filter(b => b.current || b.version).map(b => [b.id, b.name]).sort((a,b) => a[1].localeCompare(b[1], 'de'));
-  cannonOptionsLoaded = true;
-}
 async function loadStock() {
   const sequence = ++stockReadSequence;
   const {stock:s} = await api('/api/me/stock');
@@ -275,7 +269,7 @@ function renderCannonCard(c, sequence) {
   const old = cannonCard(c.name);
   if (cardProtected(c.name, old)) return false;
   const template = document.createElement('template');
-  template.innerHTML = renderCannon(c, cannonOptions, {isAdmin:isAdmin(), alignmentHtml:alignmentCard(c), ago});
+  template.innerHTML = renderCannon(c, null, {isAdmin:isAdmin(), alignmentHtml:alignmentCard(c), ago});
   const next = template.content.firstElementChild;
   if (old) {
     old.querySelectorAll('details[data-section]').forEach(d => {
@@ -306,14 +300,13 @@ async function loadCannons(force = false) {
     await cannonLoad.catch(() => {});
   }
   const loading = cannonLoad = (async () => {
-    await Promise.all([loadCannonOptions(), loadStock()]);
+    await loadStock();
     return refreshCannons();
   })();
   try { return await loading; } finally { if (cannonLoad === loading) cannonLoad = null; }
 }
 async function refreshCannons() {
   const revision = cannonRevision;
-  if (!cannonOptionsLoaded) await loadCannonOptions();
   const sequence = ++cannonReadSequence;
   const list = await api('/api/cannons');
   if (revision !== cannonRevision) return false;
@@ -331,7 +324,6 @@ async function refreshOneCannon(name) {
   if (cannonLoad) await cannonLoad;
   if (cardProtected(name)) return false;
   const revision = cannonRevision;
-  if (!cannonOptionsLoaded) await loadCannonOptions();
   const sequence = ++cannonReadSequence;
   try {
     const c = await api('/api/cannons/' + encodeURIComponent(name));
@@ -369,6 +361,16 @@ $('cannonList').addEventListener('reset', e => {
   form.querySelector('.form-error').textContent = '';
   setTimeout(() => { document.activeElement?.blur(); refreshQueue.request('cannon:' + form.closest('[data-cannon]').dataset.cannon); refreshQueue.resume(); }, 0);
 });
+$('cannonList').addEventListener('change',e=>{
+  if(!e.target.matches('.assignment-form select[name="blueprint"]'))return;
+  const c=cannonBaseline.get(e.target.closest('[data-cannon]').dataset.cannon);
+  const choice=c?.blueprintChoices?.items.find(b=>b.id===e.target.value);
+  e.target.closest('form').querySelector('[data-choice-preview]').innerHTML=renderChoicePreview(choice);
+});
+$('cannonList').addEventListener('reset',e=>{
+  if(!e.target.matches('.assignment-form'))return;
+  setTimeout(()=>e.target.querySelector('select').dispatchEvent(new Event('change',{bubbles:true})),0);
+});
 $('cannonList').addEventListener('submit', async e => {
   const form = e.target;
   if (!form.matches('.cannon-settings, .assignment-form')) return;
@@ -386,10 +388,10 @@ $('cannonList').addEventListener('submit', async e => {
     }
     else {
       if (card.querySelector('.cannon-settings[data-dirty]')) throw new Error('Einstellungen zuerst speichern oder verwerfen.');
-      const blueprint = data.get('blueprint') || null;
-      if (blueprint === (current.blueprint?.id || null)) { form.reset(); return; }
+      body = cannonSelectionPayload(data,current);
+      if (!Object.keys(body).length) { form.reset(); return; }
+      const blueprint = body.blueprint;
       if (!confirm(blueprint ? `${name} den gewählten Bauplan zuweisen? Reste des alten Auftrags gehen zurück ins ME.` : `${name} keinen Bauplan mehr zuweisen?`)) return;
-      body = {blueprint};
     }
     if (!Object.keys(body).length) { form.reset(); toast('Keine Änderungen.'); return; }
     busyCannons.add(name);
@@ -592,7 +594,6 @@ const refreshQueue = createRefreshQueue({
     if (key === 'snapshots') return loadSnapshots();
     if (key === 'activity') return loadActivity();
     if (key === 'stock') return loadStock();
-    if (key === 'options') { await loadCannonOptions(); refreshQueue.request('cannons'); return; }
     if (key === 'cannons') { if (cannonLoad) await cannonLoad; return refreshCannons(); }
     if (key.startsWith('cannon:')) return refreshOneCannon(key.slice(7));
   },
@@ -600,7 +601,6 @@ const refreshQueue = createRefreshQueue({
 function queueChanges(change) {
   const topics = new Set(change?.topics || []);
   if (topics.has('blueprints') || topics.has('snapshots')) { refreshQueue.request('status'); refreshQueue.request('cannons'); }
-  if (topics.has('blueprints')) refreshQueue.request('options');
   if (topics.has('snapshots')) refreshQueue.request('snapshots');
   if (topics.has('stock')) refreshQueue.request('stock');
   if (topics.has('activity')) refreshQueue.request('activity');
@@ -610,7 +610,7 @@ function queueChanges(change) {
   }
 }
 function syncVisible() {
-  if (activeTab === 'cannons') ['options','cannons','stock'].forEach(key => refreshQueue.request(key));
+  if (activeTab === 'cannons') ['cannons','stock'].forEach(key => refreshQueue.request(key));
   else if (['overview','coordinates'].includes(activeTab)) refreshQueue.request('status');
   else if (['activity','snapshots'].includes(activeTab)) refreshQueue.request(activeTab);
   refreshQueue.resume();

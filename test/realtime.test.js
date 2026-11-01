@@ -106,6 +106,9 @@ test('computer reports invalidate the named cannon; reads and rejected writes do
   app.updates.publish('cannons','alpha');app.updates.publish('cannons');
   const all=await stream.next('change',d=>d.topics.includes('cannons'));
   assert.equal(all.data.cannons,undefined,'a full invalidation must not be narrowed by a named one');
+  await app.inject({method:'PUT',url:'/api/cannons/alpha',headers,payload:{blueprint:null}});
+  const released=await stream.next('change',d=>d.topics.includes('cannons'));
+  assert.equal(released.data.cannons,undefined,'assignment changes refresh the buildable choices of all cannons');
 });
 
 test('domain blueprint writes and completed background snapshots publish fresh-data notifications', async t=>{

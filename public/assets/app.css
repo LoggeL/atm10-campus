@@ -240,3 +240,10 @@ pre{background:var(--bg);border:1px solid var(--line);border-radius:var(--radius
 
 .material-extra{display:none}
 .materials-page:has(#materialDetails:checked) .material-extra{display:table-cell}
+
+.cannon-choice { display:flex; gap:12px; align-items:flex-start; margin:12px 0; }
+.cannon-choice > div { min-width:0; flex:1; }
+.cannon-choice p { margin:5px 0; font-size:12px; }
+.cannon-choice .bar { margin-top:8px; }
+.assignment select { max-width:100%; }
+@media(max-width:540px) { .cannon-choice { flex-direction:column; } }

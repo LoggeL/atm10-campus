@@ -6,18 +6,24 @@ def clean(raw):
     return re.sub(r'\x1b\[[0-9;]*m|§.', '', raw).strip()
 
 
+def block_payload(raw, binding):
+    """Reject a concurrent RCON client's reply for another block or command."""
+    raw = clean(raw)
+    marker = f"{binding['x']}, {binding['y']}, {binding['z']} has the following block data: "
+    if not raw.startswith(marker):
+        raise ValueError('Minecraft hat keine eindeutige Antwort für diese Kanonenposition geliefert. Bitte erneut prüfen.')
+    return raw[len(marker):]
+
+
 def read_fields(run, binding, parse):
     pos = f"{binding['x']} {binding['y']} {binding['z']}"
     prefix = f"execute in {binding['dimension']}"
 
     def field(path, optional=False):
         raw = clean(run(f'{prefix} run data get block {pos} {path}'))
-        marker = 'has the following block data: '
         if optional and raw == 'Found no elements matching ' + path:
             return None
-        if marker not in raw:
-            raise ValueError('Kanonen-Daten konnten nicht vollständig gelesen werden: ' + path)
-        return parse(raw.split(marker, 1)[1])
+        return parse(block_payload(raw, binding))
 
     def count(path):
         raw = clean(run(f'{prefix} if data block {pos} {path}[]'))
