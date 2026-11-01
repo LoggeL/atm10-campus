@@ -1,13 +1,11 @@
-import { renderChoicePreview, cannonSelectionPayload, updateCannonPicker } from './cannon-picker.js?v=20261101-progress-2';
-'use strict';
-import { renderCannon, cannonSettingsPayload, cannonStartState, updateCannonLive } from './cannon-ui.js?v=20261101-progress-2';
-import { coordinateFields, placementCard, placementValues, coordinateListText } from './placement.js?v=20261101-progress-2';
-import { blueprintPreview, installPreviewFallbacks } from './blueprint-preview.js?v=20261101-progress-2';
-import { connectPolling, createRefreshQueue } from './live-updates.js?v=20261101-progress-2';
+import { esc, fmt } from './format.js?v=20261101-polish-1';
+import { renderChoicePreview, cannonSelectionPayload, updateCannonPicker } from './cannon-picker.js?v=20261101-polish-1';
+import { renderCannon, cannonSettingsPayload, cannonStartState, updateCannonLive } from './cannon-ui.js?v=20261101-polish-1';
+import { coordinateFields, placementCard, placementValues, coordinateListText } from './placement.js?v=20261101-polish-1';
+import { blueprintPreview, installPreviewFallbacks } from './blueprint-preview.js?v=20261101-polish-1';
+import { connectPolling, createRefreshQueue } from './live-updates.js?v=20261101-polish-1';
 installPreviewFallbacks();
 const $ = id => document.getElementById(id);
-const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-const fmt = n => n == null ? '–' : Number(n).toLocaleString('de-DE');
 const when = t => t ? new Date(t).toLocaleString('de-DE', { dateStyle: 'short', timeStyle: 'short' }) : '–';
 const ago = t => {
   if (!t) return '–';
@@ -94,7 +92,7 @@ function renderRows() {
   $('bpRows').innerHTML = rows.map(b => {
     const c = b.conflicts || {};
     const conflictText = [c.protectedBlockEntities ? `${fmt(c.protectedBlockEntities)} Maschinen` : '', c.overlapCells ? `${fmt(c.overlapCells)} Überlappung` : '', c.changedSinceBase ? `${fmt(c.changedSinceBase)} geändert` : ''].filter(Boolean).join(' · ') || '–';
-    return `<tr class="click" data-id="${esc(b.id)}"><td><div class="blueprint-entry">${blueprintPreview(b)}<span><button class="text-button blueprint-name">${esc(b.name)}</button><span class="muted mono blueprint-file">${esc(b.fileName)}</span></span></div></td><td>${badge(b.status)}${conflictText !== '–' ? `<div class="muted" style="font-size:12px">${esc(conflictText)}</div>` : ''}</td><td>v${b.version}</td>
+    return `<tr class="click" data-id="${esc(b.id)}"><td><div class="blueprint-entry">${blueprintPreview(b)}<span><button class="text-button blueprint-name">${esc(b.name)}</button><span class="muted mono blueprint-file">${esc(b.fileName)}</span></span></div></td><td>${badge(b.status)}${conflictText !== '–' ? `<div class="cell-note">${esc(conflictText)}</div>` : ''}</td><td>v${b.version}</td>
       <td><div class="progress-cell"><div class="bar"><i style="width:${b.progress ?? 0}%"></i></div><span>${b.progress == null ? '–' : b.progress.toLocaleString('de-DE') + ' %'}</span></div></td>
       <td><button class="text-button" aria-label="Details zu ${esc(b.name)}">Details</button></td></tr>`;
   }).join('') || '<tr><td colspan="5" class="muted">Keine passenden Baupläne. Suche oder Filter ändern, oder einen neuen Bauplan hochladen.</td></tr>';
@@ -278,7 +276,7 @@ function renderCannonCard(c, sequence) {
     return true;
   }
   const template = document.createElement('template');
-  template.innerHTML = renderCannon(c, null, {isAdmin:isAdmin(), alignmentHtml:alignmentCard(c), ago});
+  template.innerHTML = renderCannon(c, {isAdmin:isAdmin(), alignmentHtml:alignmentCard(c), ago});
   const next = template.content.firstElementChild;
   if (old) {
     old.querySelectorAll('details[data-section]').forEach(d => {
@@ -347,23 +345,20 @@ async function refreshOneCannon(name) {
     return revision === cannonRevision && renderCannonCard(c, sequence);
   } catch (error) { if (error.status === 404 && revision === cannonRevision) return removeCannonCard(name, sequence); throw error; }
 }
-$('showSetup').onclick = () => { $('ccSetup').open = !$('ccSetup').open; if ($('ccSetup').open) $('ccSetup').scrollIntoView({block:'nearest'}); };
-$('ccSetup').addEventListener('toggle', () => $('showSetup').setAttribute('aria-expanded', String($('ccSetup').open)));
 window.addEventListener('beforeunload', e => { if (dirtyCannons()) { e.preventDefault(); e.returnValue = ''; } });
 
 function alignmentCard(c) {
   const a=c.alignment || {state:'disabled',message:'Ausrichtung deaktiviert: keine bestätigte Blockbindung.'}, b=a.binding, d=a.desired, o=a.observed;
   return `<details class="alignment" data-section="binding"><summary>Erweitert: Position und Ausrichtung</summary>
     <p class="${a.state==='aligned'?'muted':'warn'}">${esc(a.message)}</p>
-    ${b?`<p>Bestätigter Block: <span class="mono">${esc(b.dimension)} ${esc(b.x)} ${esc(b.y)} ${esc(b.z)}</span> · Owner ${esc(b.owner)}</p>`:''}
+    ${b?`<p>Block: <span class="mono">${esc(b.dimension)} ${esc(b.x)} ${esc(b.y)} ${esc(b.z)}</span> · Owner ${esc(b.owner)}</p>`:''}
     ${d?`<p>Soll: ${esc(d.file)} · v${esc(d.version)} · Anker ${esc(d.anchor.join(' '))} · Rotation none / Spiegelung none<br><small class="mono">SHA256 ${esc(d.sha256)}</small></p>`:''}
     ${o?`<p>Ist (Live): ${esc(o.state)} · AmountPlaced ${esc(o.amountPlaced)} · Datei ${esc(o.components?.['create:schematic_file'])} · Owner ${esc(o.components?.['create:schematic_owner'])}<br>Anker ${esc(o.components?.['create:schematic_anchor']?.join(' '))} · Rotation ${esc(o.components?.['create:schematic_rotation'])} · Spiegelung ${esc(o.components?.['create:schematic_mirror'])}<br>Printer-Anker ${esc(o.printer?.Anchor?.join(' ') || 'kein Cache-Anker')}<br><small>Live-Dateihash ${esc(o.fileHash || 'Datei fehlt / nicht prüfbar')}</small></p>`:''}
-    <p class="warn">Nur Campus-Materialfreigabe, kein unveränderlicher Baulock: Die native Create-GUI und manuell bereitgestellte Materialien können das umgehen. Bestehender Kisteninhalt bleibt verfügbar. Während Apply niemand im Spiel die Kanone bedienen; Readback ist keine dauerhafte GUI-Sperre.</p>
-    ${me?.user?.role==='admin'?`<p>Die Position wird normalerweise automatisch erkannt. Falls die Zuordnung nicht gelingt, kannst du hier den Kanonenblock manuell angeben. Beispiel (nicht vorausgefüllt): minecraft:overworld 94 64 21, Owner Campus. Erst den richtigen Block prüfen, dann ausdrücklich binden. Die Probe schreibt keine Welt-NBT.</p>
+    <p class="footnote">Die Prüfung sperrt nur die Campus-Materialfreigabe. Die native Create-GUI und vorhandener Kisteninhalt bleiben nutzbar. Während Apply die Kanone nicht im Spiel bedienen.</p>
+    ${me?.user?.role==='admin'?`<p>Die Position wird normalerweise automatisch erkannt. Nur wenn das scheitert, hier den Kanonenblock angeben, prüfen und ausdrücklich binden. Beispiel (nicht vorausgefüllt): minecraft:overworld 94 64 21, Owner Campus. Die Prüfung schreibt nichts in die Welt.</p>
       <div class="row"><label>Dimension <select data-bind="dimension">${['minecraft:overworld','minecraft:the_nether','minecraft:the_end'].map(dim=>`<option${b?.dimension===dim?' selected':''}>${dim}</option>`).join('')}</select></label>${['x','y','z'].map(k=>`<label>${k} <input data-bind="${k}" type="number" step="1" value="${esc(b?.[k]??'')}" required></label>`).join('')}<label>Schematic-Owner <input data-bind="owner" value="${esc(b?.owner??'')}" autocomplete="off" maxlength="16" required></label></div>
-      <button class="small" data-act="alignment-probe">Block prüfen / Bindung bestätigen</button><button class="small" data-act="binding-reset">Eingaben verwerfen</button>
-      ${b?'<button class="small primary" data-act="alignment-apply">Nach Stop/Reset: Ausrichtung anwenden / erneut versuchen</button>':''}
-      <p class="muted">Die manuelle Bindung benötigt einen aktuellen Feeder mit frischer Statusmeldung. Apply nur STOPPED, AmountPlaced=0, AmountToPlace=0, ohne Printer-Cache; sonst im Spiel bewusst stoppen/zurücksetzen bzw. Schematic entnehmen. Es gibt keinen automatischen Reset. Bei automatischer Vorbereitung wird das Schematic direkt eingesetzt. Bei bewusst ausgeschalteter Automatik die gewählte NBT-Version am Schematic Table hochladen und einlegen. Ein Bauplanwechsel wartet bei einer laufenden Kanone auf einen sicheren Stopp.</p>`:''}
+      <div class="row"><button class="small" data-act="alignment-probe">Block prüfen / Bindung bestätigen</button><button class="small" data-act="binding-reset">Eingaben verwerfen</button>${b?'<button class="small" data-act="alignment-apply">Nach Stop/Reset: Ausrichtung anwenden</button>':''}</div>
+      <p class="footnote">Bindung braucht einen aktuellen Feeder mit frischer Statusmeldung. Anwenden nur bei gestoppter, zurückgesetzter Kanone (AmountPlaced 0, AmountToPlace 0, kein Printer-Cache); es gibt keinen automatischen Reset. Ohne Automatik die gewählte NBT-Version am Schematic Table hochladen und einlegen. Ein Bauplanwechsel wartet bei laufender Kanone auf einen sicheren Stopp.</p>`:''}
   </details>`;
 }
 // alignment-card-end
@@ -436,9 +431,8 @@ $('cannonList').addEventListener('click', guard(async e => {
   if (!b || !card) return;
   const name = card.dataset.cannon;
   if (b.disabled || busyCannons.has(name)) return;
-  if (['open-binding','open-settings'].includes(b.dataset.act)) {
-    const section = b.dataset.act === 'open-binding' ? 'binding' : 'settings';
-    const details = card.querySelector(`[data-section="${section}"]`);
+  if (b.dataset.act === 'open-settings') {
+    const details = card.querySelector('[data-section="settings"]');
     for (let p = details; p && p !== card; p = p.parentElement) if (p.tagName === 'DETAILS') p.open = true;
     details.scrollIntoView({block:'nearest'}); details.querySelector('input:not(:disabled),select:not(:disabled)')?.focus(); return;
   }
@@ -553,7 +547,7 @@ $('tokCreate').onclick = guard(async () => {
   if (!name) { toast('Bitte einen Namen angeben.', true); return; }
   const t = await api('/api/tokens', { method: 'POST', body: { name, scope: $('tokScope').value } });
   $('tokNew').classList.remove('hide');
-  $('tokNew').innerHTML = `<p>Neuer Token <strong>${esc(t.name)}</strong>. Jetzt kopieren, er wird nicht noch einmal angezeigt:</p><div class="secret" id="tokVal">${esc(t.token)}</div><div class="row" style="margin-top:8px"><button class="small" id="tokCopy">Kopieren</button><button class="small" id="tokCopySnippet">Agent-Anleitung mit Token kopieren</button></div>`;
+  $('tokNew').innerHTML = `<p>Neuer Token <strong>${esc(t.name)}</strong>. Jetzt kopieren, er wird nicht noch einmal angezeigt:</p><div class="secret" id="tokVal">${esc(t.token)}</div><div class="row"><button class="small" id="tokCopy">Kopieren</button><button class="small" id="tokCopySnippet">Agent-Anleitung mit Token kopieren</button></div>`;
   $('tokCopy').onclick = () => navigator.clipboard.writeText(t.token).then(() => toast('Kopiert.'));
   $('tokCopySnippet').onclick = () => navigator.clipboard.writeText(agentSnippet(t.token)).then(() => toast('Kopiert.'));
   $('tokName').value = ''; loadTokens();
@@ -564,7 +558,7 @@ const ACTIONS = { 'blueprint.create': 'Bauplan angelegt', 'blueprint.version': '
 async function loadActivity() {
   const list = await api('/api/activity?limit=200');
   $('actRows').innerHTML = list.filter(a => a.action !== 'auth.login').map(a => `<tr><td>${esc(when(a.at))}</td><td>${esc(a.user || 'System')}</td><td>${esc(a.via)}</td><td>${esc(ACTIONS[a.action] || a.action)}</td><td class="mono">${esc(a.target || '')}</td>
-    <td class="muted" style="font-size:12px">${esc(a.detail ? Object.entries(a.detail).filter(([k, v]) => v != null && typeof v !== 'object').map(([k, v]) => k + ': ' + v).join(', ') : '')}</td></tr>`).join('') || '<tr><td colspan="6" class="muted">Noch keine Änderungen.</td></tr>';
+    <td class="cell-note">${esc(a.detail ? Object.entries(a.detail).filter(([k, v]) => v != null && typeof v !== 'object').map(([k, v]) => k + ': ' + v).join(', ') : '')}</td></tr>`).join('') || '<tr><td colspan="6" class="muted">Noch keine Änderungen.</td></tr>';
 }
 
 // ---------- admin ----------
@@ -583,7 +577,7 @@ async function loadAdmin() {
 $('invCreate').onclick = guard(async () => {
   const r = await api('/api/invites', { method: 'POST', body: { note: $('invNote').value, role: $('invRole').value, days: Number($('invDays').value) } });
   $('invNew').classList.remove('hide');
-  $('invNew').innerHTML = `<p>Einladungslink (${r.days} Tage, einmalig nutzbar):</p><div class="secret">${esc(r.url)}</div><button class="small" id="invCopy" style="margin-top:8px">Kopieren</button>`;
+  $('invNew').innerHTML = `<p>Einladungslink (${r.days} Tage, einmalig nutzbar):</p><div class="secret">${esc(r.url)}</div><button class="small" id="invCopy">Kopieren</button>`;
   $('invCopy').onclick = () => navigator.clipboard.writeText(r.url).then(() => toast('Kopiert.'));
   $('invNote').value = ''; loadAdmin();
 });

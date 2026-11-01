@@ -5,7 +5,7 @@ import vm from 'node:vm';
 
 // Exercise the app's actual read/paint coordination with a protected card, without booting the whole app.
 const source=readFileSync(new URL('../public/assets/app.js',import.meta.url),'utf8');
-const coordination=source.slice(source.indexOf('// ---------- cannons ----------'),source.indexOf("$('showSetup').onclick"));
+const coordination=source.slice(source.indexOf('// ---------- cannons ----------'),source.indexOf("window.addEventListener('beforeunload'"));
 function appFixture() {
   let protectedCard=true,replacements=0;
   const updates=[],requests=[],reads=[];

@@ -1,6 +1,6 @@
 <!doctype html>
 <html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>ATM10 Campus</title><link rel="stylesheet" href="/assets/app.css?v=20261101-progress-2"><link rel="stylesheet" href="/assets/blueprint-preview.css?v=20261101-progress-2"></head>
+<title>ATM10 Campus</title><link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><rect x='2' y='2' width='12' height='12' rx='3' fill='%2373d8e5'/></svg>"><link rel="stylesheet" href="/assets/app.css?v=20261101-polish-1"><link rel="stylesheet" href="/assets/blueprint-preview.css?v=20261101-polish-1"></head>
 <body>
 <a class="skip-link" href="#main">Zum Inhalt</a>
 <header class="top">
@@ -25,14 +25,14 @@
     <button class="small" id="refreshNow">Jetzt aktualisieren</button>
   </div>
   <section data-pane="overview">
-    <div class="page-heading"><h1>Baupläne</h1><button id="newBp">Neuer Bauplan</button></div>
+    <div class="page-heading"><h1>Baupläne</h1><button class="primary" id="newBp">Neuer Bauplan</button></div>
     <div class="summary-line" id="cards" aria-label="Campus-Status"></div>
     <div class="toolbar">
       <input class="search" id="search" type="search" placeholder="Bauplan suchen …" aria-label="Bauplan suchen">
       <select id="filter" aria-label="Status filtern"><option value="">Alle Status</option><option value="conflict">Konflikt</option><option value="warning">Geändert seit Planung</option><option value="ok">Offen</option><option value="built">Gebaut</option></select>
       <details class="menu toolbar-end"><summary>Downloads</summary><div class="menu-content"><a href="/api/remaining.zip" download>Rest-Baupläne (.zip)</a><a href="/api/blueprints.zip" download>Alle Baupläne (.zip)</a></div></details>
     </div>
-    <div class="table-wrap" role="region" aria-label="Baupläne" tabindex="0"><table class="blueprint-table">
+    <div class="table-wrap" role="region" aria-label="Baupläne" tabindex="0"><table class="blueprint-table stack-table">
       <thead><tr><th>Bauplan</th><th>Status</th><th>Version</th><th>Fortschritt</th><th>Aktion</th></tr></thead><tbody id="bpRows"></tbody>
     </table></div>
     <details id="overlapPanel"><summary id="overlapSummary">Überlappungen und Konflikte</summary><div id="overlaps" class="table-scroll muted"></div></details>
@@ -42,7 +42,7 @@
     <div class="page-heading"><h1>Koordinaten</h1><button id="coordinateDownload">Liste herunterladen</button></div>
     <p class="intro">Bauplan-Anker in der Welt. Drehung 0°, keine Spiegelung.</p>
     <div class="toolbar"><input class="search" id="coordinateSearch" type="search" placeholder="Bauplan suchen …" aria-label="Koordinaten suchen"><span class="muted" id="coordinateCount"></span></div>
-    <div class="table-wrap" role="region" aria-label="Einsetzkoordinaten" tabindex="0"><table class="coordinate-table"><thead><tr><th>Bauplan</th><th>Version</th><th>Zielkoordinaten</th><th>Aktion</th></tr></thead><tbody id="coordinateRows"></tbody></table></div>
+    <div class="table-wrap" role="region" aria-label="Einsetzkoordinaten" tabindex="0"><table class="coordinate-table stack-table"><thead><tr><th>Bauplan</th><th>Version</th><th>Zielkoordinaten</th><th>Aktion</th></tr></thead><tbody id="coordinateRows"></tbody></table></div>
     <details><summary>Koordinaten im Spiel verwenden</summary><p>Trage X, Y und Z im Positionsmenü der Schematic ein. Y ist der unterste Bauplan-Anker, nicht deine Standhöhe. Die Kanone kann woanders stehen.</p><p class="muted">Hier stehen die aktuellen Versionen. Ältere zugewiesene Versionen haben unter „Kanonen“ ihre eigenen Koordinaten. Für eine neue Version auch eine neue Schematic im Spiel drucken.</p></details>
   </section>
 
@@ -55,7 +55,7 @@
   </section>
 
   <section data-pane="cannons" class="hide">
-    <div class="page-heading"><h1>Kanonen</h1><button class="text-button" id="showSetup" aria-controls="ccSetup" aria-expanded="false">Einrichtung</button></div>
+    <div class="page-heading"><h1>Kanonen</h1></div>
     <p class="intro" id="meLine">ME-Bestand wird geladen …</p>
       <details id="ccSetup"><summary>Kanone verbinden</summary>
         <ol class="steps">
@@ -67,14 +67,14 @@
         </ol>
       </details>
     <div id="cannonList"></div>
-    <p class="footnote">Bestätigte, automatisch vorbereitete Kanonen kannst du als Admin hier starten oder fortsetzen. Stoppen und Zurücksetzen erfolgt im Spiel. Die App fragt alle 30 Sekunden den aktuellen Auftrag ab. Der Weltabgleich zeigt zusätzlich den zuletzt gespeicherten Weltstand.</p>
+    <p class="footnote">Admins starten oder setzen Kanonen hier fort. Stoppen und Zurücksetzen erfolgt im Spiel. Der Baustand stammt aus dem zuletzt gespeicherten Weltstand.</p>
   </section>
 
   <section data-pane="agent" class="hide">
     <div class="page-heading"><h1>Agent-Zugang</h1></div>
     <p class="intro">Tokens geben einem Agent oder ME-Computer Zugriff in deinem Namen.</p>
     <details class="form-section"><summary>Token anlegen</summary>
-      <div class="form-row"><label>Name<input id="tokName" placeholder="z. B. ME-Computer"></label><label>Zugriff<select id="tokScope"><option value="write">Lesen + Schreiben</option><option value="read">Nur lesen</option><option value="station">Station (ME-Computer)</option></select></label><button id="tokCreate">Token erzeugen</button></div>
+      <div class="form-row"><label>Name<input id="tokName" placeholder="z. B. ME-Computer"></label><label>Zugriff<select id="tokScope"><option value="write">Lesen + Schreiben</option><option value="read">Nur lesen</option><option value="station">Station (ME-Computer)</option></select></label><button class="primary" id="tokCreate">Token erzeugen</button></div>
       <div id="tokNew" class="hide" role="status"></div>
     </details>
     <div class="table-wrap" role="region" aria-label="API-Tokens" tabindex="0"><table><thead><tr><th>Name</th><th>Zugriff</th><th>Präfix</th><th>Erstellt</th><th>Zuletzt benutzt</th><th>Aktion</th></tr></thead><tbody id="tokRows"></tbody></table></div>
@@ -108,5 +108,5 @@
 <dialog class="drawer" id="drawer" aria-labelledby="blueprintTitle"></dialog>
 <dialog class="form-dialog" id="editDialog" aria-labelledby="editTitle"></dialog>
 <input type="file" id="hiddenFile" accept=".nbt" class="hide">
-<script type="module" src="/assets/app.js?v=20261101-progress-2"></script>
+<script type="module" src="/assets/app.js?v=20261101-polish-1"></script>
 </body></html>

@@ -1,10 +1,9 @@
-import { renderCannonPicker, renderNativeProgress, nativeProgressLabel } from './cannon-picker.js?v=20261101-progress-2';
-import { cannonRangeCard, distanceText } from './cannon-range.js?v=20261101-progress-2';
-import { coordinateFields, placementValues } from './placement.js?v=20261101-progress-2';
-import { blueprintPreview } from './blueprint-preview.js?v=20261101-progress-2';
+import { esc, fmt } from './format.js?v=20261101-polish-1';
+import { renderCannonPicker, renderNativeProgress, nativeProgressLabel } from './cannon-picker.js?v=20261101-polish-1';
+import { cannonRangeCard, distanceText } from './cannon-range.js?v=20261101-polish-1';
+import { coordinateFields, placementValues } from './placement.js?v=20261101-polish-1';
+import { blueprintPreview } from './blueprint-preview.js?v=20261101-polish-1';
 
-const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
-const fmt = n => n == null ? '–' : Number(n).toLocaleString('de-DE');
 const checked = value => value ? ' checked' : '';
 const states = { outofrange:'Außer Reichweite', alignment:'Material gesperrt', offline:'Computer offline', nocomputer:'Kein Computer', feeding:'Aktiv', preparing:'Wartet auf Schematic', waiting:'Wartet auf Material', full:'Kiste voll', done:'Fertig', paused:'Pausiert', unassigned:'Kein Bauplan', missing:'Bauplan fehlt', nosnapshot:'Kein Live-Bestand', error:'Fehler', start:'Startet', unknown:'Status ausstehend' };
 const jobs = { outofrange:'Außer Reichweite', queued:'Wartet auf Vorbereitung', applying:'Wird eingesetzt', waiting:'Wartet auf Kanone', ready:'Vorbereitet', empty:'Kein Rest zu bauen', consumed:'Abgearbeitet oder entnommen', error:'Vorbereitung fehlgeschlagen' };
@@ -52,12 +51,12 @@ export function renderCannonProgress(c) {
   const native=c.nativeProgress, t=c.totals;
   if(native?.fresh)return `<div class="cannon-progress">${renderNativeProgress(native)}</div>`;
   const pct=t?.start?Math.max(0,Math.min(100,Math.round((t.start-t.needed)/t.start*1000)/10)):null;
-  return `<div class="cannon-progress"><div class="bar" role="progressbar" aria-label="Materialfortschritt aus Weltabgleich" aria-valuemin="0" aria-valuemax="100"${pct==null?'':` aria-valuenow="${pct}"`}><i style="width:${pct??0}%"></i></div><p>Weltabgleich: ${pct==null?'Fortschritt noch unbekannt':fmt(pct)+' %'}${t?` · noch ${fmt(t.needed)} Items in ${fmt(t.kinds)} Sorten`:''}</p>${native?`<p class="muted">${esc(nativeProgressLabel(native))}, nicht live.${native.state==='completed'?' Auftrag abgeschlossen.':''}</p>`:''}</div>`;
+  return `<div class="cannon-progress"><div class="bar" role="progressbar" aria-label="Materialfortschritt aus Weltabgleich" aria-valuemin="0" aria-valuemax="100"${pct==null?'':` aria-valuenow="${pct}"`}><i style="width:${pct??0}%"></i></div><p>Weltabgleich: ${pct==null?'Fortschritt noch unbekannt':fmt(pct)+' %'}${!t?'':t.needed?` · noch ${fmt(t.needed)} Items in ${fmt(t.kinds)} Sorten`:' · kein Material offen'}</p>${native?`<p class="muted">${esc(nativeProgressLabel(native))}, nicht live.${native.state==='completed'?' Auftrag abgeschlossen.':''}</p>`:''}</div>`;
 }
 
 function renderCannonStart(c,isAdmin) {
   const start=cannonStartState(c,isAdmin),bp=c.blueprint;
-  return start.visible?`<div class="cannon-start"><button class="primary" data-act="start"${start.enabled?'':' disabled'} title="${esc(start.reason||'Bauplan und Kanone werden vor dem Start live geprüft.')}">${start.label}</button><span class="muted">${esc(start.reason||`Baut v${bp.version} an ${bp.origin.join(' ')}. Die Kanone wird vor dem Start live geprüft.`)}</span></div>`:'';
+  return start.visible?`<div class="cannon-start"><button class="primary" data-act="start"${start.enabled?'':' disabled'} title="${esc(start.reason||'Bauplan und Kanone werden vor dem Start live geprüft.')}">${start.label}</button>${c.done?'':`<span>${esc(start.reason||`Baut v${bp.version} an ${bp.origin.join(' ')}. Die Kanone wird vor dem Start live geprüft.`)}</span>`}</div>`:'';
 }
 
 // Live status must keep moving while editable form nodes and their baselines stay intact.
@@ -107,7 +106,7 @@ export function cannonSettingsPayload(data, c, isAdmin) {
   return { ...(Object.keys(options).length ? { options } : {}), ...(Object.keys(schematic).length ? { schematic } : {}) };
 }
 
-export function renderCannon(c, bpOptions, { isAdmin, alignmentHtml, ago }) {
+export function renderCannon(c, { isAdmin, alignmentHtml, ago }) {
   const o = c.options, bp = c.blueprint;
   const sc = c.schematic?.settings || {}, job = c.schematic?.job;
   const live = c.online && !c.status?.stale ? c.status : null;
@@ -121,23 +120,27 @@ export function renderCannon(c, bpOptions, { isAdmin, alignmentHtml, ago }) {
   const checkbox = (key, label, value) => `<label class="check"><input type="checkbox" name="${key}"${checked(value)}> ${label}</label>`;
   const shortages = (live?.shortages || []).map(x => `<li${x.crafting ? '' : ' class="warn"'}>${fmt(x.missing)} × ${esc(String(x.item).replace(/^minecraft:/,''))} <span class="muted">· im ME ${fmt(x.inME)}${x.crafting ? ' · wird gecraftet' : x.craftable ? ' · craftbar' : ''}</span>${x.error ? ` <span class="err">${esc(x.error)}</span>` : ''}</li>`).join('');
   return `<article class="panel cannon" data-cannon="${esc(c.name)}" aria-label="${esc(c.name)}">
-    <div class="cannon-heading"><h2>${esc(c.name)}</h2><span class="connection"><span class="dot${c.online ? ' on' : ''}"></span>${c.online ? 'Online' : 'Offline'}</span><span class="last-seen">${c.lastSeenAt ? 'Meldung ' + esc(ago(c.lastSeenAt)) : 'Noch keine Meldung'}</span></div>
-    <dl class="kv">
-      <dt>Bauplan</dt><dd>${bp ? blueprintPreview(bp) : ''}<span>${bp ? `${esc(bp.name)} · v${esc(bp.version)}` : 'Kein Bauplan zugewiesen'}</span>
+    <header class="cannon-heading"><h2>${esc(c.name)}</h2><span class="connection"><span class="dot${c.online ? ' on' : ''}"></span>${c.online ? 'Online' : 'Offline'}</span><span class="last-seen">${c.lastSeenAt ? 'Meldung ' + esc(ago(c.lastSeenAt)) : 'Noch keine Meldung'}</span><span data-cannon-state title="Materialversorgung" class="badge ${blocked ? 'warning' : state === 'done' ? 'built' : 'ok'}">${esc(states[state] || state)}</span></header>
+    <div class="cannon-job${bp ? '' : ' unassigned'}">
+      ${bp ? blueprintPreview(bp,{size:'large'}) : ''}
+      <div class="cannon-job-body">
+        <p class="eyebrow">Auftrag</p>
+        <h3>${bp ? `${esc(bp.name)} · v${esc(bp.version)}` : 'Kein Bauplan zugewiesen'}</h3>
+        ${bp ? `<div class="coordinate-row">${coordinateFields(bp)}${origin ? `<button class="text-button small" data-copy-coordinate="${origin.join(' ')}">X Y Z kopieren</button>` : ''}</div>` : ''}
+        <div data-cannon-progress>${renderCannonProgress(c)}</div>
+        <div data-cannon-start>${renderCannonStart(c,isAdmin)}</div>
         ${canEdit ? renderCannonPicker(c,ago) : ''}
-        ${canEdit && bp && bp.version !== bp.currentVersion ? `<button class="small" data-act="upgrade" data-bp="${esc(bp.id)}">Auf v${esc(bp.currentVersion)} aktualisieren</button>` : ''}</dd>
-      ${bp ? `<dt>Zielkoordinaten</dt><dd>${coordinateFields(bp)}${origin ? `<button class="text-button small" data-copy-coordinate="${origin.join(' ')}">Kopieren</button>` : ''}</dd>` : ''}
-      <dt>Kanonen-Position</dt><dd><span>${esc(location.label)}</span>${location.binding ? `<span class="mono">X ${location.binding.x} · Y ${location.binding.y} · Z ${location.binding.z}</span>` : isAdmin && location.retry ? '<button class="text-button small" data-act="discover">Erneut suchen</button>' : ''}</dd>
-      ${r?.state !== 'unbound' ? `<dt>Reichweite</dt><dd><span class="muted" title="Weniger als 256 Blöcke Luftlinie, Höhe eingeschlossen">${rangeText}</span><span class="badge ${r?.state === 'inrange' ? 'built' : 'warning'}">${r?.state === 'inrange' ? 'Erreichbar' : r?.state === 'outofrange' ? 'Außer Reichweite' : r?.state === 'dimension' ? 'Andere Dimension' : 'Kein Ziel'}</span>${bp && r?.version && r.version !== bp.version ? `<span class="muted">Für v${esc(r.version)}: ${esc(r.origin?.join(' '))}</span>` : ''}</dd>` : ''}
-      <dt>Materialversorgung</dt><dd><span data-cannon-state class="badge ${blocked ? 'warning' : state === 'done' ? 'built' : 'ok'}">${esc(states[state] || state)}</span>${live?.chest ? `<span class="muted">Kiste ${fmt(live.chest.used)}/${fmt(live.chest.slots)}</span>` : ''}</dd>
-      <dt>Schematic</dt><dd data-cannon-schematic>${esc(c.nativeProgress?.state==='completed'?'Auftrag abgeschlossen':sc.enabled ? jobs[job?.state] || (bp ? 'Wartet auf Vorbereitung' : 'Bauplan auswählen') : c.alignment?.enabled ? 'Automatische Vorbereitung ist aus' : 'Wartet auf Kanonen-Position')}${job?.version ? ` <span class="muted">v${esc(job.version)}</span>` : ''}${!sc.enabled && c.alignment?.enabled && isAdmin ? '<button class="text-button small" data-act="open-settings">Automatik einrichten</button>' : ''}</dd>
-    </dl>
-    <div data-cannon-start>${renderCannonStart(c,isAdmin)}</div>
-    <div data-cannon-progress>${renderCannonProgress(c)}</div>
+        ${canEdit && bp && bp.version !== bp.currentVersion ? `<button class="small" data-act="upgrade" data-bp="${esc(bp.id)}">Auf v${esc(bp.currentVersion)} aktualisieren</button>` : ''}
+      </div>
+    </div>
     ${r && ['outofrange','dimension'].includes(r.state) ? cannonRangeCard(c, isAdmin) : ''}
-    ${c.message && c.state !== 'outofrange' ? `<p class="notice${c.state === 'error' ? ' error' : ''}" role="status">${esc(c.message)}</p>` : ''}
-    ${sc.enabled && job && !c.done && !['ready','empty','outofrange'].includes(job.state) && job.message !== c.message ? `<p class="notice" role="status">${esc(job.message || jobs[job.state])}</p>` : ''}
-    ${live?.message && live.message !== c.message ? `<p class="muted">${esc(live.message)}</p>` : ''}
+    <div class="cannon-notes">${c.message && c.state !== 'outofrange' ? `<p class="notice${c.state === 'error' ? ' error' : c.done ? ' success' : ''}" role="status">${esc(c.message)}</p>` : ''}${sc.enabled && job && !c.done && !['ready','empty','outofrange'].includes(job.state) && job.message !== c.message ? `<p class="notice" role="status">${esc(job.message || jobs[job.state])}</p>` : ''}${live?.message && live.message !== c.message ? `<p class="muted">${esc(live.message)}</p>` : ''}</div>
+    <dl class="kv cannon-facts">
+      <div><dt>Kanonen-Position</dt><dd><span>${esc(location.label)}</span>${location.binding ? `<span class="mono">X ${location.binding.x} · Y ${location.binding.y} · Z ${location.binding.z}</span>` : isAdmin && location.retry ? '<button class="text-button small" data-act="discover">Erneut suchen</button>' : ''}</dd></div>
+      ${r?.state !== 'unbound' ? `<div><dt>Reichweite</dt><dd><span class="muted" title="Weniger als 256 Blöcke Luftlinie, Höhe eingeschlossen">${rangeText}</span><span class="badge ${r?.state === 'inrange' ? 'built' : 'warning'}">${r?.state === 'inrange' ? 'Erreichbar' : r?.state === 'outofrange' ? 'Außer Reichweite' : r?.state === 'dimension' ? 'Andere Dimension' : 'Kein Ziel'}</span>${bp && r?.version && r.version !== bp.version ? `<span class="muted">Für v${esc(r.version)}: ${esc(r.origin?.join(' '))}</span>` : ''}</dd></div>` : ''}
+      <div><dt>Schematic</dt><dd data-cannon-schematic>${esc(c.nativeProgress?.state==='completed'?'Auftrag abgeschlossen':sc.enabled ? jobs[job?.state] || (bp ? 'Wartet auf Vorbereitung' : 'Bauplan auswählen') : c.alignment?.enabled ? 'Automatische Vorbereitung ist aus' : 'Wartet auf Kanonen-Position')}${job?.version ? ` <span class="muted">v${esc(job.version)}</span>` : ''}${!sc.enabled && c.alignment?.enabled && isAdmin ? '<button class="text-button small" data-act="open-settings">Automatik einrichten</button>' : ''}</dd></div>
+      ${live?.chest ? `<div><dt>Versorgungskiste</dt><dd>${fmt(live.chest.used)} von ${fmt(live.chest.slots)} Slots belegt</dd></div>` : ''}
+    </dl>
     ${shortages ? `<details data-section="shortages"${live.shortages.length <= 3 ? ' open' : ''}><summary>Fehlendes Material (${live.shortages.length})</summary><ul class="short">${shortages}</ul></details>` : ''}
     <details class="settings" data-section="settings"><summary>Einstellungen</summary>
       ${!canEdit ? '<p class="muted">Diese gebundene Kanone kann nur ein Admin ändern.</p>' : ''}
@@ -147,11 +150,13 @@ export function renderCannon(c, bpOptions, { isAdmin, alignmentHtml, ago }) {
         <fieldset${canSchematic ? '' : ' disabled'}>${checkbox('s_enabled', 'Schematic automatisch vorbereiten', sc.enabled)}</fieldset>
         ${!c.alignment?.enabled ? '<p class="footnote">Die automatische Vorbereitung braucht eine eindeutig erkannte Kanone.</p>' : !isAdmin ? '<p class="footnote">Die automatische Vorbereitung kann ein Admin ändern.</p>' : ''}
         <details data-section="advanced"><summary>Weitere Einstellungen</summary>
-          ${checkbox('o_paused', 'Materialzufuhr pausieren', o.paused)}
-          <p class="footnote">Pausiert die Lieferung aus dem ME. Einen laufenden Bau hältst du an der Kanone im Spiel an.</p>
-          ${checkbox('o_skipBlocked', 'Zellen mit Maschinen nicht beliefern', o.skipBlocked)}
-          <div class="form-row">${[['bufferStacks','Puffer (Stacks)',1,16],['gunpowder','Schießpulver',0,64],['craftBatch','Craft-Menge',1,4096]].map(([k,label,min,max]) => `<label>${label}<input type="number" name="o_${k}" min="${min}" max="${max}" step="1" value="${o[k]}" required></label>`).join('')}</div>
-          <fieldset${canSchematic ? '' : ' disabled'}><label class="setting">Blöcke ersetzen<select name="s_replaceMode">${[[0,'Feste Blöcke stehen lassen'],[1,'Feste Blöcke nur durch feste ersetzen'],[2,'Vorhandene Blöcke ersetzen']].map(([v,label]) => `<option value="${v}"${(sc.replaceMode ?? 2) === v ? ' selected' : ''}>${label}</option>`).join('')}</select></label>
+          <div class="settings-group"><p class="eyebrow">Material</p>
+            ${checkbox('o_paused', 'Materialzufuhr pausieren', o.paused)}
+            <p class="footnote">Pausiert die Lieferung aus dem ME. Einen laufenden Bau hältst du an der Kanone im Spiel an.</p>
+            ${checkbox('o_skipBlocked', 'Zellen mit Maschinen nicht beliefern', o.skipBlocked)}
+            <div class="form-row">${[['bufferStacks','Puffer (Stacks)',1,16],['gunpowder','Schießpulver',0,64],['craftBatch','Craft-Menge',1,4096]].map(([k,label,min,max]) => `<label>${label}<input type="number" name="o_${k}" min="${min}" max="${max}" step="1" value="${o[k]}" required></label>`).join('')}</div>
+          </div>
+          <fieldset class="settings-group"${canSchematic ? '' : ' disabled'}><legend class="eyebrow">Schematic</legend><label class="setting">Blöcke ersetzen<select name="s_replaceMode">${[[0,'Feste Blöcke stehen lassen'],[1,'Feste Blöcke nur durch feste ersetzen'],[2,'Vorhandene Blöcke ersetzen']].map(([v,label]) => `<option value="${v}"${(sc.replaceMode ?? 2) === v ? ' selected' : ''}>${label}</option>`).join('')}</select></label>
             ${checkbox('s_autoUpdate', 'Neue Planversionen übernehmen', sc.autoUpdate !== false)}
             ${checkbox('s_skipMissing', 'Fehlende Materialien überspringen', sc.skipMissing)}
             ${checkbox('s_protectBlockEntities', 'Maschinen in der Welt schützen', sc.protectBlockEntities !== false)}
@@ -161,12 +166,14 @@ export function renderCannon(c, bpOptions, { isAdmin, alignmentHtml, ago }) {
       </fieldset><p class="form-error" role="alert"></p></form>
     </details>
     <details data-section="diagnostics"><summary>Verbindung und Diagnose</summary>
-      <p class="muted">${live?.script ? `Computer-Script ${esc(live.script)}` : 'Keine aktuelle Script-Meldung'} · Auftrag ${esc(c.assignment)}</p>
-      ${bp ? `<div class="row"><a class="btn small" href="/api/blueprints/${encodeURIComponent(bp.id)}/download?version=${bp.version}">NBT v${esc(bp.version)}</a>${c.restNbt ? `<a class="btn small" href="${esc(c.restNbt)}" download>Rest-NBT</a>` : ''}<button class="small" data-act="position" data-bp="${esc(bp.id)}">Bauplan und Position</button>${isAdmin ? `<button class="small" data-act="prepare"${sc.enabled ? '' : ' disabled'}>Rest-Plan neu vorbereiten</button>` : ''}</div>` : ''}
-      ${alignmentHtml}
-      ${job?.message ? `<p class="muted">${esc(job.message)}</p>` : ''}
-      ${(c.items || []).length ? `<p class="muted">Als Nächstes: ${c.items.slice(0,6).map(i => `${esc(String(i.item).replace(/^minecraft:/,''))} ${fmt(i.needed)}`).join(' · ')}</p>` : ''}
-      <button class="small danger" data-act="delete"${c.alignment?.enabled ? ' disabled title="Gebundene Station geschützt"' : ''}>Station entfernen</button>
+      <div class="diagnostics">
+        <p class="muted">${live?.script ? `Computer-Script ${esc(live.script)}` : 'Keine aktuelle Script-Meldung'} · Auftrag ${esc(c.assignment)}</p>
+        ${bp ? `<div class="row"><a class="btn small" href="/api/blueprints/${encodeURIComponent(bp.id)}/download?version=${bp.version}">NBT v${esc(bp.version)}</a>${c.restNbt ? `<a class="btn small" href="${esc(c.restNbt)}" download>Rest-NBT</a>` : ''}<button class="small" data-act="position" data-bp="${esc(bp.id)}">Bauplan und Position</button>${isAdmin ? `<button class="small" data-act="prepare"${sc.enabled ? '' : ' disabled'}>Rest-Plan neu vorbereiten</button>` : ''}</div>` : ''}
+        ${alignmentHtml}
+        ${job?.message ? `<p class="muted">${esc(job.message)}</p>` : ''}
+        ${(c.items || []).length ? `<p class="muted">Als Nächstes: ${c.items.slice(0,6).map(i => `${esc(String(i.item).replace(/^minecraft:/,''))} ${fmt(i.needed)}`).join(' · ')}</p>` : ''}
+        <button class="small danger" data-act="delete"${c.alignment?.enabled ? ' disabled title="Gebundene Station geschützt"' : ''}>Station entfernen</button>
+      </div>
     </details>
   </article>`;
 }

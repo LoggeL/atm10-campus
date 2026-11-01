@@ -4,8 +4,8 @@ import { VoxelRenderer } from './renderer.js';
 import { Navigation } from './navigation.js';
 import { buildAtlas } from './atlas.js';
 import { LAYERS, PRESETS, MODES, CAT, categoryModes, categoryColors, statusLabel, statusColor } from './layers.js';
-import { blueprintPreview, installPreviewFallbacks } from '/assets/blueprint-preview.js?v=20261101-progress-2';
-import { connectPolling } from '/assets/live-updates.js?v=20261101-progress-2';
+import { blueprintPreview, installPreviewFallbacks } from '/assets/blueprint-preview.js?v=20261101-polish-1';
+import { connectPolling } from '/assets/live-updates.js?v=20261101-polish-1';
 installPreviewFallbacks();
 
 const $ = s => document.querySelector(s);

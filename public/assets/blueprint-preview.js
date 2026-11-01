@@ -1,4 +1,4 @@
-const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+import { esc } from './format.js?v=20261101-polish-1';
 
 // Always pin the image to the displayed version, including older cannon assignments.
 export function blueprintPreview(bp, {size = 'thumbnail', eager = false} = {}) {

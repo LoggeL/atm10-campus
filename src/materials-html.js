@@ -31,7 +31,7 @@ export function materialsHtml(report, title, requestUrl) {
     ${me ? `<td class="num">${fmt(r.me)}</td><td class="num">${fmt(r.short)}</td><td>${r.craftable ? 'Ja' : 'Nein'}</td>` : ''}</tr>`).join('');
   return `<!doctype html>
 <html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Materialliste · ${esc(title)}</title><link rel="stylesheet" href="/assets/app.css?v=20261101-live-1"></head>
+<title>Materialliste · ${esc(title)}</title><link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><rect x='2' y='2' width='12' height='12' rx='3' fill='%2373d8e5'/></svg>"><link rel="stylesheet" href="/assets/app.css?v=20261101-polish-1"></head>
 <body class="materials-page"><a class="skip-link" href="#main">Zum Inhalt</a>
 <header class="top"><a class="brand" href="/app">ATM10 Campus</a><span class="spacer"></span><a href="/viewer">3D-Viewer</a><a href="/app">Baupläne</a><a href="/app#cannons">Kanonen</a></header>
 <main id="main"><div class="page-heading"><h1>Materialliste</h1></div><p class="intro">${esc(title)}</p>
@@ -39,14 +39,14 @@ export function materialsHtml(report, title, requestUrl) {
 <a class="btn" href="${link({format:'html', all: all ? 'false' : 'true'})}">${all ? 'Nur fehlende Materialien' : 'Gebautes zeigen'}</a>
 <label class="check"><input type="checkbox" id="materialDetails"> Planmengen zeigen</label>
 <details class="menu toolbar-end"><summary>Downloads</summary><div class="menu-content"><a href="${link({format:'text'})}">Textliste</a><a href="${link({format:'csv'})}">CSV herunterladen</a></div></details></div>
-<p><b>${fmt(t.needed)} Items</b> fehlen in der Weltaufnahme · ${fmt(t.kinds)} Sorten · etwa ${fmt(t.stacks)} Stacks.</p>
+<div class="summary-line" aria-label="Fehlendes Material laut Weltaufnahme"><span><b>${fmt(t.needed)}</b> Items fehlen</span><span><b>${fmt(t.kinds)}</b> Sorten</span><span><b>${fmt(t.stacks)}</b> Stacks (ca.)</span></div>
 <p class="material-meta">Weltstand: ${esc(when(report.snapshot?.worldTime))} · Snapshot #${esc(report.snapshot?.id)}. Kein Echtzeitstand.</p>
 ${me ? `<p class="material-meta">ME-Bestand: ${esc(when(me.at))} · ${esc(me.source)} · davon noch ${fmt(me.short)} Items zu beschaffen.</p>` : '<p class="muted">Kein ME-Bestand berücksichtigt.</p>'}
-${t.blocked || t.unknown ? `<p class="badge warning">${fmt(t.blocked)} Zellen mit Maschine im Weg · ${fmt(t.unknown)} Zellen ohne bekannten Bestand</p>` : ''}
+${t.blocked || t.unknown ? `<p class="notice">${fmt(t.blocked)} Zellen mit Maschine im Weg · ${fmt(t.unknown)} Zellen ohne bekannten Bestand</p>` : ''}
 <div class="table-wrap material-table" role="region" aria-label="Materialien" tabindex="0"><table>
 <thead><tr><th scope="col">Material / exakte Variante</th><th scope="col" class="num">Noch setzen</th><th scope="col" class="num">Stacks + Rest</th><th scope="col" class="num material-extra">Geplant</th><th scope="col" class="num material-extra">Gebaut</th>
 ${me ? '<th scope="col" class="num">Im ME</th><th scope="col" class="num">Fehlt im ME</th><th scope="col">Im ME craftbar</th>' : ''}</tr></thead>
 <tbody>${rows || `<tr><td colspan="${me ? 8 : 5}" class="muted">Für diese Auswahl fehlen keine Materialien.</td></tr>`}<tr id="materialEmpty" class="hide"><td colspan="${me ? 8 : 5}" class="muted">Kein Material passt zur Suche.</td></tr></tbody></table></div>
 <p class="footnote">Blockbilder aus den Minecraft- und Modtexturen. Connecting-Bilder zeigen einen einzelnen Block; die Kennzeichnung nennt die benötigte Variante.</p>
-</main><script src="/assets/materials.js?v=20261101-live-1" defer></script></body></html>`;
+</main><script src="/assets/materials.js?v=20261101-polish-1" defer></script></body></html>`;
 }

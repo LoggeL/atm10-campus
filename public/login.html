@@ -1,13 +1,13 @@
 <!doctype html>
 <html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Campus Login</title><link rel="stylesheet" href="/assets/app.css?v=20261101-live-1"></head>
+<title>Campus Login</title><link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><rect x='2' y='2' width='12' height='12' rx='3' fill='%2373d8e5'/></svg>"><link rel="stylesheet" href="/assets/app.css?v=20261101-polish-1"></head>
 <body><div class="center"><form class="authbox" id="f">
-<h1>ATM10 Campus</h1><div class="muted">Baupläne und Baufortschritt verwalten</div>
+<div class="brand">ATM10 Campus</div><h1>Anmelden</h1><div class="muted">Baupläne und Baufortschritt verwalten</div>
 <label for="u">Benutzername</label><input id="u" autocomplete="username" required>
 <label for="p">Passwort</label><input id="p" type="password" autocomplete="current-password" required>
 <button class="primary" type="submit">Anmelden</button>
 <p id="e" class="err" role="alert"></p>
-<p class="muted" style="font-size:12px">Kein Account? Lass dir von Logge eine Einladung schicken.</p>
+<p class="auth-note">Kein Account? Lass dir von Logge eine Einladung schicken.</p>
 </form></div>
 <script>
 document.getElementById('f').addEventListener('submit', async ev => {

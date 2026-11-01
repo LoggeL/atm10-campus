@@ -1,4 +1,4 @@
-const escapeHtml = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+import { esc } from './format.js?v=20261101-polish-1';
 
 // Always use the origin of the version being displayed, including pinned cannon jobs.
 export function placementValues(bp) {
@@ -12,7 +12,7 @@ export function coordinateFields(bp) {
 }
 export function placementCard(bp, label = 'Schematic platzieren') {
   const origin = placementValues(bp), version = bp.version ?? bp.currentVersion;
-  return `<div class="placement-card"><div class="row"><strong>${escapeHtml(label)}</strong><span class="badge ok">v${escapeHtml(version)}</span></div>
+  return `<div class="placement-card"><div class="row"><strong>${esc(label)}</strong><span class="badge ok">v${esc(version)}</span></div>
     ${coordinateFields(bp)}
     <p>Drehung <b>0°</b> · Spiegelung <b>keine</b></p>
     <p class="muted">X, Y und Z im Positionsmenü der Schematic eintragen. Das ist der Bauplan-Anker, nicht deine Standhöhe oder die Position der Kanone.</p>

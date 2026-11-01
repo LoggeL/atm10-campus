@@ -14,7 +14,7 @@ function values(c) {
   for (const [key,value] of Object.entries(c.schematic.settings)) if (typeof value !== 'boolean' || value) data.set('s_'+key,String(value));
   return data;
 }
-const render = (c, isAdmin = true) => renderCannon(c, [['west','Nordhaus West']], {isAdmin, alignmentHtml:'', ago:()=>'gerade eben'});
+const render = (c, isAdmin = true) => renderCannon(c, {isAdmin, alignmentHtml:'', ago:()=>'gerade eben'});
 
 test('saving unchanged settings is a no-op; feeder edits never resend the schematic', () => {
   const c = station(), data = values(c);

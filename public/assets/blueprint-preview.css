@@ -1,4 +1,4 @@
-.blueprint-preview{position:relative;display:block;flex:none;overflow:hidden;aspect-ratio:8/5;background:#101923;border:1px solid #2c3948;border-radius:6px;color:#a5b2c2}
+.blueprint-preview{position:relative;display:block;flex:none;overflow:hidden;aspect-ratio:8/5;background:#0c141c;border:1px solid var(--line);border-radius:7px;color:var(--muted)}
 .blueprint-preview.thumbnail{width:152px}
 .blueprint-preview.small{width:96px}
 .blueprint-preview.large{width:100%}
