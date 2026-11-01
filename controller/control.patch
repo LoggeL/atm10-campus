@@ -1,0 +1,38 @@
+--- control.py
++++ control.py
+@@ -17,6 +17,7 @@
+ from mc_status import status as minecraft_status
+ from events import EventStream, LogTail, plain_text
+ from awake import Lease, parse_duration
++from campus_cannon import CannonBridge, RequestAuth, serve_campus
+ 
+ BASE = Path('/home/logge/minecraft/atm10')
+ CONTAINER = 'atm10'
+@@ -283,7 +284,15 @@
+             self.lock.release()
+ 
+ 
+-def make_server(address, token, controller):
++def make_server(address, token, controller, campus_bridge=None, campus_secret=None):
++    base = Path(getattr(controller, 'base', BASE))
++    if campus_secret is None:
++        secret_path = base / 'discord/control/campus-secret'
++        campus_secret = secret_path.read_text().strip() if secret_path.exists() else ''
++    campus_auth = RequestAuth(campus_secret)
++    if campus_bridge is None and len(campus_secret) >= 32:
++        campus_bridge = CannonBridge(base, lambda command: controller.run(
++            'docker', 'exec', CONTAINER, 'rcon-cli', command, timeout=4))
+     class Handler(BaseHTTPRequestHandler):
+         def log_message(self, *_args):
+             pass  # Never log headers, credentials or raw Discord input.
+@@ -331,6 +340,10 @@
+                 self.reply(503, {'error': 'Serverstatus momentan nicht verfügbar.'})
+ 
+         def do_POST(self):
++            if self.path.startswith('/campus/'):
++                if campus_bridge is None:
++                    return self.reply(401, {'error': 'Campus-Bridge nicht aktiviert.'})
++                return serve_campus(self, controller, campus_bridge, campus_auth)
+             if not self.permitted():
+                 return
+             if self.path not in ('/action', '/chat', '/awake'):

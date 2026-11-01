@@ -16,6 +16,7 @@ import { zipStore } from './zip.js';
 import { openapi } from './openapi.js';
 import { registerAgentRoutes } from './api-agent.js';
 import { registerMaterialRoutes } from './api-materials.js';
+import { registerAlignment } from './alignment.js';
 import { registerStationRoutes, endCannonJobs } from './api-stations.js';
 import { sceneJson, blueprintsBinary } from './viewer-data.js';
 
@@ -266,7 +267,8 @@ export async function buildServer(config = defaultConfig) {
   });
 
   registerAgentRoutes(app, campus);
-  registerStationRoutes(app, campus, registerMaterialRoutes(app, campus));
+  const alignment = registerAlignment(app, campus);
+  registerStationRoutes(app, campus, registerMaterialRoutes(app, campus), alignment);
 
   // ---------- viewer data ----------
   const snapParam = q => (q.snapshot && q.snapshot !== 'none' ? campus.getSnapshot(Number(q.snapshot)).id : q.snapshot === 'none' ? null : campus.latestSnapshot('live')?.id ?? null);

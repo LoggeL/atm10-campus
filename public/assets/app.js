@@ -178,7 +178,7 @@ $('snapNow').onclick = guard(async () => {
 });
 
 // ---------- cannons ----------
-const CANNON_STATE = { offline: 'Computer offline', nocomputer: 'Kein Computer', feeding: 'Liefert', waiting: 'Wartet auf Material', full: 'Kiste voll', done: 'Fertig', paused: 'Pausiert', unassigned: 'Kein Bauplan', missing: 'Bauplan fehlt', nosnapshot: 'Kein Live-Bestand', error: 'Fehler', start: 'Startet' };
+const CANNON_STATE = { alignment: 'Ausrichtung gesperrt', offline: 'Computer offline', nocomputer: 'Kein Computer', feeding: 'Liefert', waiting: 'Wartet auf Material', full: 'Kiste voll', done: 'Fertig', paused: 'Pausiert', unassigned: 'Kein Bauplan', missing: 'Bauplan fehlt', nosnapshot: 'Kein Live-Bestand', error: 'Fehler', start: 'Startet' };
 const shortName = item => String(item).replace(/^minecraft:/, '');
 let cannonTimer = null;
 async function loadCannons() {
@@ -201,6 +201,22 @@ function scheduleCannons() {
     loadCannons().catch(() => scheduleCannons());
   }, 15e3);
 }
+function alignmentCard(c) {
+  const a=c.alignment || {state:'disabled',message:'Ausrichtung deaktiviert: keine bestätigte Blockbindung.'}, b=a.binding, d=a.desired, o=a.observed;
+  return `<details class="alignment"><summary>Ausrichtung: ${esc(a.state==='aligned'?'Live bestätigt':a.state==='disabled'?'Deaktiviert / nicht gebunden':'Material gesperrt · '+a.state)}</summary>
+    <p class="${a.state==='aligned'?'muted':'warn'}">${esc(a.message)}</p>
+    ${b?`<p>Bestätigter Block: <span class="mono">${esc(b.dimension)} ${esc(b.x)} ${esc(b.y)} ${esc(b.z)}</span> · Owner ${esc(b.owner)}</p>`:''}
+    ${d?`<p>Soll: ${esc(d.file)} · v${esc(d.version)} · Anker ${esc(d.anchor.join(' '))} · Rotation none / Spiegelung none<br><small class="mono">SHA256 ${esc(d.sha256)}</small></p>`:''}
+    ${o?`<p>Ist (Live): ${esc(o.state)} · AmountPlaced ${esc(o.amountPlaced)} · Datei ${esc(o.components?.['create:schematic_file'])} · Owner ${esc(o.components?.['create:schematic_owner'])}<br>Anker ${esc(o.components?.['create:schematic_anchor']?.join(' '))} · Rotation ${esc(o.components?.['create:schematic_rotation'])} · Spiegelung ${esc(o.components?.['create:schematic_mirror'])}<br>Printer-Anker ${esc(o.printer?.Anchor?.join(' ') || 'kein Cache-Anker')}<br><small>Live-Dateihash ${esc(o.fileHash || 'Datei fehlt / nicht prüfbar')}</small></p>`:''}
+    <p class="warn">Nur Campus-Materialfreigabe, kein unveränderlicher Baulock: Die native Create-GUI und manuell bereitgestellte Materialien können das umgehen. Bestehender Kisteninhalt bleibt verfügbar. Während Apply niemand im Spiel die Kanone bedienen; Readback ist keine dauerhafte GUI-Sperre.</p>
+    ${me?.user?.role==='admin'?`<p>Blockbindung manuell eingeben. Beispiel (nicht vorausgefüllt): minecraft:overworld 94 64 21, Owner KGZJonny. Erst am richtigen Block prüfen, dann ausdrücklich binden. Die Probe schreibt keine Welt-NBT.</p>
+      <div class="row"><label>Dimension <select data-bind="dimension">${['minecraft:overworld','minecraft:the_nether','minecraft:the_end'].map(dim=>`<option${b?.dimension===dim?' selected':''}>${dim}</option>`).join('')}</select></label>${['x','y','z'].map(k=>`<label>${k} <input data-bind="${k}" type="number" step="1" value="${esc(b?.[k]??'')}" required></label>`).join('')}<label>Schematic-Owner <input data-bind="owner" value="${esc(b?.owner??'')}" autocomplete="off" maxlength="16" required></label></div>
+      <button class="small" data-act="alignment-probe">Block read-only prüfen / Bindung bestätigen</button>
+      ${b?'<button class="small primary" data-act="alignment-apply">Nach Stop/Reset: Ausrichtung anwenden / erneut versuchen</button>':''}
+      <p class="muted">Aktivierung benötigt Feeder 1.1.0 mit frischer Statusmeldung. Apply nur STOPPED, AmountPlaced=0, AmountToPlace=0, ohne Printer-Cache; sonst im Spiel bewusst stoppen/zurücksetzen bzw. Schematic entnehmen. Es gibt keinen automatischen Reset. Exakte gewählte NBT-Version am Schematic Table hochladen und einlegen. Bauplanwechsel stellt den neuen Anker bereit und versucht sicheres Apply; bei laufender/gecachter Kanone bleibt er ausstehend.</p>`:''}
+  </details>`;
+}
+// alignment-card-end
 function cannonCard(c, bpOptions) {
   const o = c.options, st = c.status, t = c.totals, bp = c.blueprint;
   const pct = t && t.start ? Math.max(0, Math.min(100, Math.round((t.start - t.needed) / t.start * 1000) / 10)) : null;
@@ -231,7 +247,8 @@ function cannonCard(c, bpOptions) {
       <label>Schießpulver <input type="number" min="0" max="64" data-o="gunpowder" value="${o.gunpowder}"></label>
       <label>Craft-Menge <input type="number" min="1" max="4096" data-o="craftBatch" value="${o.craftBatch}"></label>
     </div>
-    <div class="row"><button class="small danger" data-act="delete">Entfernen</button></div>
+    ${alignmentCard(c)}
+    <div class="row"><button class="small danger" data-act="delete"${c.alignment?.enabled?' disabled title="Gebundene Station geschützt"':''}>Entfernen</button></div>
   </div>`;
 }
 $('cannonList').addEventListener('change', guard(async e => {
@@ -254,6 +271,25 @@ $('cannonList').addEventListener('click', guard(async e => {
   const b = e.target.closest('button[data-act]'), card = e.target.closest('[data-cannon]');
   if (!b || !card) return;
   const name = card.dataset.cannon;
+  const alignmentUrl='/api/cannons/'+encodeURIComponent(name)+'/alignment';
+  if(b.dataset.act==='alignment-probe') {
+    const binding={};
+    for(const k of ['dimension','x','y','z','owner']) {
+      const value=card.querySelector(`[data-bind="${k}"]`).value;
+      if(!value)throw new Error('Dimension, x/y/z und Owner vollständig eingeben.');
+      binding[k]=['x','y','z'].includes(k)?Number(value):value;
+    }
+    const probe=await api(alignmentUrl+'/probe',{method:'POST',body:{binding}});
+    const o=probe.observed;
+    if(confirm(`READ-ONLY PROBE: create:schematicannon in ${binding.dimension} ${binding.x} ${binding.y} ${binding.z}\nNative State: ${o.state}, AmountPlaced ${o.amountPlaced}\nOwner-Bindung: ${binding.owner}\nEingelegte Datei: ${o.components?.['create:schematic_file']||'keine'}\n\nIst dies wirklich die Kanone dieser Station? Bindung und Materialschutz AKTIVIEREN? Bis zum sicheren Apply wird die Materiallieferung gesperrt. Kein Welt-NBT-Write durch Binden. Native GUI bleibt bedienbar.`)) {
+      await api(alignmentUrl+'/bind',{method:'POST',body:{binding,nonce:probe.nonce,confirm:true}});
+      toast('Blockbindung bestätigt. Materialschutz aktiv; nach Stop/Reset Ausrichtung anwenden.');
+    }
+  }
+  if(b.dataset.act==='alignment-apply') {
+    if(!confirm('Nur gestoppte, ungestartete Kanone ohne Printer-Cache. Niemand darf während Apply die native GUI bedienen. Sichere Ausrichtung jetzt versuchen (kein Reset)?'))return;
+    const result=await api(alignmentUrl+'/apply',{method:'POST',body:{}});toast(result.state==='aligned'?'Ausrichtung live bestätigt.':result.message);
+  }
   if (b.dataset.act === 'delete') {
     if (!confirm(`${name} entfernen? Läuft der Computer noch, meldet er sich gleich wieder an.`)) return;
     await api('/api/cannons/' + encodeURIComponent(name), { method: 'DELETE' });

@@ -30,5 +30,7 @@ export const config = {
   seedHtml: process.env.SEED_HTML || '',
   publicUrl: (process.env.PUBLIC_URL || 'http://localhost:3000').replace(/\/$/, ''),
   cookieSecure: process.env.COOKIE_SECURE ? process.env.COOKIE_SECURE === 'true' : process.env.NODE_ENV === 'production',
+  cannonBridgeUrl: process.env.CANNON_BRIDGE_URL || '',
+  cannonBridgeSecret: process.env.CANNON_BRIDGE_SECRET || '',
   maxUploadBytes: Number(process.env.MAX_UPLOAD_MB || 64) * 1024 * 1024,
 };

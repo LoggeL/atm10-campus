@@ -1,0 +1,41 @@
+# Trusted cannon alignment (Campus 0.3.0 / feeder 1.1.0)
+
+## Rollout and use
+
+Existing stations are **unbound and explicitly disabled by default**. Installing this release does not select a block, change an assignment, reset counters, or modify a cannon. Existing unbound supply behavior remains unchanged.
+
+1. Open **Kanonen → Ausrichtung** as a browser-session admin. Ensure the CC feeder reports **1.1.0** and a fresh status. Its existing automatic update setting normally upgrades it; otherwise rerun the existing installer. Feeder state/counters remain in `.campus-state`. Binding refuses old feeders because they can reuse stale plans.
+2. Manually enter the dimension, cannon block x/y/z, and the exact Create Schematic Table upload owner. `minecraft:overworld 94 64 21 / KGZJonny` is an **example discovered block, not a preconfigured station binding**. Confirm the actual station/physical block yourself.
+3. Click **Block read-only prüfen / Bindung bestätigen**. The first operation is read-only, requires a canonical `create:schematicannon`, and displays native state and placement counter. Cancel leaves the station unbound. Explicit confirmation consumes a two-minute, single-use probe nonce and persists the binding in both Campus and the host controller registry. Binding enables the supply gate but does not write world NBT or apply to an already loaded printer.
+4. Select the desired blueprint/version. Campus pins its filename, version, immutable SHA256 and origin, the confirmed upload owner, and rotation/mirror `none`. Selection automatically attempts guarded apply only for an enabled binding. A refusal leaves the selected revision queued and shows the specific reason. Download the **full selected version** and upload that exact file through the Schematic Table with the confirmed owner; a remaining-NBT export has a different hash and is deliberately not accepted.
+5. In game, deliberately stop/reset the cannon and, if necessary, remove the schematic to clear its printer. Reinsert the exact schematic with the canonical filename/owner. Do not just pause a running printer. Click **Nach Stop/Reset: Ausrichtung anwenden / erneut versuchen**. There is no automatic reset and no apply on binding or read-only GETs. Native `STOPPED`, `AmountPlaced=0`, `AmountToPlace=0`, an empty/uninitialized printer cache and exact file hash/identity are required. A new or explicitly reset cannon is the supported target.
+6. After apply, the UI shows desired and live observed anchor, native state, counter, filename, owner, file hash and printer anchor. Every bound feeder plan obtains a new trusted live probe. Mismatch, missing receipt, changed version/assignment, offline bridge or unknown state yields no items, no gunpowder, no crafting and a paused plan. Feeder 1.1.0 polls enabled plans every five seconds, expires its local permission after ten seconds, invalidates it on request failure, and checks before every export/craft. Unbound stations retain the original cadence and behavior.
+
+Bound station deletion/recreation is rejected to prevent accidental removal of the supply gate. Bound assignments/options require browser-admin authorization. All probe/bind/apply attempts are audited through Campus activity (apply refusals included).
+
+## Boundary and races — not an immutable build lock
+
+This is a **Campus feeder interlock**, not an in-server Create mod or a native GUI lock. Players can still start Create through its GUI and supply materials manually. Materials already in a chest, fuel already loaded, in-flight blocks and cached CC permission within its short lease cannot be recalled. Do not use this as a real-time world protection mechanism.
+
+Do not operate the native GUI during apply. The final write is a single server-thread `execute if block ...` command, rechecking canonical block identity, STOPPED state, zero counters, input filename/owner and absence of cached `Printer.Anchor`/`CurrentPos` at the write instant. It merges **only four components** (anchor int array, rotation, mirror, deployed) on integer input `Slot:0`, preserving all other item components, inventory slots, cannon NBT and fuel. It neither replaces the whole inventory nor changes counters/state. Readback must confirm the stopped zero-counter target and exact components/hash; no rollback is attempted against a potentially newly active printer. RCON sequencing and readback do not establish a permanent GUI/player lock. The serialized printer exposes its anchor but not a separate cached rotation/hash; live checks include item components, file hash and the printer anchor, backed by the prior guarded apply receipt. Native edits remain outside the enforcement boundary.
+
+## Host integration
+
+`controller/campus_cannon.py` is stdlib-only. Install beside the existing host `control.py`; `controller/control.patch` is the small integration patch. The runtime remains `/home/logge/minecraft/atm10/discord/control.py` under `atm10-control.service`. Only this service needs restart, **not Minecraft**. Existing Discord `/status`, `/events`, `/action`, `/chat`, `/awake` routes and credentials are unchanged.
+
+The controller binds to its existing internal `172.17.0.1:25576`. A separate random mode-0600 `discord/control/campus-secret` authenticates only four POST routes: `/campus/probe`, `/campus/bind`, `/campus/inspect`, `/campus/apply`. Requests are HMAC-SHA256 signed over path, timestamp, unique nonce and exact body, expire after 30 seconds, reject replay and any browser Origin, and have bounded body size. The old Discord bearer token does not authorize these routes; the Campus signing secret does not authorize server stop/restart/chat. The secret is host/server-only (`CANNON_BRIDGE_SECRET`), never returned to browsers or CC. Set `CANNON_BRIDGE_URL=http://172.17.0.1:25576` and persist both environment variables in Dokploy's application configuration.
+
+The host registry is `discord/cannon-registry.json`, created only by confirmed binding. Inspect/apply take only an existing station name; candidate probe accepts strictly validated dimension/coordinates/owner and is read-only. Supported dimensions are overworld, Nether, End; x/z within world bounds, y -64..319, vanilla-safe owner, canonical uploaded filename and hash. Uploaded files are read only below `data/schematics/uploaded/<owner>/`; symlinks/traversal are refused. There is no arbitrary command/RCON endpoint, Docker socket in Campus, world-file write path, inventory overwrite, mod install, Discord post, or Minecraft restart.
+
+The installed Create 6.0.10 jar was inspected: STOPPED resets a loaded printer in `tickPrinter`; the serialized uninitialized `Printer` contains `DeferredBlocks:[]`, `PrintStage:"BLOCKS"`, `EntityProgress:-1` but no `Anchor`/`CurrentPos`. Input inventory Slot is an **int**, not a byte. Anchors use `[I;x,y,z]`. `rcon-cli` appends ANSI reset sequences, stripped before bounded fail-closed SNBT parsing.
+
+## Verification
+
+- `LOG_LEVEL=silent npm test`
+- `node --check public/assets/app.js`
+- `/usr/bin/python3 test/controller_alignment_test.py` (actual HTTP hook test requires this host's existing controller; uses only fixture data)
+- `uv run --with lupa python test/feeder_alignment_test.py` (executes actual lease helper and compiles entire Lua script)
+- Existing bot/controller: from its directory, `/usr/bin/python3 -m unittest discover -s tests -q`.
+- `docker build .` builds the actual static JS/backend artifact; there is no separate frontend bundler in this repository.
+
+Production smoke tests must remain **read-only**: authenticate controller status; unsigned and browser-Origin bridge requests must be 401; registered-only inspect of unbound `kanone-11` must refuse; signed candidate probe may inspect the operator example without binding. Do not run live apply or register the user's active cannon as a deployment test. Test stopped apply, NBT preservation, running/paused/cached refusals, hash mismatch, auth/replay and post-write counter changes against injected fixtures, not the player's world.

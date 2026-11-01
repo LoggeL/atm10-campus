@@ -3,7 +3,7 @@
 -- through an Advanced Peripherals ME Bridge. Which blueprint and the options are set in the web app (tab "Kanonen");
 -- this computer only knows URL, a station token and its cannon name (install: wget run <url>/cc/install.lua).
 -- Strings shown on screen use Latin-1 escapes (\228 = ae-umlaut ...), the CC font is ISO-8859-1.
-local VERSION = "1.0.1"
+local VERSION = "1.1.0"
 
 settings.define("campus.url", { description = "Campus-URL", type = "string" })
 settings.define("campus.token", { description = "API-Token mit Scope Station", type = "string" })
@@ -28,6 +28,18 @@ local GUNPOWDER = "minecraft:gunpowder"
 
 -- ---------- helpers ----------
 local function now() return os.epoch("utc") / 1000 end
+
+-- alignment-lease-start
+local function alignmentReady(p, receivedAt, clock)
+  if not p or not p.alignment or not p.alignment.enabled then return true end
+  local a = p.alignment
+  return a.state == "aligned" and type(a.leaseSeconds) == "number"
+    and a.leaseSeconds > 0 and a.leaseSeconds <= 10
+    and clock >= receivedAt and clock - receivedAt < a.leaseSeconds
+end
+-- alignment-lease-end
+local planReceivedAt = -1e9
+local plan
 
 -- Server texts are UTF-8; the terminal font is Latin-1.
 local SUBST = { [0x2013] = "-", [0x2014] = "-", [0x2018] = "'", [0x2019] = "'", [0x201A] = "'", [0x201C] = '"', [0x201D] = '"', [0x201E] = '"', [0x2026] = "...", [0x2192] = ">", [0x00D7] = "x" }
@@ -184,7 +196,10 @@ local function transfer(which, item, count)
   api = nil
   return 0, tostring(r)
 end
-local function export(item, count) return transfer("export", item, count) end
+local function export(item, count)
+  if not alignmentReady(plan, planReceivedAt, now()) then return 0, "Ausrichtung nicht live bestaetigt" end
+  return transfer("export", item, count)
+end
 local function import(item, count) return transfer("import", item, count) end
 
 local function meAmount(item)
@@ -196,7 +211,7 @@ local function isCraftable(item) return call(bridge.isCraftable or bridge.isItem
 local function isCrafting(item) return call(bridge.isCrafting or bridge.isItemCrafting, { name = item }) == true end
 
 -- ---------- feeding ----------
-local plan, view = nil, { shortages = {}, state = "start", message = nil }
+local view = { shortages = {}, state = "start", message = nil }
 
 local function returnLeftovers()
   local back = 0
@@ -229,7 +244,7 @@ local function shortage(it, missing, have, err)
     if s.craftable then
       s.crafting = isCrafting(it.item)
       local last = state.craftAt[it.item] or 0
-      if not s.crafting and plan.options.autoCraft and now() - last > 60 then
+      if not s.crafting and plan.options.autoCraft and now() - last > 60 and alignmentReady(plan, planReceivedAt, now()) then
         local amount = math.max(1, math.min(plan.options.craftBatch, it.needed - have - inME))
         local ok, cerr = call(bridge.craftItem, { name = it.item, count = amount })
         state.craftAt[it.item] = now()
@@ -355,7 +370,7 @@ end
 -- ---------- screen ----------
 local LABELS = {
   start = "Startet", feeding = "Liefert", waiting = "Wartet auf Material", full = "Kiste voll", done = "Fertig",
-  paused = "Pausiert", unassigned = "Kein Bauplan", missing = "Bauplan fehlt", nosnapshot = "Kein Live-Bestand", error = "Fehler",
+  alignment = "Ausrichtung gesperrt", paused = "Pausiert", unassigned = "Kein Bauplan", missing = "Bauplan fehlt", nosnapshot = "Kein Live-Bestand", error = "Fehler",
 }
 local function draw(t)
   local w, h = t.getSize()
@@ -412,10 +427,11 @@ local function tick()
   if now() - planAt >= iv.plan then
     local p, err = request("GET", "/api/cannons/" .. NAME .. "/plan")
     if p then
-      plan, planAt = p, now()
+      plan, planAt, planReceivedAt = p, now(), now()
       if settings.get("campus.autoupdate") and p.script and p.script ~= VERSION then selfUpdate(p.script) end
     else
-      view.error, planAt = err, now() - iv.plan + 15
+      view.error, planAt = err, now() - iv.plan + 5
+      if plan and plan.alignment and plan.alignment.enabled then planReceivedAt = -1e9 end
     end
   end
   view.message = view.notice and now() < view.noticeUntil and view.notice or nil
@@ -424,7 +440,8 @@ local function tick()
     view.state, view.error, view.shortages, view.chest = "error", perr, {}, nil
   elseif plan then
     if plan.assignment ~= state.assignment then startAssignment(plan) end
-    if not plan.blueprint then view.state, view.message, view.shortages = plan.state, plan.message and latin1(plan.message), {}
+    if not alignmentReady(plan, planReceivedAt, now()) then view.state, view.message, view.shortages = "alignment", latin1(plan.message or "Live-Freigabe fehlt oder abgelaufen"), {}
+    elseif not plan.blueprint then view.state, view.message, view.shortages = plan.state, plan.message and latin1(plan.message), {}
     elseif plan.options.paused then view.state, view.shortages = "paused", {}
     elseif plan.done then
       if plan.options.returnLeftovers and not state.returned then

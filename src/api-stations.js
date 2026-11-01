@@ -63,7 +63,7 @@ export function endCannonJobs(db, bpId, actor) {
   return rows.length;
 }
 
-export function registerStationRoutes(app, campus, mat) {
+export function registerStationRoutes(app, campus, mat, alignment) {
   const db = campus.db;
   const getRow = name => db.prepare('SELECT * FROM cannons WHERE name = ?').get(name);
   const checkName = name => {
@@ -120,15 +120,17 @@ export function registerStationRoutes(app, campus, mat) {
     };
   };
 
-  const cannonView = (row, snap) => {
+  const cannonView = async (row, snap) => {
     let plan = null;
     try { plan = planFor(row, snap); } catch (e) { plan = { state: 'error', message: e.message }; }
     const status = JSON.parse(row.status_json || 'null');
+    const alignmentView = await alignment.view(row.name);
+    const blocked = alignmentView.enabled && alignmentView.state !== 'aligned';
     return {
-      name: row.name, assignment: row.assignment, createdAt: row.created_at, updatedAt: row.updated_at, lastSeenAt: row.last_seen_at,
+      name: row.name, assignment: row.assignment, alignment: alignmentView, createdAt: row.created_at, updatedAt: row.updated_at, lastSeenAt: row.last_seen_at,
       online: !!row.last_seen_at && Date.now() - new Date(row.last_seen_at) < ONLINE_MS,
       options: normalizeOptions(JSON.parse(row.options_json || '{}')),
-      blueprint: plan.blueprint ?? null, state: plan.state, message: plan.message ?? null, totals: plan.totals ?? null, done: !!plan.done,
+      blueprint: plan.blueprint ?? null, state: blocked ? 'alignment' : plan.state, message: blocked ? alignmentView.message : plan.message ?? null, totals: plan.totals ?? null, done: !blocked && !!plan.done,
       restNbt: plan.restNbt ?? null, items: plan.items ?? [],
       status: status && status.assignment === row.assignment ? status : status && { ...status, stale: true },
     };
@@ -139,7 +141,7 @@ export function registerStationRoutes(app, campus, mat) {
   app.get('/api/cannons', async req => {
     requireActor(req, 'read');
     const snap = liveSnap();
-    return db.prepare('SELECT * FROM cannons ORDER BY name').all().map(r => cannonView(r, snap));
+    return Promise.all(db.prepare('SELECT * FROM cannons ORDER BY name').all().map(r => cannonView(r, snap)));
   });
 
   app.get('/api/cannons/:name', async req => {
@@ -155,6 +157,8 @@ export function registerStationRoutes(app, campus, mat) {
     const a = requireActor(req, 'write');
     const name = checkName(req.params.name), b = req.body || {};
     const row = getRow(name) || ensureRow(name);
+    if (alignment.enabled(name)) alignment.admin(req);
+    if (alignment.busy(name)) throw new HttpError(409, 'Apply läuft. Auftrag bleibt unverändert; danach erneut wählen.');
     const options = normalizeOptions(b.options, JSON.parse(row.options_json || '{}'));
     let { blueprint_id: bpId, version, assignment, start_json: start } = row;
     const prevSkip = normalizeOptions(JSON.parse(row.options_json || '{}')).skipBlocked;
@@ -176,11 +180,15 @@ export function registerStationRoutes(app, campus, mat) {
     if (bpId && !start && snap) start = startFor(bpId, version, options, snap);
     db.prepare('UPDATE cannons SET blueprint_id = ?, version = ?, assignment = ?, options_json = ?, start_json = ?, updated_at = ? WHERE name = ?')
       .run(bpId, version, assignment, JSON.stringify(options), start, now(), name);
+    if (alignment.enabled(name) && assignment !== row.assignment && bpId) {
+      try { await alignment.apply(name, a); } catch { /* Queued: UI shows exact live refusal; never reset a printer. */ }
+    }
     return cannonView(getRow(name), snap);
   });
 
   app.delete('/api/cannons/:name', async req => {
     const a = requireActor(req, 'write');
+    if (alignment.enabled(req.params.name)) throw new HttpError(409, 'Gebundene Station kann nicht gelöscht werden; Materialschutz bleibt aktiv.');
     const r = db.prepare('DELETE FROM cannons WHERE name = ?').run(req.params.name);
     if (!r.changes) throw new HttpError(404, 'Kanone nicht gefunden.');
     logActivity(db, a, 'cannon.delete', req.params.name);
@@ -192,7 +200,7 @@ export function registerStationRoutes(app, campus, mat) {
     requireActor(req, 'station');
     const row = ensureRow(req.params.name);
     seen(row.name);
-    return planFor(row, liveSnap());
+    return alignment.gate(row.name, planFor(row, liveSnap()));
   });
 
   app.post('/api/cannons/:name/status', async req => {
