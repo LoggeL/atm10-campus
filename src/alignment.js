@@ -100,7 +100,7 @@ export function registerAlignment(app, campus) {
     if(applying.has(r.name.toLowerCase()))throw new HttpError(409,'Apply läuft. Bindung nicht geändert.');
     if(req.body?.confirm!==true)throw new HttpError(400,'Block und Aktivierung ausdrücklich bestätigen.');
     const status=JSON.parse(r.status_json||'null');
-    if(status?.script!=='1.1.0' || Date.now()-Date.parse(status.at)>180000)throw new HttpError(409,'Vor Aktivierung Feeder auf 1.1.0 aktualisieren und frische Statusmeldung abwarten. Legacy-Feeder können alte Materialpläne weiterverwenden.');
+    if(status?.script!=='1.1.0' || !Number.isFinite(Date.parse(status.at)) || Date.now()-Date.parse(status.at)>180000)throw new HttpError(409,'Vor Aktivierung Feeder auf 1.1.0 aktualisieren und frische Statusmeldung abwarten. Legacy-Feeder können alte Materialpläne weiterverwenden.');
     const result=await request('bind',{station:r.name,binding:req.body.binding,nonce:req.body.nonce});
     db.prepare('INSERT INTO cannon_alignment(name,binding_json,updated_at) VALUES(?,?,?) ON CONFLICT(name) DO UPDATE SET binding_json=excluded.binding_json,applied_json=NULL,last_error=NULL,updated_at=excluded.updated_at').run(r.name,JSON.stringify(result.binding),now());
     logActivity(db,a,'cannon.alignment.bind',r.name,{binding:result.binding});return view(r.name);

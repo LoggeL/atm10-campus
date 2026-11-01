@@ -88,3 +88,5 @@ pre{background:#10202b;border:1px solid var(--line);border-radius:8px;padding:10
 @media print{.materials-page{background:white;color:black}.materials-page .toolbar,.materials-page header .btn{display:none}.materials-page .panel,.materials-page th{background:white}.materials-page .material-table{overflow:visible;padding:0}.materials-page .muted{color:#555}.materials-page th{position:static}}
 .hide{display:none!important}
 @media (max-width:700px){.cannons{grid-template-columns:1fr}header.top,nav.tabs,main{padding-left:16px;padding-right:16px}.kv{grid-template-columns:1fr}.hide-sm{display:none}}
+
+.alignment{margin:14px 0;padding:12px;border:1px solid var(--line,#334155);border-radius:8px;overflow-wrap:anywhere}.alignment summary{cursor:pointer;font-weight:600}.alignment .row{flex-wrap:wrap;gap:10px}.alignment label{display:flex;flex-direction:column;gap:4px}.alignment input[type=number]{width:85px}.alignment button{margin:8px 8px 0 0}
