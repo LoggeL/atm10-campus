@@ -23,6 +23,10 @@ JSON (Standard), Text und CSV bleiben unverändert verfügbar. Unbekannte Materi
 
 Die 34 Materialbilder unter `public/assets/material-icons/` sind aus den tatsächlichen Item-Modellen und Texturen von Minecraft 1.21.1, Rechiseled 1.2.6, Rechiseled Create 1.1.1, Create 6.0.10, Chipped 4.0.2 und Connected Glass 1.1.14 gerendert.
 
+Die App verwendet eine gemeinsame schlichte Oberfläche: Baupläne, Koordinaten, Kanonen und Live-Bestand stehen in der Hauptnavigation; Agent-Zugang, Aktivität und Verwaltung unter „Mehr“. Downloads und seltenere Details sind aufklappbar. Materiallisten bieten eine Suche und optional zusätzliche Planmengen. Im 3D-Viewer stehen Ebenen und Darstellungsoptionen in eigenen aufklappbaren Bereichen.
+
+Kanonen-Einstellungen werden erst mit „Speichern“ übernommen. „Verwerfen“ setzt den Entwurf zurück. Während der Bearbeitung erhalten automatische Statusaktualisierungen die Eingaben; nur geänderte Optionen werden gesendet. Änderungen an der Materialversorgung lösen deshalb keine erneute Schematic-Vorbereitung aus. Gebundene Kanonen bleiben nur für Browser-Admins bearbeitbar. „Materialzufuhr pausieren“ steuert ausschließlich den ME-Versorger.
+
 Unter `/app#coordinates` stehen die Einsetzkoordinaten aller aktuellen Baupläne mit einzeln kopierbaren X-/Y-/Z-Werten und TXT-Export. Die Bauplan-Details zeigen denselben Anker; Kanonen zeigen ausdrücklich den Anker ihrer zugewiesenen Version, auch wenn eine neuere existiert. Drehung 0°, keine Spiegelung.
 Connecting zeigt jeweils einen einzelnen, noch nicht mit Nachbarblöcken verbundenen Block. Die Texturen stammen von Mojang und den jeweiligen Mod-Autoren; es sind keine generierten Ersatztexturen.
 Zum Aktualisieren `tools/material-items.json` ergänzen und mit Pillow ausführen:
@@ -63,7 +67,7 @@ Mounts: Volume `atm10-campus-data` → `/data`, Bind `~/minecraft/atm10/data/wor
 
 ## Automatische Schematic-Vorbereitung (Create 1.21.1-6.0.10)
 
-Im Kanonen-Tab den Bauplan zuweisen und unter „Ausrichtung“ als Browser-Admin den physischen Kanonen-Block prüfen und bestätigen. Danach „Schematic automatisch vorbereiten“ aktivieren. Die App überträgt den Rest-Plan mit den Zielkoordinaten der Bauplanversion und den gewählten Ersetzungs-/Material-/Maschinenschutz-Einstellungen. „Zielkoordinaten ändern“ öffnet den Bauplan; eine Positionsänderung wird als neue Version gespeichert. Ausrichtung und Spiegelung entsprechen der NBT. Automatische Rest-Pläne verwenden den Live-Bestand der Oberwelt.
+Im Kanonen-Tab den Bauplan zuweisen und unter „Verbindung und Diagnose → Ausrichtung“ als Browser-Admin den physischen Kanonen-Block prüfen und bestätigen. Danach unter „Einstellungen“ die Option „Schematic automatisch vorbereiten“ aktivieren und speichern. Die App überträgt den Rest-Plan mit den Zielkoordinaten der Bauplanversion und den gewählten Ersetzungs-/Material-/Maschinenschutz-Einstellungen. „Bauplan und Position“ öffnet den Bauplan; eine Positionsänderung wird als neue Version gespeichert. Ausrichtung und Spiegelung entsprechen der NBT. Automatische Rest-Pläne verwenden den Live-Bestand der Oberwelt.
 
 Die bestehende signierte Controller-Anbindung wird um `/campus/prepare` erweitert. Neben `campus_cannon.py` müssen `controller/campus_schematic.py` und `controller/campus_snbt.py` neben dem vorhandenen `control.py` auf dem Host liegen. Danach nur den Controller-Service neu starten. Die bisherigen Bridge-Adresse, Signatur und Block-Registry werden weiterverwendet; ein zusätzlicher Worker oder Station-Token ist nicht erforderlich. Details zur Host-Anbindung stehen in `docs/cannon-alignment.md`.
 
@@ -79,4 +83,4 @@ Prüfen: `LOG_LEVEL=silent npm test`, `python3 test/bridge_test.py`, `python3 te
 
 ## Neue Version von Jonnys HTML
 
-Als Admin unter **Admin → Campus-HTML importieren**. Geänderte NBTs werden neue Versionen. Was seit dem letzten Import in der App geändert wurde, wird nicht überschrieben und als Konflikt gemeldet.
+Als Admin unter **Mehr → Verwaltung → Campus importieren**. Geänderte NBTs werden neue Versionen. Was seit dem letzten Import in der App geändert wurde, wird nicht überschrieben und als Konflikt gemeldet.

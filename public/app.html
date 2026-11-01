@@ -1,68 +1,58 @@
 <!doctype html>
 <html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>ATM10 Campus</title><link rel="stylesheet" href="/assets/app.css?v=20261101-range-1"></head>
+<title>ATM10 Campus</title><link rel="stylesheet" href="/assets/app.css?v=20261101-simple-1"></head>
 <body>
+<a class="skip-link" href="#main">Zum Inhalt</a>
 <header class="top">
-  <div><h1>ATM10 Campus</h1><div class="sub" id="liveLine">Live-Bestand wird geladen …</div></div>
-  <span class="spacer"></span>
-  <a class="btn primary" href="/viewer">3D-Viewer öffnen</a>
-  <a class="btn" href="/api/materials?format=html" target="_blank" rel="noopener" title="Was für den ganzen Campus noch fehlt – mit Blockbildern">Materialliste</a>
-  <a class="btn" href="/api/remaining.zip" download title="Je Bauplan nur die fehlenden Blöcke als NBT">Rest-NBTs (ZIP)</a>
-  <a class="btn" href="/api/blueprints.zip">Alle Baupläne (.zip)</a>
-  <span class="muted" id="who"></span>
-  <button class="small" id="logout">Abmelden</button>
+  <a class="brand" href="/app">ATM10 Campus</a><span class="spacer"></span>
+  <a href="/viewer">3D-Viewer</a><a href="/api/materials?format=html">Materialliste</a>
+  <details class="menu" id="accountMenu"><summary>Konto</summary><div class="menu-content"><span class="muted" id="who"></span><button id="logout">Abmelden</button></div></details>
 </header>
-<nav class="tabs" role="tablist">
-  <button role="tab" data-tab="overview" aria-selected="true">Übersicht</button>
-  <button role="tab" data-tab="coordinates">Koordinaten</button>
-  <button role="tab" data-tab="snapshots">Live-Bestand</button>
-  <button role="tab" data-tab="cannons">Kanonen</button>
-  <button role="tab" data-tab="agent">Agent-Zugang</button>
-  <button role="tab" data-tab="activity">Aktivität</button>
-  <button role="tab" data-tab="admin" class="hide" id="adminTab">Admin</button>
+<nav class="tabs" aria-label="Campus">
+  <a data-tab="overview" href="#overview" aria-current="page">Baupläne</a>
+  <a data-tab="coordinates" href="#coordinates">Koordinaten</a>
+  <a data-tab="cannons" href="#cannons">Kanonen</a>
+  <a data-tab="snapshots" href="#snapshots">Live-Bestand</a>
+  <details class="menu" id="moreMenu"><summary id="moreLabel">Mehr</summary><div class="menu-content">
+    <a data-tab="agent" href="#agent">Agent-Zugang</a><a data-tab="activity" href="#activity">Aktivität</a>
+    <a data-tab="admin" href="#admin" class="hide" id="adminTab">Verwaltung</a><a href="/docs">API-Dokumentation</a>
+  </div></details>
 </nav>
-<main>
+<main id="main">
   <section data-pane="overview">
-    <div class="cards" id="cards"></div>
-    <div class="panel">
-      <div class="toolbar">
-        <input class="grow" id="search" placeholder="Bauplan suchen …" aria-label="Bauplan suchen">
-        <select id="filter" aria-label="Status filtern"><option value="">Alle Status</option><option value="conflict">Konflikt</option><option value="warning">Geändert seit Planung</option><option value="ok">Offen</option><option value="built">Gebaut</option></select>
-        <button id="newBp">Neuer Bauplan</button>
-      </div>
-      <div style="overflow:auto"><table>
-        <thead><tr><th>Bauplan</th><th>Status</th><th class="num">Ver.</th><th>Fortschritt</th><th class="num hide-sm">Zu setzen</th><th class="num hide-sm">Zu ersetzen</th><th class="num">Konflikte</th><th class="hide-sm">Zuletzt</th></tr></thead>
-        <tbody id="bpRows"></tbody>
-      </table></div>
+    <div class="page-heading"><h1>Baupläne</h1><button id="newBp">Neuer Bauplan</button></div>
+    <div class="summary-line" id="cards" aria-label="Campus-Status"></div>
+    <div class="toolbar">
+      <input class="search" id="search" type="search" placeholder="Bauplan suchen …" aria-label="Bauplan suchen">
+      <select id="filter" aria-label="Status filtern"><option value="">Alle Status</option><option value="conflict">Konflikt</option><option value="warning">Geändert seit Planung</option><option value="ok">Offen</option><option value="built">Gebaut</option></select>
+      <details class="menu toolbar-end"><summary>Downloads</summary><div class="menu-content"><a href="/api/remaining.zip" download>Rest-Baupläne (.zip)</a><a href="/api/blueprints.zip" download>Alle Baupläne (.zip)</a></div></details>
     </div>
-    <div class="panel" id="overlapPanel"><h2>Überlappungen zwischen Bauplänen</h2><div id="overlaps" class="muted">–</div></div>
+    <div class="table-wrap" role="region" aria-label="Baupläne" tabindex="0"><table class="blueprint-table">
+      <thead><tr><th>Bauplan</th><th>Status</th><th>Version</th><th>Fortschritt</th><th>Aktion</th></tr></thead><tbody id="bpRows"></tbody>
+    </table></div>
+    <details id="overlapPanel"><summary id="overlapSummary">Überlappungen und Konflikte</summary><div id="overlaps" class="table-scroll muted"></div></details>
   </section>
 
   <section data-pane="coordinates" class="hide">
-    <div class="panel">
-      <h2>Koordinaten zum Einsetzen der Schematics</h2>
-      <p>Diese Werte im <b>Positionsmenü der Schematic</b> eingeben: <b>Drehung 0°</b>, <b>Spiegelung keine</b>. Y ist der unterste Bauplan-Anker, nicht deine Standhöhe. Die Kanone kann woanders stehen.</p>
-      <p class="muted">Hier stehen die aktuellen API-Versionen. Bereits zugewiesene ältere Versionen findest du mit ihren eigenen Koordinaten unter „Kanonen“. Für eine neue Version auch eine neue Schematic im Spiel drucken.</p>
-      <div class="toolbar"><input class="grow" id="coordinateSearch" placeholder="Nummer oder Gebäude suchen …" aria-label="Koordinaten suchen"><button id="coordinateDownload">Liste als TXT herunterladen</button></div>
-      <p class="muted" id="coordinateCount"></p>
-      <div style="overflow:auto"><table class="coordinate-table"><thead><tr><th>Bauplan / Datei</th><th>Version</th><th>Einsetzkoordinaten · Zahl anklicken zum Kopieren</th><th></th></tr></thead><tbody id="coordinateRows"></tbody></table></div>
-    </div>
+    <div class="page-heading"><h1>Koordinaten</h1><button id="coordinateDownload">Liste herunterladen</button></div>
+    <p class="intro">Bauplan-Anker in der Welt. Drehung 0°, keine Spiegelung.</p>
+    <div class="toolbar"><input class="search" id="coordinateSearch" type="search" placeholder="Bauplan suchen …" aria-label="Koordinaten suchen"><span class="muted" id="coordinateCount"></span></div>
+    <div class="table-wrap" role="region" aria-label="Einsetzkoordinaten" tabindex="0"><table class="coordinate-table"><thead><tr><th>Bauplan</th><th>Version</th><th>Zielkoordinaten</th><th>Aktion</th></tr></thead><tbody id="coordinateRows"></tbody></table></div>
+    <details><summary>Koordinaten im Spiel verwenden</summary><p>Trage X, Y und Z im Positionsmenü der Schematic ein. Y ist der unterste Bauplan-Anker, nicht deine Standhöhe. Die Kanone kann woanders stehen.</p><p class="muted">Hier stehen die aktuellen Versionen. Ältere zugewiesene Versionen haben unter „Kanonen“ ihre eigenen Koordinaten. Für eine neue Version auch eine neue Schematic im Spiel drucken.</p></details>
   </section>
 
   <section data-pane="snapshots" class="hide">
-    <div class="panel">
-      <h2>Live-Bestand</h2>
-      <p class="muted">Die App liest alle paar Minuten die Region-Files der ATM10-Welt (nur lesend). Ein neuer Snapshot entsteht nur, wenn der Server seit dem letzten etwas gespeichert hat.</p>
-      <div class="row"><select id="snapSource" aria-label="Weltquelle"></select><input id="snapLabel" placeholder="Bezeichnung (optional)"><button class="primary" id="snapNow">Jetzt erfassen</button></div>
-    </div>
-    <div class="panel"><table><thead><tr><th>#</th><th>Quelle</th><th>Erfasst</th><th>Welt gespeichert</th><th class="num">Flächen</th><th class="num">Block-Entities</th><th></th></tr></thead><tbody id="snapRows"></tbody></table></div>
+    <div class="page-heading"><h1>Live-Bestand</h1></div>
+    <p class="intro">Wird nach dem Speichern der Welt automatisch aktualisiert.</p>
+    <div class="toolbar"><select id="snapSource" aria-label="Weltquelle"></select><input id="snapLabel" aria-label="Bezeichnung der Weltaufnahme" placeholder="Bezeichnung (optional)"><button id="snapNow">Jetzt erfassen</button></div>
+    <div class="table-wrap" role="region" aria-label="Weltaufnahmen" tabindex="0"><table><thead><tr><th>Aufnahme</th><th>Quelle</th><th>Erfasst</th><th>Welt gespeichert</th><th class="num">Flächen</th><th class="num">Block-Entities</th><th>Aktion</th></tr></thead><tbody id="snapRows"></tbody></table></div>
+    <details><summary>Wie aktuell ist der Bestand?</summary><p>Die App liest alle paar Minuten die gespeicherten Region-Dateien der Welt. Eine neue Aufnahme entsteht nur, wenn sich der gespeicherte Stand geändert hat. Die Welt wird dabei nicht verändert.</p></details>
   </section>
 
   <section data-pane="cannons" class="hide">
-    <div class="panel">
-      <div class="row" style="justify-content:space-between"><h2 style="margin:0">Schematicannons am ME-System</h2><span class="muted" id="meLine">–</span></div>
-      <p class="muted">Ein CC:Tweaked-Computer mit Advanced-Peripherals-ME-Bridge füllt die Kiste an jeder Kanone mit genau dem, was ihr Bauplan noch braucht, unterste Schichten zuerst. Hier legst du fest, welche Kanone was baut. Die Computer melden sich von selbst, sobald das Script läuft.</p>
-      <details id="ccSetup"><summary>Einrichtung (einmal pro Kanone)</summary>
+    <div class="page-heading"><h1>Kanonen</h1><button class="text-button" id="showSetup" aria-controls="ccSetup" aria-expanded="false">Einrichtung</button></div>
+    <p class="intro" id="meLine">ME-Bestand wird geladen …</p>
+      <details id="ccSetup"><summary>Kanone verbinden</summary>
         <ol class="steps">
           <li>Unter <a href="#agent" data-goto="agent">Agent-Zugang</a> einen Token mit Scope <b>Station (ME-Computer)</b> anlegen. Der darf nur lesen und Bestand/Status melden, keine Baupläne ändern.</li>
           <li>Aufbau: <span class="mono">ME-Kabel → ME Bridge → Computer → Kiste → Schematicannon</span>. ME Bridge und Kiste hängen beide direkt am Computer oder beide am selben Wired-Modem-Netz. Eine einfache Kiste oder ein Fass nehmen, keine Doppelkiste. Die Kiste berührt die Kanone an einer beliebigen Seite, die Kanone zieht Blöcke und Schießpulver daraus. Die ME Bridge braucht einen ME-Kanal.</li>
@@ -71,44 +61,47 @@
           <li>In der Kanone <b>„Skip Missing“ ausschalten</b> (ist bei neuen Kanonen an), sonst überspringt sie Blöcke, die gerade noch nicht in der Kiste liegen. Modus „Replace Solid with Any“ (Standard) lassen, nicht „Replace Solid with Empty“. „Protect Block Entities“ an lassen. Dann Play drücken: fehlt etwas, wartet die Kanone und baut weiter, sobald das Script nachgefüllt hat.</li>
         </ol>
       </details>
-    </div>
     <div id="cannonList"></div>
+    <p class="footnote">Den Bau startest du an der Kanone im Spiel. Der Fortschritt folgt dem zuletzt gespeicherten Weltstand.</p>
   </section>
 
   <section data-pane="agent" class="hide">
-    <div class="panel">
-      <h2>API-Token für deinen Agent</h2>
-      <p class="muted">Der Token handelt in deinem Namen. Er wird nur einmal angezeigt. „Lesen“ reicht für Status und Downloads, „Schreiben“ erlaubt Uploads, neue Versionen und Snapshots. „Station“ ist für die CC-Computer an den Schematicannons: lesen plus ME-Bestand und Kanonen-Status melden. Accounts und Tokens lassen sich nur hier im Browser verwalten.</p>
-      <div class="row"><input id="tokName" placeholder="Name, z. B. Claude Code Laptop"><select id="tokScope"><option value="write">Lesen + Schreiben</option><option value="read">Nur lesen</option><option value="station">Station (ME-Computer)</option></select><button class="primary" id="tokCreate">Token erzeugen</button></div>
-      <div id="tokNew" class="hide" style="margin-top:12px"></div>
-    </div>
-    <div class="panel"><table><thead><tr><th>Name</th><th>Scope</th><th>Präfix</th><th>Erstellt</th><th>Zuletzt benutzt</th><th></th></tr></thead><tbody id="tokRows"></tbody></table></div>
-    <div class="panel"><h2>So nutzt dein Agent die API</h2><p class="muted">Vollständige Doku: <a href="/docs">/docs</a> · OpenAPI: <a href="/api/openapi.json">/api/openapi.json</a></p><pre id="agentSnippet"></pre></div>
+    <div class="page-heading"><h1>Agent-Zugang</h1></div>
+    <p class="intro">Tokens geben einem Agent oder ME-Computer Zugriff in deinem Namen.</p>
+    <details class="form-section"><summary>Token anlegen</summary>
+      <div class="form-row"><label>Name<input id="tokName" placeholder="z. B. ME-Computer"></label><label>Zugriff<select id="tokScope"><option value="write">Lesen + Schreiben</option><option value="read">Nur lesen</option><option value="station">Station (ME-Computer)</option></select></label><button id="tokCreate">Token erzeugen</button></div>
+      <div id="tokNew" class="hide" role="status"></div>
+    </details>
+    <div class="table-wrap" role="region" aria-label="API-Tokens" tabindex="0"><table><thead><tr><th>Name</th><th>Zugriff</th><th>Präfix</th><th>Erstellt</th><th>Zuletzt benutzt</th><th>Aktion</th></tr></thead><tbody id="tokRows"></tbody></table></div>
+    <details><summary>Anleitung für Agents</summary><p class="muted">Tokens werden nur einmal angezeigt. „Station“ erlaubt Status- und Bestandsmeldungen, aber keine Änderungen an Bauplänen. Accounts und Tokens verwaltest du hier im Browser.</p><p><a href="/docs">API-Dokumentation</a> · <a href="/api/openapi.json">OpenAPI</a></p><pre id="agentSnippet"></pre></details>
   </section>
 
   <section data-pane="activity" class="hide">
-    <div class="panel"><table><thead><tr><th>Zeit</th><th>Wer</th><th>Über</th><th>Aktion</th><th>Ziel</th><th>Details</th></tr></thead><tbody id="actRows"></tbody></table></div>
+    <div class="page-heading"><h1>Aktivität</h1></div><p class="intro">Änderungen an Bauplänen, Aufträgen und Zugängen.</p>
+    <div class="table-wrap" role="region" aria-label="Aktivität" tabindex="0"><table><thead><tr><th>Zeit</th><th>Wer</th><th>Über</th><th>Aktion</th><th>Ziel</th><th>Details</th></tr></thead><tbody id="actRows"></tbody></table></div>
   </section>
 
   <section data-pane="admin" class="hide">
-    <div class="panel">
-      <h2>Campus-HTML importieren</h2>
+    <div class="page-heading"><h1>Verwaltung</h1></div>
+    <details class="form-section"><summary>Campus importieren</summary>
       <p class="muted">Jonnys Export (z. B. <span class="mono">ATM10-Campus-zum-Teilen.html</span>). Geänderte Baupläne werden neue Versionen, der 3D-Viewer wird aktualisiert. Baupläne, die seit dem letzten Import hier in der App geändert wurden, werden nicht überschrieben und als Konflikt gemeldet.</p>
-      <div class="row"><input type="file" id="impFile" accept=".html,text/html"><label class="row"><input type="checkbox" id="impForce"> trotzdem überschreiben</label><select id="impBase" aria-label="Planungsstand"></select><button class="primary" id="impGo">Importieren</button></div>
+      <div class="row"><input aria-label="Campus-HTML" type="file" id="impFile" accept=".html,text/html"><label class="row"><input type="checkbox" id="impForce"> trotzdem überschreiben</label><select id="impBase" aria-label="Planungsstand"></select><button class="primary" id="impGo">Importieren</button></div>
       <pre id="impOut" class="hide"></pre>
-    </div>
-    <div class="panel">
+    </details>
+    <section class="content-section">
       <h2>Einladungen</h2>
-      <div class="row"><input id="invNote" placeholder="Für wen? (z. B. Jonny)"><select id="invRole"><option value="member">Mitglied</option><option value="admin">Admin</option></select><select id="invDays"><option value="7">7 Tage gültig</option><option value="30">30 Tage</option><option value="1">1 Tag</option></select><button class="primary" id="invCreate">Einladung erzeugen</button></div>
-      <div id="invNew" class="hide" style="margin-top:12px"></div>
-      <table style="margin-top:12px"><thead><tr><th>Für</th><th>Rolle</th><th>Erstellt</th><th>Gültig bis</th><th>Benutzt von</th><th></th></tr></thead><tbody id="invRows"></tbody></table>
-    </div>
-    <div class="panel"><h2>Accounts</h2><table><thead><tr><th>Name</th><th>Rolle</th><th>Seit</th><th>Status</th><th></th></tr></thead><tbody id="userRows"></tbody></table></div>
+      <details class="form-section"><summary>Einladung erstellen</summary>
+      <div class="row"><input aria-label="Für wen ist die Einladung?" id="invNote" placeholder="Für wen? (z. B. Jonny)"><select aria-label="Rolle" id="invRole"><option value="member">Mitglied</option><option value="admin">Admin</option></select><select aria-label="Gültigkeit" id="invDays"><option value="7">7 Tage gültig</option><option value="30">30 Tage</option><option value="1">1 Tag</option></select><button class="primary" id="invCreate">Einladung erzeugen</button></div>
+      <div id="invNew" class="hide" role="status"></div></details>
+      <div class="table-wrap" role="region" aria-label="Einladungen" tabindex="0"><table><thead><tr><th>Für</th><th>Rolle</th><th>Erstellt</th><th>Gültig bis</th><th>Benutzt von</th><th></th></tr></thead><tbody id="invRows"></tbody></table></div>
+    </section>
+    <section class="content-section"><h2>Accounts</h2><div class="table-wrap" role="region" aria-label="Accounts" tabindex="0"><table><thead><tr><th>Name</th><th>Rolle</th><th>Seit</th><th>Status</th><th></th></tr></thead><tbody id="userRows"></tbody></table></div></section>
   </section>
+  <footer class="app-footer"><span id="liveLine">Live-Bestand wird geladen …</span></footer>
 </main>
 
-<div class="scrim" id="scrim"></div>
-<aside class="drawer" id="drawer" aria-label="Bauplan-Details"></aside>
+<dialog class="drawer" id="drawer" aria-labelledby="blueprintTitle"></dialog>
+<dialog class="form-dialog" id="editDialog" aria-labelledby="editTitle"></dialog>
 <input type="file" id="hiddenFile" accept=".nbt" class="hide">
-<script type="module" src="/assets/app.js?v=20261101-range-1"></script>
+<script type="module" src="/assets/app.js?v=20261101-simple-1"></script>
 </body></html>

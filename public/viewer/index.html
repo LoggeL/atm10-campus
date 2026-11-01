@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Campus-Viewer · ATM10</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><rect x='2' y='2' width='12' height='12' rx='2' fill='%2373d8e5'/></svg>">
-<link rel="stylesheet" href="/viewer/viewer.css">
+<link rel="stylesheet" href="/viewer/viewer.css?v=20261101-simple-1">
 <script type="importmap">
 { "imports": { "three": "/vendor/three/build/three.module.min.js", "three/addons/": "/vendor/three/examples/jsm/" } }
 </script>
@@ -14,45 +14,54 @@
 <canvas id="scene" tabindex="0" aria-label="3D-Ansicht des Campus"></canvas>
 
 <div id="loading" class="loading">
-  <div class="loading-hero"></div>
+
   <div class="loading-card">
-    <div class="brand"><span class="logo"></span>ATM10 Campus</div>
-    <h1>Campus wird aufgebaut</h1>
+    <div class="brand">ATM10 Campus</div>
+    <h1>3D-Ansicht laden</h1>
     <p id="loading-step">Lade Szene …</p>
     <div class="bar"><div id="loading-bar"></div></div>
   </div>
 </div>
 
 <header class="topbar glass">
-  <a class="brand" href="/app" title="Zur Übersicht"><span class="logo"></span><span class="brand-text">ATM10 Campus</span></a>
+  <a class="brand" href="/app" title="Zur Übersicht"><span class="brand-text">ATM10 Campus</span><span class="brand-short">Campus</span></a>
   <div class="snap">
     <span id="live-badge" class="badge">–</span>
     <label class="select"><span class="sr">Snapshot</span><select id="snapshot"></select></label>
   </div>
   <div id="edition" class="edition"></div>
   <nav class="links">
-    <a href="/app">Übersicht</a>
-    <a href="/docs">API</a>
+    <a href="/app">Baupläne</a><a href="/app#cannons">Kanonen</a>
   </nav>
-  <button id="panel-toggle" class="icon-btn mobile-only" aria-label="Panel ein/aus">☰</button>
+  <button id="panel-toggle" class="icon-btn mobile-only" aria-label="Ansicht und Baupläne öffnen" aria-expanded="false" aria-controls="panel">Ansicht</button>
 </header>
 
 <aside id="panel" class="panel glass">
-  <div class="tabs" role="tablist">
-    <button role="tab" data-tab="view" class="active">Ansicht</button>
-    <button role="tab" data-tab="blueprints">Baupläne <span id="bp-count" class="count"></span></button>
-    <button role="tab" data-tab="places">Orte</button>
+  <div class="tabs" aria-label="Viewer-Bereiche">
+    <button data-tab="view" class="active" aria-pressed="true">Ansicht</button>
+    <button data-tab="blueprints" aria-pressed="false">Baupläne <span id="bp-count" class="count"></span></button>
+    <button data-tab="places" aria-pressed="false">Orte</button>
   </div>
   <section data-pane="view" class="pane active">
     <h3>Ansichten</h3>
     <div id="presets" class="presets"></div>
-    <h3>Ebenen kombinieren <span class="hint">Modus je Ebene</span></h3>
+    <details class="viewer-disclosure"><summary>Ebenen anpassen</summary>
     <div id="layers" class="layers"></div>
-    <label class="check"><input type="checkbox" id="overlap"> Überlappungen zwischen Bauplänen hervorheben <span id="overlap-count" class="count"></span></label>
+    <label class="check"><input type="checkbox" id="overlap"> Überlappungen hervorheben <span id="overlap-count" class="count"></span></label></details>
+    <details class="viewer-disclosure"><summary>Darstellung</summary>  <label class="slider" title="Tageszeit">
+    <span>Zeit <b id="tod-val">15:30</b></span>
+    <input id="tod" type="range" min="0" max="24" step="0.25" value="15.5">
+  </label>
+  <div class="seg small">
+    <button id="t-shadows" class="active" title="Schatten">Schatten</button>
+    <button id="t-bloom" class="active" title="Leuchten">Glow</button>
+    <button id="t-grid" class="active" title="Raster">Raster</button>
+  </div>
+</details>
   </section>
   <section data-pane="blueprints" class="pane">
     <div class="bp-tools">
-      <input id="bp-search" type="search" placeholder="Bauplan suchen …" autocomplete="off">
+      <input id="bp-search" type="search" aria-label="Bauplan suchen" placeholder="Bauplan suchen …" autocomplete="off">
       <button id="bp-all" class="chip">Alle</button>
       <button id="bp-none" class="chip">Keine</button>
     </div>
@@ -78,7 +87,7 @@
     </header>
     <div id="mat-summary" class="mat-summary"></div>
     <div class="mat-tools">
-      <input id="mat-search" type="search" placeholder="Item suchen …" autocomplete="off">
+      <input id="mat-search" type="search" aria-label="Material suchen" placeholder="Item suchen …" autocomplete="off">
       <label class="check"><input type="checkbox" id="mat-built"> Gebautes zeigen</label>
     </div>
     <div id="mat-body" class="mat-body"></div>
@@ -106,23 +115,14 @@
     <span>Schnitt <b id="clip-val">aus</b></span>
     <input id="clip" type="range" min="0" max="1" step="1">
   </label>
-  <label class="slider" title="Tageszeit">
-    <span>Zeit <b id="tod-val">15:30</b></span>
-    <input id="tod" type="range" min="0" max="24" step="0.25" value="15.5">
-  </label>
-  <div class="seg small">
-    <button id="t-shadows" class="active" title="Schatten">Schatten</button>
-    <button id="t-bloom" class="active" title="Leuchten">Glow</button>
-    <button id="t-grid" class="active" title="Raster">Raster</button>
-  </div>
-  <button id="reset-cam" class="icon-btn" title="Kamera zurücksetzen">⌂</button>
-  <button id="shot" class="icon-btn" title="Screenshot speichern">⤓</button>
+  <button id="reset-cam" class="tool-btn" title="Kamera zurücksetzen">Zurücksetzen</button>
+  <button id="shot" class="tool-btn" title="Screenshot speichern">Bild speichern</button>
 </div>
 
 <div id="tooltip" class="tooltip hidden"></div>
 <div id="hud" class="hud"></div>
 <div id="toast" class="toast hidden"></div>
 
-<script type="module" src="/viewer/main.js"></script>
+<script type="module" src="/viewer/main.js?v=20261101-simple-1"></script>
 </body>
 </html>

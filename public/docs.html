@@ -1,9 +1,9 @@
 <!doctype html>
 <html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Campus API-Doku</title><link rel="stylesheet" href="/assets/app.css"></head>
-<body>
-<header class="top"><div><h1>ATM10 Campus · API für Agents</h1><div class="sub">Maschinenlesbar: <a href="/api/openapi.json">/api/openapi.json</a></div></div><span class="spacer"></span><a class="btn" href="/app">Zur Übersicht</a></header>
-<main style="max-width:900px">
+<title>Campus API-Doku</title><link rel="stylesheet" href="/assets/app.css?v=20261101-simple-1"></head>
+<body class="docs-page">
+<header class="top"><a class="brand" href="/app">ATM10 Campus</a><span class="spacer"></span><a href="/viewer">3D-Viewer</a><a href="/api/materials?format=html">Materialliste</a><a href="/app#agent">Agent-Zugang</a></header>
+<main><div class="page-heading"><h1>API-Dokumentation</h1><a href="/api/openapi.json">OpenAPI</a></div>
 <div class="panel">
 <h2>Zugang</h2>
 <p>Token in der App unter <strong>Agent-Zugang</strong> erzeugen und als <span class="mono">Authorization: Bearer atc_…</span> mitschicken. Ein Token handelt im Namen seines Accounts, jede Änderung landet mit Namen im Protokoll. „Nur lesen“-Tokens dürfen ausschließlich GET-Anfragen.</p>

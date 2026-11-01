@@ -1,6 +1,6 @@
 'use strict';
-import { cannonRangeCard } from './cannon-range.js?v=20261101-range-1';
-import { coordinateFields, placementCard, placementValues, coordinateListText } from './placement.js?v=20261101-coordinates-1';
+import { renderCannon, cannonSettingsPayload } from './cannon-ui.js?v=20261101-simple-1';
+import { coordinateFields, placementCard, placementValues, coordinateListText } from './placement.js?v=20261101-simple-1';
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const fmt = n => n == null ? '–' : Number(n).toLocaleString('de-DE');
@@ -28,20 +28,32 @@ async function api(path, opts = {}) {
 }
 function toast(msg, err) {
   const t = document.createElement('div'); t.className = 'toast' + (err ? ' err' : ''); t.textContent = msg;
-  document.body.append(t); setTimeout(() => t.remove(), err ? 7000 : 3500);
+  t.setAttribute('role', err ? 'alert' : 'status'); (document.querySelector('dialog[open]') || document.body).append(t); setTimeout(() => t.remove(), err ? 7000 : 3500);
 }
 const guard = fn => async (...a) => { try { await fn(...a); } catch (e) { toast(e.message, true); } };
 
 let me = null, status = null;
 
 // ---------- tabs ----------
-document.querySelectorAll('nav.tabs button').forEach(b => b.addEventListener('click', () => showTab(b.dataset.tab)));
+document.querySelectorAll('nav.tabs [data-tab]').forEach(b => b.addEventListener('click', e => {
+  e.preventDefault(); closeDrawer(); showTab(b.dataset.tab);
+}));
 function showTab(tab) {
-  document.querySelectorAll('nav.tabs button').forEach(b => b.setAttribute('aria-selected', String(b.dataset.tab === tab)));
+  if (tab === 'admin' && me?.user?.role !== 'admin') tab = 'overview';
+  document.querySelectorAll('nav.tabs [data-tab]').forEach(b => {
+    if (b.dataset.tab === tab) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current');
+  });
   document.querySelectorAll('[data-pane]').forEach(p => p.classList.toggle('hide', p.dataset.pane !== tab));
-  ({ overview: loadStatus, coordinates: loadStatus, snapshots: loadSnapshots, cannons: loadCannons, agent: loadTokens, activity: loadActivity, admin: loadAdmin })[tab]?.();
+  const extra = {agent:'Agent-Zugang', activity:'Aktivität', admin:'Verwaltung'};
+  $('moreMenu').classList.toggle('active', !!extra[tab]);
+  $('moreLabel').textContent = extra[tab] || 'Mehr';
+  document.querySelectorAll('.menu[open]').forEach(d => d.open = false);
+  const loader = { overview: loadStatus, coordinates: loadStatus, snapshots: loadSnapshots, cannons: loadCannons, agent: loadTokens, activity: loadActivity, admin: loadAdmin }[tab];
+  loader?.().catch(e => toast(e.message, true));
   history.replaceState(null, '', '#' + tab);
 }
+document.addEventListener('click', e => document.querySelectorAll('.menu[open]').forEach(d => { if (!d.contains(e.target)) d.open = false; }));
+document.addEventListener('keydown', e => { if (e.key === 'Escape') document.querySelectorAll('.menu[open]').forEach(d => { d.open = false; d.querySelector('summary').focus(); }); });
 
 // ---------- overview ----------
 async function loadStatus() {
@@ -53,12 +65,13 @@ async function loadStatus() {
   const placed = status.blueprints.reduce((a, b) => a + (b.counts ? b.counts.placed + b.counts.clear - b.counts.outsideSnapshot : 0), 0);
   const done = status.blueprints.reduce((a, b) => a + (b.counts ? b.counts.built + b.counts.cleared : 0), 0);
   $('cards').innerHTML = [
-    ['Baupläne', fmt(t.blueprints), 'in der aktuellen Edition'],
-    ['Konflikte', fmt(t.conflict), 'Maschinen im Weg oder Überlappung'],
-    ['Geändert seit Planung', fmt(t.warning), 'Bestand im Baufeld hat sich verändert'],
-    ['Gebaut', fmt(t.built), `von ${fmt(t.blueprints)} komplett`],
-    ['Gesamtfortschritt', placed ? (Math.round(done / placed * 1000) / 10).toLocaleString('de-DE') + ' %' : '–', 'Blöcke wie geplant'],
-  ].map(([k, v, d]) => `<div class="card"><div class="k">${k}</div><div class="v">${v}</div><div class="d">${d}</div></div>`).join('');
+    [fmt(t.blueprints), 'Baupläne'], [fmt(t.built), 'gebaut'],
+    [fmt(t.conflict), 'Konflikte', t.conflict ? 'warn' : ''],
+    [fmt(t.warning), 'seit Planung geändert', t.warning ? 'warn' : ''],
+    [placed ? (Math.round(done / placed * 1000) / 10).toLocaleString('de-DE') + ' %' : '–', 'gesamt gebaut'],
+  ].map(([value, label, cls]) => `<span class="${cls || ''}"><b>${value}</b> ${label}</span>`).join('');
+  $('overlapSummary').textContent = status.overlaps.length ? `Überlappungen und Konflikte (${status.overlaps.length} Überlappungen)` : 'Überlappungen und Konflikte';
+  $('overlapSummary').classList.toggle('warn', !!status.overlaps.length);
   renderRows();
   renderCoordinates();
   $('overlaps').innerHTML = status.overlaps.length
@@ -75,11 +88,10 @@ function renderRows() {
   $('bpRows').innerHTML = rows.map(b => {
     const c = b.conflicts || {};
     const conflictText = [c.protectedBlockEntities ? `${fmt(c.protectedBlockEntities)} Maschinen` : '', c.overlapCells ? `${fmt(c.overlapCells)} Überlappung` : '', c.changedSinceBase ? `${fmt(c.changedSinceBase)} geändert` : ''].filter(Boolean).join(' · ') || '–';
-    return `<tr class="click" data-id="${esc(b.id)}"><td><div>${esc(b.name)}</div><div class="muted mono">${esc(b.fileName)}</div></td><td>${badge(b.status)}</td><td class="num">v${b.version}</td>
-      <td><div class="bar"><i style="width:${b.progress ?? 0}%"></i></div><div class="muted" style="font-size:12px">${b.progress == null ? '–' : b.progress.toLocaleString('de-DE') + ' %'}</div></td>
-      <td class="num hide-sm">${fmt(b.counts?.toPlace)}</td><td class="num hide-sm">${fmt(b.counts?.toReplace)}</td><td class="num" style="font-size:12px">${conflictText}</td>
-      <td class="hide-sm muted" style="font-size:12px">${esc(ago(b.updatedAt))}${b.uploadedBy ? ' · ' + esc(b.uploadedBy) : ''}</td></tr>`;
-  }).join('') || '<tr><td colspan="8" class="muted">Keine Baupläne. Als Admin unter „Admin“ eine Campus-HTML importieren oder „Neuer Bauplan“ nutzen.</td></tr>';
+    return `<tr class="click" data-id="${esc(b.id)}"><td><button class="text-button blueprint-name">${esc(b.name)}</button><div class="muted mono">${esc(b.fileName)}</div></td><td>${badge(b.status)}${conflictText !== '–' ? `<div class="muted" style="font-size:12px">${esc(conflictText)}</div>` : ''}</td><td>v${b.version}</td>
+      <td><div class="progress-cell"><div class="bar"><i style="width:${b.progress ?? 0}%"></i></div><span>${b.progress == null ? '–' : b.progress.toLocaleString('de-DE') + ' %'}</span></div></td>
+      <td><button class="text-button" aria-label="Details zu ${esc(b.name)}">Details</button></td></tr>`;
+  }).join('') || '<tr><td colspan="5" class="muted">Keine passenden Baupläne. Suche oder Filter ändern, oder einen neuen Bauplan hochladen.</td></tr>';
 }
 $('search').addEventListener('input', renderRows);
 $('filter').addEventListener('change', renderRows);
@@ -92,7 +104,7 @@ function renderCoordinates() {
   const rows = status.blueprints.filter(b => !q || `${b.name} ${b.id} ${b.fileName}`.toLowerCase().includes(q))
     .sort((a,b) => a.fileName.localeCompare(b.fileName, 'de', {numeric:true}));
   $('coordinateCount').textContent = `${rows.length} von ${status.blueprints.length} Bauplänen · Stand ${when(status.generatedAt)}`;
-  $('coordinateRows').innerHTML = rows.map(b => `<tr><td><button class="small" data-open-blueprint="${esc(b.id)}">${esc(b.name)}</button><div class="muted mono">${esc(b.fileName)}</div></td><td>v${b.version}</td><td>${coordinateFields(b)}</td><td>${placementValues(b) ? `<button class="small" data-copy-coordinate="${b.origin.join(' ')}">X Y Z kopieren</button>` : ''}<a class="btn small" href="/api/blueprints/${encodeURIComponent(b.id)}/download?version=${b.version}">NBT v${b.version}</a></td></tr>`).join('') || '<tr><td colspan="4">Keine passenden Baupläne.</td></tr>';
+  $('coordinateRows').innerHTML = rows.map(b => `<tr><td><button class="text-button blueprint-name" data-open-blueprint="${esc(b.id)}">${esc(b.name)}</button><div class="muted mono">${esc(b.fileName)}</div></td><td>v${b.version}</td><td>${coordinateFields(b)}</td><td>${placementValues(b) ? `<button class="small" data-copy-coordinate="${b.origin.join(' ')}">X Y Z kopieren</button>` : ''}<a class="btn small" href="/api/blueprints/${encodeURIComponent(b.id)}/download?version=${b.version}">NBT v${b.version}</a></td></tr>`).join('') || '<tr><td colspan="4">Keine passenden Baupläne.</td></tr>';
 }
 $('coordinateSearch').addEventListener('input', renderCoordinates);
 $('coordinateRows').addEventListener('click', e => { const b = e.target.closest('[data-open-blueprint]'); if (b) openBlueprint(b.dataset.openBlueprint); });
@@ -112,9 +124,9 @@ document.addEventListener('click', guard(async e => {
 }));
 
 // ---------- drawer ----------
-function closeDrawer() { $('drawer').classList.remove('open'); $('scrim').classList.remove('open'); }
-$('scrim').addEventListener('click', closeDrawer);
-document.addEventListener('keydown', e => { if (e.key === 'Escape') closeDrawer(); });
+function closeDrawer() { $('drawer').close(); $('drawer').classList.remove('open'); }
+$('drawer').addEventListener('close', () => $('drawer').classList.remove('open'));
+$('drawer').addEventListener('click', e => { if (e.target === $('drawer') && e.clientX < $('drawer').getBoundingClientRect().left) closeDrawer(); });
 
 const openBlueprint = guard(async id => {
   const bp = await api('/api/blueprints/' + encodeURIComponent(id));
@@ -122,8 +134,8 @@ const openBlueprint = guard(async id => {
   const st = status?.blueprints.find(b => b.id === id);
   const sample = (title, list, cols) => list?.length ? `<details><summary>${title} (${fmt(list.length)}${list.length >= 200 ? '+' : ''} Beispiele)</summary><table><thead><tr>${cols.map(c => `<th>${c[0]}</th>`).join('')}</tr></thead><tbody>${list.slice(0, 60).map(s => `<tr>${cols.map(c => `<td class="mono">${esc(c[1](s))}</td>`).join('')}</tr>`).join('')}</tbody></table></details>` : '';
   $('drawer').innerHTML = `
-    <div class="row" style="justify-content:space-between"><div><h2>${esc(bp.name)}</h2><div class="muted mono">${esc(bp.fileName)}</div></div><button class="small" id="dClose">Schließen</button></div>
-    <div class="row" style="margin-top:10px">${st ? badge(st.status) : ''}<a class="btn small primary" href="/api/blueprints/${encodeURIComponent(id)}/download">NBT herunterladen (v${bp.currentVersion})</a><button class="small" id="dUpload">Neue Version hochladen</button><a class="btn small" href="/viewer#bp=${encodeURIComponent(id)}">Im 3D-Viewer</a><a class="btn small" href="/api/blueprints/${encodeURIComponent(id)}/materials?format=html" target="_blank" rel="noopener">Materialliste</a><a class="btn small" href="/api/blueprints/${encodeURIComponent(id)}/remaining.nbt" download title="Nur fehlende Blöcke, gleicher origin – für die Schematicannon (normaler Modus)">Rest-NBT</a></div>
+    <div class="drawer-heading"><div><h2 id="blueprintTitle">${esc(bp.name)}</h2><div class="muted mono">${esc(bp.fileName)}</div></div><button class="small" id="dClose">Schließen</button></div>
+    <div class="row">${st ? badge(st.status) : ''}<a class="btn small" href="/viewer#bp=${encodeURIComponent(id)}">Im 3D-Viewer</a><a class="btn small" href="/api/blueprints/${encodeURIComponent(id)}/materials?format=html">Materialliste</a></div>
     ${placementCard({origin:cur?.origin, version:bp.currentVersion})}
     <dl class="kv">
       <dt>Bauplan verschieben</dt><dd><button class="small" id="dMove">Position im Campus ändern</button></dd>
@@ -145,25 +157,22 @@ const openBlueprint = guard(async id => {
       ${sample('Seit Planung geändert', a.samples.changedSinceBase, [['Position', s => s.pos.join(' ')], ['Damals', s => s.base], ['Jetzt', s => s.live], ['Geplant', s => s.planned]])}
       ${sample('Zu ersetzende Blöcke', a.samples.toReplace, [['Position', s => s.pos.join(' ')], ['Live', s => s.live], ['Geplant', s => s.planned]])}
     </div>` : '<p class="muted">Noch keine Analyse (kein Live-Snapshot).</p>'}
-    <div class="panel"><h2>Versionen</h2><table><thead><tr><th>Ver.</th><th>Wann</th><th>Wer</th><th>Notiz</th><th></th></tr></thead><tbody>
+    <details><summary>Dateien und Versionen</summary><div class="row"><a class="btn small" href="/api/blueprints/${encodeURIComponent(id)}/download">NBT v${bp.currentVersion}</a><a class="btn small" href="/api/blueprints/${encodeURIComponent(id)}/remaining.nbt" download>Rest-NBT</a><button class="small" id="dUpload">Neue Version hochladen</button></div><div class="table-scroll"><table><thead><tr><th>Ver.</th><th>Wann</th><th>Wer</th><th>Notiz</th><th></th></tr></thead><tbody>
       ${bp.versions.map(v => `<tr><td>v${v.version}${v.version === bp.currentVersion ? ' <span class="badge ok">aktuell</span>' : ''}</td><td>${esc(when(v.createdAt))}</td><td>${esc(v.uploadedBy || '–')} <span class="muted">(${esc(v.uploadedVia)})</span></td><td>${esc(v.note || '')}${v.origin.join() !== cur?.origin.join() ? ` <span class="muted mono">@${esc(v.origin.join(','))}</span>` : ''}</td>
         <td class="row"><a class="btn small" href="/api/blueprints/${encodeURIComponent(id)}/download?version=${v.version}">↓</a>${v.version !== bp.currentVersion ? `<button class="small" data-revert="${v.version}">wiederherstellen</button>` : ''}</td></tr>`).join('')}
-    </tbody></table></div>
-    <div class="row"><button class="small danger" id="dArchive">Bauplan archivieren</button></div>`;
-  $('drawer').classList.add('open'); $('scrim').classList.add('open');
+    </tbody></table></div></details>
+    <details><summary>Bauplan verwalten</summary><button class="small danger" id="dArchive">Bauplan archivieren</button></details>`;
+  $('drawer').classList.add('open'); if (!$('drawer').open) $('drawer').showModal();
+  $('dClose').focus();
   $('dClose').onclick = closeDrawer;
-  $('dUpload').onclick = () => pickFile(guard(async file => {
-    const note = prompt('Änderungsnotiz (optional):', '') ?? '';
-    const r = await api(`/api/blueprints/${encodeURIComponent(id)}/nbt?baseVersion=${bp.currentVersion}&note=${encodeURIComponent(note)}`, { method: 'PUT', body: file, headers: { 'content-type': 'application/octet-stream' } })
-      .catch(e => { if (e.status === 409) throw new Error(e.message + ' Bitte Seite neu laden und erneut versuchen.'); throw e; });
+  $('dUpload').onclick = () => pickFile(file => editForm('Neue Version hochladen', `<p class="muted">${esc(file.name)}</p><label>Änderungsnotiz<input name="note" placeholder="Optional"></label>`, async data => {
+    const r = await api(`/api/blueprints/${encodeURIComponent(id)}/nbt?baseVersion=${bp.currentVersion}&note=${encodeURIComponent(data.get('note'))}`, { method: 'PUT', body: file, headers: { 'content-type': 'application/octet-stream' } });
     toast(r.unchanged ? 'Identisch mit aktueller Version, nichts geändert.' : `Version ${r.version.version} gespeichert.`);
-    await loadStatus(); openBlueprint(id);
+    await loadStatus(); await openBlueprint(id);
   }));
-  $('dMove').onclick = guard(async () => {
-    const v = prompt('Neue Position x,y,z:', cur.origin.join(','));
-    if (!v) return;
-    await api('/api/blueprints/' + encodeURIComponent(id), { method: 'PATCH', body: { origin: v.split(',').map(Number), baseVersion: bp.currentVersion } });
-    toast('Neue Version mit geänderter Position gespeichert.'); await loadStatus(); openBlueprint(id);
+  $('dMove').onclick = () => editForm('Zielkoordinaten ändern', `<p class="muted">Erstellt eine neue Version des Bauplans. Y ist der Bauplan-Anker.</p>${originInputs(cur.origin)}`, async data => {
+    await api('/api/blueprints/' + encodeURIComponent(id), { method: 'PATCH', body: { origin: ['x','y','z'].map(k => Number(data.get(k))), baseVersion: bp.currentVersion } });
+    toast('Neue Version mit geänderter Position gespeichert.'); await loadStatus(); await openBlueprint(id);
   });
   $('drawer').querySelectorAll('[data-revert]').forEach(b => b.onclick = guard(async () => {
     if (!confirm(`Version ${b.dataset.revert} als neue Version wiederherstellen?`)) return;
@@ -182,13 +191,32 @@ function pickFile(cb) {
   f.onchange = () => f.files[0] && cb(f.files[0]);
   f.click();
 }
-$('newBp').onclick = () => pickFile(guard(async file => {
-  const origin = prompt(`Position (origin x,y,z) für ${file.name}:`, '0,63,0');
-  if (!origin) return;
-  const name = prompt('Anzeigename:', file.name.replace(/\.nbt$/i, '')) || '';
-  const r = await api(`/api/blueprints/${encodeURIComponent(file.name.replace(/\.nbt$/i, ''))}/nbt?fileName=${encodeURIComponent(file.name)}&origin=${encodeURIComponent(origin)}&name=${encodeURIComponent(name)}`,
+function originInputs(origin) {
+  return `<div class="coords">${['x','y','z'].map((k,i) => `<label>${k.toUpperCase()}<input name="${k}" type="number" step="1" value="${origin[i]}" required></label>`).join('')}</div>`;
+}
+document.addEventListener('invalid', e => {
+  let parent = e.target.parentElement;
+  while (parent) { if (parent.tagName === 'DETAILS') parent.open = true; parent = parent.parentElement; }
+}, true);
+function editForm(title, fields, save) {
+  const dialog = $('editDialog');
+  dialog.innerHTML = `<h2 id="editTitle">${esc(title)}</h2><form><div class="form-stack">${fields}</div><p class="form-error" role="alert"></p><div class="form-actions"><button class="primary" type="submit">Speichern</button><button type="button" data-cancel>Abbrechen</button></div></form>`;
+  dialog.querySelector('[data-cancel]').onclick = () => dialog.close();
+  dialog.querySelector('form').onsubmit = async e => {
+    e.preventDefault(); const form = e.target, button = form.querySelector('[type=submit]');
+    if (button.disabled) return;
+    button.disabled = true;
+    try { await save(new FormData(form)); dialog.close(); }
+    catch (error) { form.querySelector('.form-error').textContent = error.message; }
+    finally { button.disabled = false; }
+  };
+  dialog.showModal();
+}
+$('newBp').onclick = () => pickFile(file => editForm('Neuer Bauplan', `<p class="muted">${esc(file.name)}</p><label>Name<input name="name" value="${esc(file.name.replace(/\.nbt$/i, ''))}" required></label>${originInputs([0,63,0])}`, async data => {
+  const origin = ['x','y','z'].map(k => Number(data.get(k))).join(',');
+  const r = await api(`/api/blueprints/${encodeURIComponent(file.name.replace(/\.nbt$/i, ''))}/nbt?fileName=${encodeURIComponent(file.name)}&origin=${encodeURIComponent(origin)}&name=${encodeURIComponent(data.get('name'))}`,
     { method: 'PUT', body: file, headers: { 'content-type': 'application/octet-stream' } });
-  toast(`${r.blueprint.name}: Version ${r.version.version} gespeichert.`); loadStatus();
+  toast(`${r.blueprint.name}: Version ${r.version.version} gespeichert.`); await loadStatus();
 }));
 
 // ---------- snapshots ----------
@@ -196,7 +224,7 @@ async function loadSnapshots() {
   const { sources, snapshots } = await api('/api/snapshots');
   $('snapSource').innerHTML = sources.map(s => `<option value="${esc(s)}">${s === 'live' ? 'Live-Welt' : esc(s)}</option>`).join('');
   $('snapSource').classList.toggle('hide', sources.length < 2);
-  $('snapRows').innerHTML = snapshots.map(s => `<tr><td>#${s.id}${s.pinned ? ' 📌' : ''}</td><td>${esc(s.source === 'live' ? 'Live' : s.label)}</td><td>${esc(when(s.capturedAt))}</td><td>${esc(when(s.worldTime))}</td>
+  $('snapRows').innerHTML = snapshots.map(s => `<tr><td>#${s.id}${s.pinned ? ' <span class="muted">(gesichert)</span>' : ''}</td><td>${esc(s.source === 'live' ? 'Live' : s.label)}</td><td>${esc(when(s.capturedAt))}</td><td>${esc(when(s.worldTime))}</td>
     <td class="num">${fmt(s.recordCount)}</td><td class="num">${fmt(s.blockEntityCount)}</td><td><a class="btn small" href="/viewer?snapshot=${s.id}">im Viewer</a></td></tr>`).join('') || '<tr><td colspan="7" class="muted">Noch keine Snapshots.</td></tr>';
 }
 $('snapNow').onclick = guard(async () => {
@@ -208,32 +236,66 @@ $('snapNow').onclick = guard(async () => {
 });
 
 // ---------- cannons ----------
-const CANNON_STATE = { outofrange: 'Außer Reichweite', alignment: 'Ausrichtung gesperrt', offline: 'Computer offline', nocomputer: 'Kein Computer', feeding: 'Liefert', preparing: 'Schematic vorbereiten', waiting: 'Wartet auf Material', full: 'Kiste voll', done: 'Fertig', paused: 'Pausiert', unassigned: 'Kein Bauplan', missing: 'Bauplan fehlt', nosnapshot: 'Kein Live-Bestand', error: 'Fehler', start: 'Startet' };
-const shortName = item => String(item).replace(/^minecraft:/, '');
-let cannonTimer = null;
-async function loadCannons() {
-  const [list, stock, bps] = await Promise.all([api('/api/cannons'), api('/api/me/stock'), status ? Promise.resolve(status.blueprints) : api('/api/blueprints')]);
+let cannonTimer = null, cannonLoad = null, cannonRevision = 0;
+const cannonBaseline = new Map();
+const busyCannons = new Set();
+const isAdmin = () => me?.user?.role === 'admin';
+const dirtyCannons = () => !!document.querySelector('.cannon form[data-dirty]');
+async function loadCannons(force = false) {
+  if (cannonLoad) {
+    if (!force) return cannonLoad;
+    await cannonLoad.catch(() => {});
+  }
+  cannonLoad = refreshCannons();
+  try { await cannonLoad; } finally { cannonLoad = null; scheduleCannons(); }
+}
+async function refreshCannons() {
+  const revision = cannonRevision;
+  const [list, stock, bps] = await Promise.all([api('/api/cannons'), api('/api/me/stock'), api('/api/blueprints')]);
+  if (revision !== cannonRevision) return;
   $('ccInstall').textContent = `wget run ${location.origin}/cc/install.lua`;
   const s = stock.stock;
-  $('meLine').innerHTML = s ? `ME-Bestand von <b>${esc(s.source)}</b>, ${esc(ago(s.at))} · ${fmt(s.kinds)} relevante Sorten` : 'Noch kein ME-Bestand gemeldet.';
+  $('meLine').textContent = s ? `ME-Bestand ${ago(s.at)} · ${fmt(s.kinds)} relevante Sorten` : 'Noch kein ME-Bestand gemeldet.';
   if (!list.length) $('ccSetup').open = true;
-  const options = bps.filter(b => b.current || b.version).map(b => [b.id, b.name]).sort((a, b) => a[1].localeCompare(b[1], 'de'));
-  $('cannonList').innerHTML = list.length ? `<div class="cannons">${list.map(c => cannonCard(c, options)).join('')}</div>`
-    : '<div class="panel muted">Noch keine Kanone gemeldet. Sobald ein Computer das Script startet, erscheint er hier.</div>';
-  scheduleCannons();
+  const options = bps.filter(b => b.current || b.version).map(b => [b.id, b.name]).sort((a,b) => a[1].localeCompare(b[1], 'de'));
+  if (!$('cannonList').querySelector('.cannons')) $('cannonList').innerHTML = '<div class="cannons"></div>';
+  const parent = $('cannonList').querySelector('.cannons');
+  for (const c of list) {
+    const old = [...parent.children].find(el => el.dataset.cannon === c.name);
+    // Check after the request, so edits made while the response was in flight are retained.
+    if (old && (busyCannons.has(c.name) || old.querySelector('form[data-dirty]') || old.contains(document.activeElement))) continue;
+    const template = document.createElement('template');
+    template.innerHTML = renderCannon(c, options, {isAdmin:isAdmin(), alignmentHtml:alignmentCard(c), ago});
+    const next = template.content.firstElementChild;
+    if (old) {
+      old.querySelectorAll('details[data-section]').forEach(d => {
+        const matching = [...next.querySelectorAll('details[data-section]')].find(n => n.dataset.section === d.dataset.section);
+        if (matching) matching.open = d.open;
+      });
+      old.replaceWith(next);
+    } else parent.append(next);
+    cannonBaseline.set(c.name, c);
+  }
+  for (const old of [...parent.children]) {
+    if (!list.some(c => c.name === old.dataset.cannon)) { cannonBaseline.delete(old.dataset.cannon); old.remove(); }
+  }
+  if (!list.length) parent.innerHTML = '<p class="muted">Noch keine Kanone gemeldet. Sobald ein Computer das Script startet, erscheint er hier.</p>';
 }
-// Re-arms every 15 s; skips the reload while hidden, on another tab or while a card field has focus.
 function scheduleCannons() {
   clearTimeout(cannonTimer);
   cannonTimer = setTimeout(() => {
     if ($('cannonList').closest('.hide')) return;
-    if (document.hidden || document.activeElement?.closest?.('.cannon select, .cannon input') || document.querySelector('.schematic-form[data-dirty], button[data-act="transfer"]:disabled')) return scheduleCannons();
+    if (document.hidden) return scheduleCannons();
     loadCannons().catch(() => scheduleCannons());
   }, 15e3);
 }
+$('showSetup').onclick = () => { $('ccSetup').open = !$('ccSetup').open; if ($('ccSetup').open) $('ccSetup').scrollIntoView({block:'nearest'}); };
+$('ccSetup').addEventListener('toggle', () => $('showSetup').setAttribute('aria-expanded', String($('ccSetup').open)));
+window.addEventListener('beforeunload', e => { if (dirtyCannons()) { e.preventDefault(); e.returnValue = ''; } });
+
 function alignmentCard(c) {
   const a=c.alignment || {state:'disabled',message:'Ausrichtung deaktiviert: keine bestätigte Blockbindung.'}, b=a.binding, d=a.desired, o=a.observed;
-  return `<details class="alignment"><summary>Ausrichtung: ${esc(a.state==='aligned'?'Live bestätigt':a.state==='disabled'?'Deaktiviert / nicht gebunden':'Material gesperrt · '+a.state)}</summary>
+  return `<details class="alignment" data-section="binding"><summary>Ausrichtung: ${esc(a.state==='aligned'?'Live bestätigt':a.state==='disabled'?'Deaktiviert / nicht gebunden':'Material gesperrt · '+a.state)}</summary>
     <p class="${a.state==='aligned'?'muted':'warn'}">${esc(a.message)}</p>
     ${b?`<p>Bestätigter Block: <span class="mono">${esc(b.dimension)} ${esc(b.x)} ${esc(b.y)} ${esc(b.z)}</span> · Owner ${esc(b.owner)}</p>`:''}
     ${d?`<p>Soll: ${esc(d.file)} · v${esc(d.version)} · Anker ${esc(d.anchor.join(' '))} · Rotation none / Spiegelung none<br><small class="mono">SHA256 ${esc(d.sha256)}</small></p>`:''}
@@ -247,107 +309,72 @@ function alignmentCard(c) {
   </details>`;
 }
 // alignment-card-end
-function cannonCard(c, bpOptions) {
-  const o = c.options, st = c.status, t = c.totals, bp = c.blueprint;
-  const sc = c.schematic?.settings || {}, job = c.schematic?.job;
-  const jobState = { outofrange: 'Außer Reichweite', queued: 'Wartet auf Vorbereitung', applying: 'Wird eingesetzt', waiting: 'Wartet auf Kanone', ready: 'Schematic eingesetzt', empty: 'Kein Rest zu bauen', error: 'Vorbereitung fehlgeschlagen' };
-  const pct = t && t.start ? Math.max(0, Math.min(100, Math.round((t.start - t.needed) / t.start * 1000) / 10)) : null;
-  const live = st && !st.stale && c.online ? st : null;
-  const offline = !c.online && bp && !['done', 'paused', 'outofrange'].includes(c.state);
-  const state = offline ? (c.lastSeenAt ? 'offline' : 'nocomputer') : c.state === 'feeding' && live ? live.state : c.state;
-  const shorts = (live?.shortages || []).map(x => `<li class="${x.crafting ? '' : 'warn'}">${fmt(x.missing)}× ${esc(shortName(x.item))} · im ME ${fmt(x.inME)}${x.crafting ? ' · wird gecraftet' : x.craftable ? ' · craftbar' : ''}${x.error ? ` · <span class="err">${esc(x.error)}</span>` : ''}</li>`).join('');
-  const next = (c.items || []).slice(0, 6).map(i => `${esc(shortName(i.item))} ${fmt(i.needed)}`).join(' · ');
-  return `<div class="panel cannon" data-cannon="${esc(c.name)}">
-    <div class="row" style="justify-content:space-between"><h3><span class="dot ${c.online ? 'on' : ''}" title="${c.online ? 'online' : 'offline'}"></span>${esc(c.name)}</h3>
-      <span class="muted" style="font-size:12px">${c.lastSeenAt ? 'zuletzt ' + esc(ago(c.lastSeenAt)) : 'nie gesehen'}${live?.script ? ' · Script ' + esc(live.script) : ''}</span></div>
-    <div class="row" style="margin-top:10px"><select data-f="blueprint" aria-label="Bauplan"><option value="">– kein Bauplan –</option>${bp && !bpOptions.some(([id]) => id === bp.id) ? `<option value="${esc(bp.id)}" selected>${esc(bp.name)}</option>` : ''}${bpOptions.map(([id, name]) => `<option value="${esc(id)}"${bp?.id === id ? ' selected' : ''}>${esc(name)}</option>`).join('')}</select>
-      ${bp && bp.version !== bp.currentVersion ? `<button class="small" data-act="upgrade" data-bp="${esc(bp.id)}" title="Neuere Version zuweisen (neuer Auftrag, Reste gehen zurück)">v${bp.version} → v${bp.currentVersion}</button>` : ''}
-      ${c.restNbt ? `<a class="btn small primary" href="${esc(c.restNbt)}" download>Rest-NBT</a>` : ''}</div>
-    ${bp ? `${placementCard(bp, 'Einsetzkoordinaten · zugewiesene Schematic')}<div style="margin-top:10px"><div class="bar"><i style="width:${pct ?? 0}%"></i></div>
-      <div class="muted" style="font-size:12px;margin-top:3px">${pct == null ? '–' : pct.toLocaleString('de-DE') + ' %'} · fehlt ${fmt(t.needed)} Items in ${fmt(t.kinds)} Sorten</div></div>` : ''}
-    ${cannonRangeCard(c, me?.user?.role === 'admin')}
-    <div class="row" style="margin-top:8px"><span class="badge ${state === 'done' ? 'built' : ['waiting', 'error', 'missing', 'offline', 'nocomputer', 'outofrange'].includes(state) ? 'warning' : 'ok'}">${esc(CANNON_STATE[state] || state)}</span>
-      ${live?.chest ? `<span class="muted" style="font-size:12px">Kiste ${fmt(live.chest.used)}/${fmt(live.chest.slots)} Slots</span>` : ''}
-      ${c.message ? `<span class="muted" style="font-size:12px">${esc(c.message)}</span>` : ''}${live?.message ? `<span class="muted" style="font-size:12px">${esc(live.message)}</span>` : ''}</div>
-    ${shorts ? `<ul class="short">${shorts}</ul>` : ''}
-    ${next && state !== 'done' ? `<div class="muted" style="font-size:12px;margin-top:6px">Als Nächstes: ${next}</div>` : ''}
-    <div class="opts">
-      <label><input type="checkbox" data-o="paused"${o.paused ? ' checked' : ''}> Pausiert</label>
-      <label><input type="checkbox" data-o="autoCraft"${o.autoCraft ? ' checked' : ''}> Fehlendes craften</label>
-      <label><input type="checkbox" data-o="returnLeftovers"${o.returnLeftovers ? ' checked' : ''}> Reste zurück ins ME</label>
-      <label title="Zellen mit Maschine im Weg nicht beliefern (wie in der Rest-NBT)"><input type="checkbox" data-o="skipBlocked"${o.skipBlocked ? ' checked' : ''}> Maschinen-Zellen auslassen</label>
-      <label>Puffer <input type="number" min="1" max="16" data-o="bufferStacks" value="${o.bufferStacks}"> Stacks</label>
-      <label>Schießpulver <input type="number" min="0" max="64" data-o="gunpowder" value="${o.gunpowder}"></label>
-      <label>Craft-Menge <input type="number" min="1" max="4096" data-o="craftBatch" value="${o.craftBatch}"></label>
-    </div>
-    <details class="schematic-details"${sc.enabled ? ' open' : ''}><summary>Schematic automatisch vorbereiten</summary>
-      <form class="schematic-form">
-        <label class="row"><input name="enabled" type="checkbox"${sc.enabled ? ' checked' : ''}> Bauplan direkt in die Kanone einsetzen</label>
-        <p class="muted">Die App überträgt den Rest-Bauplan mit Zielkoordinaten und diesen Einstellungen. Die Kanone muss vollständig gestoppt sein. Danach startet Play den Bau.</p>
-        <p class="muted">${c.alignment?.binding ? `Bestätigte Kanone: <span class="mono">${esc([c.alignment.binding.x,c.alignment.binding.y,c.alignment.binding.z].join(' '))}</span> (${esc(c.alignment.binding.dimension)}).` : 'Zuerst unten unter Ausrichtung den Kanonen-Block prüfen und bestätigen.'}</p>
-        ${bp ? `<div class="muted" style="margin:8px 0">Bauplan-Ziel: <span class="mono">${esc(bp.origin.join(' '))}</span> (Oberwelt, Originalausrichtung). <button class="small" type="button" data-act="position" data-bp="${esc(bp.id)}">Zielkoordinaten ändern</button></div>` : '<p class="muted">Zuerst oben einen Bauplan wählen.</p>'}
-        <label class="setting">Blöcke ersetzen <select name="replaceMode" aria-label="Blöcke ersetzen">${[[0, 'Feste Blöcke stehen lassen'], [1, 'Feste Blöcke nur durch feste ersetzen'], [2, 'Vorhandene Blöcke ersetzen']].map(([v, label]) => `<option value="${v}"${(sc.replaceMode ?? 2) === v ? ' selected' : ''}>${label}</option>`).join('')}</select></label>
-        <div class="opts">
-          <label><input name="autoUpdate" type="checkbox"${sc.autoUpdate !== false ? ' checked' : ''}> Neue Planversionen übernehmen</label>
-          <label><input name="skipMissing" type="checkbox"${sc.skipMissing ? ' checked' : ''}> Fehlende Materialien überspringen</label>
-          <label><input name="protectBlockEntities" type="checkbox"${sc.protectBlockEntities !== false ? ' checked' : ''}> Maschinen schützen</label>
-        </div>
-        <div class="row"><button type="submit" class="small primary">Einstellungen speichern</button><button type="button" class="small" data-act="prepare"${sc.enabled && bp ? '' : ' disabled'}>Rest-Plan neu vorbereiten</button></div>
-      </form>
-      ${job && sc.enabled ? `<div class="schematic-status" role="status"><span class="badge ${job.state === 'ready' ? 'built' : 'warning'}">${esc(jobState[job.state] || job.state)}</span><p>${esc(job.message)}</p>${job.version ? `<span class="muted">v${job.version}${job.snapshot ? ' · Bestand #' + job.snapshot : ''}${job.updatedAt ? ' · ' + esc(when(job.updatedAt)) : ''}</span>` : ''}</div>` : ''}
-    </details>
-${alignmentCard(c)}
-    <div class="row"><button class="small danger" data-act="delete"${c.alignment?.enabled?' disabled title="Gebundene Station geschützt"':''}>Entfernen</button></div>
-  </div>`;
-}
 $('cannonList').addEventListener('input', e => {
-  const form = e.target.closest('.schematic-form');
-  if (form) form.dataset.dirty = '1';
+  const form = e.target.closest('form');
+  if (form) { form.dataset.dirty = '1'; form.querySelector('.draft-note').textContent = 'Ungespeichert'; }
 });
-$('cannonList').addEventListener('submit', guard(async e => {
-  if (!e.target.matches('.schematic-form')) return;
+$('cannonList').addEventListener('reset', e => {
+  const form = e.target; delete form.dataset.dirty;
+  form.querySelector('.draft-note').textContent = '';
+  form.querySelector('.form-error').textContent = '';
+});
+$('cannonList').addEventListener('submit', async e => {
+  const form = e.target;
+  if (!form.matches('.cannon-settings, .assignment-form')) return;
   e.preventDefault();
-  const form = e.target, fields = form.elements, name = form.closest('[data-cannon]').dataset.cannon;
-  const schematic = { enabled: fields.enabled.checked,
-    replaceMode: Number(fields.replaceMode.value), autoUpdate: fields.autoUpdate.checked, skipMissing: fields.skipMissing.checked,
-    protectBlockEntities: fields.protectBlockEntities.checked };
-  await api('/api/cannons/' + encodeURIComponent(name), { method: 'PUT', body: { schematic } });
-  delete form.dataset.dirty;
-  toast('Schematic-Einstellungen gespeichert.');
-  await loadCannons();
-}));
-$('cannonList').addEventListener('change', guard(async e => {
-  const card = e.target.closest('[data-cannon]');
-  if (!card) return;
-  const name = card.dataset.cannon, el = e.target;
-  let body;
-  if (el.dataset.f === 'blueprint') {
-    if (!confirm(el.value ? `${name} baut ab jetzt „${el.selectedOptions[0].textContent}“. Reste des alten Auftrags gehen zurück ins ME. Weiter?` : `${name} keinen Bauplan mehr zuweisen?`)) { loadCannons(); return; }
-    body = { blueprint: el.value || null };
-  } else if (el.dataset.o) {
-    body = { options: { [el.dataset.o]: el.type === 'checkbox' ? el.checked : Number(el.value) } };
-  } else return;
+  const card = form.closest('[data-cannon]'), name = card.dataset.cannon;
+  if (busyCannons.has(name)) return;
+  const current = cannonBaseline.get(name), data = new FormData(form);
+  const error = form.querySelector('.form-error'); error.textContent = '';
+  let controls = [];
   try {
-    await api('/api/cannons/' + encodeURIComponent(name), { method: 'PUT', body });
-    toast('Gespeichert. Der Computer holt es sich innerhalb einer Minute.');
-  } finally { el.blur(); loadCannons().catch(() => {}); }
-}));
+    let body;
+    if (form.matches('.cannon-settings')) {
+      if (card.querySelector('.assignment-form[data-dirty]')) throw new Error('Die Bauplan-Auswahl zuerst zuweisen oder verwerfen.');
+      body = cannonSettingsPayload(data, current, isAdmin());
+    }
+    else {
+      if (card.querySelector('.cannon-settings[data-dirty]')) throw new Error('Einstellungen zuerst speichern oder verwerfen.');
+      const blueprint = data.get('blueprint') || null;
+      if (blueprint === (current.blueprint?.id || null)) { form.reset(); return; }
+      if (!confirm(blueprint ? `${name} den gewählten Bauplan zuweisen? Reste des alten Auftrags gehen zurück ins ME.` : `${name} keinen Bauplan mehr zuweisen?`)) return;
+      body = {blueprint};
+    }
+    if (!Object.keys(body).length) { form.reset(); toast('Keine Änderungen.'); return; }
+    busyCannons.add(name);
+    controls = [...card.querySelectorAll('input, select, button')].map(el => [el, el.disabled]);
+    controls.forEach(([el]) => el.disabled = true);
+    await api('/api/cannons/' + encodeURIComponent(name), {method:'PUT', body});
+    cannonRevision++;
+    delete form.dataset.dirty;
+    form.querySelector('.draft-note').textContent = '';
+    // Force this card to reload, but never discard drafts on a different cannon.
+    document.activeElement?.blur();
+    toast('Gespeichert.');
+  } catch (err) { error.textContent = err.message; }
+  finally {
+    busyCannons.delete(name); controls.forEach(([el, disabled]) => el.disabled = disabled);
+  }
+  if (!form.dataset.dirty && !error.textContent) await loadCannons(true).catch(err => toast(err.message, true));
+});
 $('cannonList').addEventListener('click', guard(async e => {
   const b = e.target.closest('button[data-act]'), card = e.target.closest('[data-cannon]');
   if (!b || !card) return;
   const name = card.dataset.cannon;
+  if (busyCannons.has(name)) return;
+  if (b.dataset.act !== 'position' && card.querySelector('form[data-dirty]')) { toast('Änderungen zuerst speichern oder verwerfen.', true); return; }
   const alignmentUrl='/api/cannons/'+encodeURIComponent(name)+'/alignment';
   if (b.dataset.act === 'transfer') {
     if (!confirm(`Auftrag von ${name} an ${b.dataset.target} verschieben? Beide Kanonen müssen vollständig gestoppt und zurückgesetzt sein. Einstellungen und Bauplan-Ziel werden übernommen. Danach an der Zielkanone Play drücken.`)) return;
-    b.disabled = true;
+    b.disabled = true; busyCannons.add(name);
     try {
       const result = await api('/api/cannons/' + encodeURIComponent(name) + '/transfer', { method: 'POST', body: {
         target: b.dataset.target, sourceAssignment: Number(b.dataset.sourceAssignment), targetAssignment: Number(b.dataset.targetAssignment), baseVersion: Number(b.dataset.version)
       } });
       const job = result.target.schematic?.job;
       toast(job?.state === 'ready' ? `Auftrag an ${result.target.name} verschoben und Schematic eingesetzt.` : `Auftrag an ${result.target.name} verschoben. ${job?.message || 'Vorbereitung wartet.'}`);
-      await loadCannons();
-    } finally { b.disabled = false; }
+    } finally { b.disabled = false; busyCannons.delete(name); }
+    cannonRevision++; b.blur(); await loadCannons(true);
     return;
   }
   if(b.dataset.act==='alignment-probe') {
@@ -373,6 +400,7 @@ $('cannonList').addEventListener('click', guard(async e => {
     await api('/api/cannons/' + encodeURIComponent(name), { method: 'DELETE' });
   }
   if (b.dataset.act === 'upgrade') {
+    if (!confirm('Die aktuelle Bauplan-Version zuweisen? Der bisherige Auftrag wird ersetzt.')) return;
     await api('/api/cannons/' + encodeURIComponent(name), { method: 'PUT', body: { blueprint: b.dataset.bp, version: null } });
   }
   if (b.dataset.act === 'position') {
@@ -383,7 +411,7 @@ $('cannonList').addEventListener('click', guard(async e => {
     await api('/api/cannons/' + encodeURIComponent(name) + '/schematic/prepare', { method: 'POST', body: {} });
     toast('Aktueller Rest-Plan wird bei gestoppter Kanone eingesetzt.');
   }
-  loadCannons();
+  cannonRevision++; b.blur(); await loadCannons(true);
 }));
 document.querySelectorAll('[data-goto]').forEach(a => a.addEventListener('click', e => { e.preventDefault(); showTab(a.dataset.goto); }));
 
@@ -434,7 +462,7 @@ const ACTIONS = { 'blueprint.create': 'Bauplan angelegt', 'blueprint.version': '
 async function loadActivity() {
   const list = await api('/api/activity?limit=200');
   $('actRows').innerHTML = list.filter(a => a.action !== 'auth.login').map(a => `<tr><td>${esc(when(a.at))}</td><td>${esc(a.user || 'System')}</td><td>${esc(a.via)}</td><td>${esc(ACTIONS[a.action] || a.action)}</td><td class="mono">${esc(a.target || '')}</td>
-    <td class="muted" style="font-size:12px">${esc(a.detail ? Object.entries(a.detail).filter(([k, v]) => v != null && typeof v !== 'object').map(([k, v]) => k + ': ' + v).join(', ') : '')}</td></tr>`).join('');
+    <td class="muted" style="font-size:12px">${esc(a.detail ? Object.entries(a.detail).filter(([k, v]) => v != null && typeof v !== 'object').map(([k, v]) => k + ': ' + v).join(', ') : '')}</td></tr>`).join('') || '<tr><td colspan="6" class="muted">Noch keine Änderungen.</td></tr>';
 }
 
 // ---------- admin ----------
@@ -442,7 +470,7 @@ async function loadAdmin() {
   const [inv, users, snaps] = await Promise.all([api('/api/invites'), api('/api/users'), api('/api/snapshots')]);
   $('impBase').innerHTML = '<option value="">Planungsstand: neuester Live-Snapshot</option>' + snaps.snapshots.map(s => `<option value="${s.id}">Planungsstand: #${s.id} ${esc(s.source === 'live' ? 'Live' : s.label)} (${esc(when(s.worldTime))})</option>`).join('');
   $('invRows').innerHTML = inv.map(i => `<tr><td>${esc(i.note || '–')}</td><td>${esc(i.role)}</td><td>${esc(when(i.createdAt))}</td><td>${esc(when(i.expiresAt))}</td><td>${esc(i.usedBy || '–')}</td>
-    <td>${!i.usedAt && new Date(i.expiresAt) > new Date() ? `<button class="small danger" data-inv="${i.id}">Zurückziehen</button>` : ''}</td></tr>`).join('');
+    <td>${!i.usedAt && new Date(i.expiresAt) > new Date() ? `<button class="small danger" data-inv="${i.id}">Zurückziehen</button>` : ''}</td></tr>`).join('') || '<tr><td colspan="6" class="muted">Noch keine Einladungen.</td></tr>';
   $('invRows').querySelectorAll('[data-inv]').forEach(b => b.onclick = guard(async () => { await api('/api/invites/' + b.dataset.inv, { method: 'DELETE' }); loadAdmin(); }));
   $('userRows').innerHTML = users.map(u => `<tr><td>${esc(u.username)}</td><td>${esc(u.role)}</td><td>${esc(when(u.createdAt))}</td><td>${u.disabledAt ? 'gesperrt' : 'aktiv'}</td>
     <td>${u.id === me.user.id ? '<span class="muted">du</span>' : `<button class="small" data-user="${u.id}" data-dis="${u.disabledAt ? 0 : 1}">${u.disabledAt ? 'Entsperren' : 'Sperren'}</button>`}</td></tr>`).join('');
@@ -486,6 +514,7 @@ window.addEventListener('hashchange', () => { if (me) routeFromHash(); });
     $('who').textContent = me.user.username;
     if (me.user.role === 'admin') $('adminTab').classList.remove('hide');
     routeFromHash();
+    if (!['#overview','#coordinates'].includes(location.hash)) loadStatus().catch(() => {});
     setInterval(() => { if (!document.hidden && !$('drawer').classList.contains('open')) loadStatus().catch(() => {}); }, 60e3);
   } catch (e) { toast(e.message, true); }
 })();

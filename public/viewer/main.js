@@ -324,7 +324,7 @@ function renderBlueprints() {
         return `<div class="bp ${state.selected === b.id ? 'selected' : ''}" data-bp="${esc(b.id)}">
           <input type="checkbox" data-vis="${esc(b.id)}" ${state.visible.has(b.id) ? 'checked' : ''} aria-label="sichtbar">
           <span class="t"><b>${esc(b.name)}</b><small>v${b.version} · ${esc(st.label)}</small></span>
-          <span class="ring" style="--p:${p};--c:${st.color}" title="${String(p).replace('.', ',')} % gebaut"><span>${Math.round(p)}</span></span>
+          <span class="ring" style="--p:${p};--c:${st.color}" title="${String(p).replace('.', ',')} % gebaut"><span>${Math.round(p)} %</span></span>
         </div>`;
       }).join('')}</div></div>`;
   }).join('') || '<p style="color:var(--muted)">Keine Baupläne gefunden.</p>';
@@ -440,7 +440,7 @@ function renderMaterials() {
     return `<tr class="${r.needed ? '' : 'done'}" title="${esc(byTitle(r))}"><td><span class="it"><i style="--c:${color(r.item)}"></i><span>${esc(n.label)}<small>${esc(r.item)}</small></span></span></td>
       <td class="num"><b>${fmt(r.needed)}</b></td><td class="num">${esc(stacksText(r))}</td>${t.me ? `<td class="num${r.short ? ' short' : ''}" title="${r.short ? `fehlt im ME: ${fmt(r.short)}${r.craftable ? ' · craftbar' : ''}` : 'ME deckt alles'}">${fmt(r.me)}${r.short && r.craftable ? ' ⚙' : ''}</td>` : ''}
       <td><div class="bar" title="${fmt(r.built)} von ${fmt(r.planned)} gesetzt"><div style="width:${pct}%"></div></div></td></tr>`;
-  }).join('')}</tbody></table>` : `<div class="empty">${t.needed ? 'Kein Item passt zur Suche.' : 'Nichts mehr zu bauen – alles steht wie geplant. 🎉'}</div>`;
+  }).join('')}</tbody></table>` : `<div class="empty">${t.needed ? 'Kein Item passt zur Suche.' : 'Nichts mehr zu bauen. Alles steht wie geplant.'}</div>`;
   const removed = d.removed.length ? `<details><summary>Beim Abreißen/Ersetzen fallen ${fmt(d.removed.reduce((a, r) => a + r.count, 0))} Blöcke an</summary><table class="mat-table"><tbody>${d.removed.slice(0, 60).map(r =>
     `<tr><td><span class="it"><i style="--c:${color(r.block)}"></i><span>${esc(pretty(r.block).label)}<small>${esc(r.block)}</small></span></span></td><td class="num">${fmt(r.count)}</td></tr>`).join('')}</tbody></table></details>` : '';
   $('#mat-body').innerHTML = table + removed;
@@ -584,7 +584,7 @@ function setupPicking() {
 
 // ---------- toolbar + wiring ----------
 function syncNavButtons() {
-  document.querySelectorAll('#nav-mode button').forEach(b => b.classList.toggle('active', b.dataset.mode === nav.mode));
+  document.querySelectorAll('#nav-mode button').forEach(b => { b.classList.toggle('active', b.dataset.mode === nav.mode); b.setAttribute('aria-pressed', String(b.dataset.mode === nav.mode)); });
 }
 
 function updateHud() {
@@ -598,7 +598,7 @@ function buildUi() {
   renderEdition(); renderBlueprints(); renderPois(); renderSnapshot();
 
   document.querySelectorAll('.tabs button').forEach(b => b.onclick = () => {
-    document.querySelectorAll('.tabs button').forEach(x => x.classList.toggle('active', x === b));
+    document.querySelectorAll('.tabs button').forEach(x => { x.classList.toggle('active', x === b); x.setAttribute('aria-pressed', String(x === b)); });
     document.querySelectorAll('.pane').forEach(p => p.classList.toggle('active', p.dataset.pane === b.dataset.tab));
   });
   $('#presets').onclick = e => { const b = e.target.closest('[data-preset]'); if (b) applyPreset(PRESETS.find(p => p.id === b.dataset.preset)); };
@@ -651,7 +651,7 @@ function buildUi() {
     view.setTimeOfDay(h);
     $('#tod-val').textContent = `${String(Math.floor(h) % 24).padStart(2, '0')}:${String(Math.round((h % 1) * 60)).padStart(2, '0')}`;
   };
-  const toggle = (id, fn) => { const b = $(id); b.onclick = () => { b.classList.toggle('active'); fn(b.classList.contains('active')); }; };
+  const toggle = (id, fn) => { const b = $(id); b.onclick = () => { b.classList.toggle('active'); b.setAttribute('aria-pressed', String(b.classList.contains('active'))); fn(b.classList.contains('active')); }; };
   toggle('#t-shadows', on => view.setShadows(on));
   toggle('#t-bloom', on => { view.bloomEnabled = on; });
   toggle('#t-grid', on => { view.grid.visible = on; });
@@ -666,7 +666,7 @@ function buildUi() {
       setTimeout(() => URL.revokeObjectURL(a.href), 2000);
     });
   };
-  $('#panel-toggle').onclick = () => $('#panel').classList.toggle('open');
+  $('#panel-toggle').onclick = () => { const open = $('#panel').classList.toggle('open'); $('#panel-toggle').setAttribute('aria-expanded', String(open)); };
   addEventListener('keydown', e => {
     if (e.key === 'Escape' && !$('#materials').classList.contains('hidden')) { closeMaterials(); return; }
     if (e.target.closest?.('input, select, textarea')) return;
@@ -679,10 +679,5 @@ function buildUi() {
   setupPicking();
   checkLive();
 }
-
-// Hero image behind the loading screen, when the build produced one.
-const hero = new Image();
-hero.onload = () => { const el = document.querySelector('.loading-hero'); el.style.setProperty('--hero', `url(${hero.src})`); el.classList.add('has-image'); };
-hero.src = '/viewer/hero.webp';
 
 main().catch(fail);

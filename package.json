@@ -1,6 +1,6 @@
 {
   "name": "atm10-campus",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "private": true,
   "description": "ATM10 Campus: Baupläne, Live-Bestand aus der Welt und Konfliktanalyse",
   "type": "module",
