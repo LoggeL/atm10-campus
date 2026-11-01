@@ -130,7 +130,8 @@ def dumps(value):
     if isinstance(value, str):
         return json.dumps(value, ensure_ascii=False)
     if isinstance(value, dict):
-        return '{' + ','.join(json.dumps(k) + ':' + dumps(v) for k, v in value.items()) + '}'
+        key = lambda k: k if re.fullmatch(r'[A-Za-z0-9_.+-]+', k) else json.dumps(k)
+        return '{' + ','.join(key(k) + ':' + dumps(v) for k, v in value.items()) + '}'
     if isinstance(value, list):
         prefix = value.kind + ';' if isinstance(value, Array) else ''
         return '[' + prefix + ','.join(map(dumps, value)) + ']'

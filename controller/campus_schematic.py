@@ -66,7 +66,7 @@ def installed(block, job):
                for i in block.get('Inventory', {}).get('Items', [])) and same(block.get('Options'), options(job))
 
 
-def apply_command(block, job):
+def prepare_update(block, job):
     prefix, pos = context(job)
     if block.get('id') != 'create:schematicannon':
         raise Waiting('An diesen Koordinaten ist keine geladene Schematicannon.')
@@ -91,15 +91,49 @@ def apply_command(block, job):
         if int(empty.get('count', 1)) > 1:
             new_items.append({**empty, 'count': int(empty['count']) - 1})
     new_items.append({'Slot': 0, 'id': 'create:schematic', 'count': 1, 'components': components(job)})
-    payload = {'Inventory': {**inventory, 'Items': new_items}, 'Options': options(job), 'State': 'STOPPED'}
+    payload = {'Inventory': {**inventory, 'Items': new_items}, 'Options': options(job)}
     # Check the observed inventory, all empty slots, the cannon type and its stopped state in the SAME server command.
     # This prevents a GUI interaction or Play between the read and write from replacing a live plan.
-    observed = {'State': 'STOPPED', 'AmountPlaced': 0, 'AmountToPlace': 0, 'FlyingBlocks': [], 'Inventory': inventory}
-    guard = f'{prefix} if block {pos} create:schematicannon if data block {pos} {dumps(observed)} unless data block {pos} Printer.Anchor unless data block {pos} Printer.CurrentPos'
+    observed_items = [i if int(i['Slot']) != 0 else {'Slot': 0, 'id': i['id'], 'count': i.get('count', 1), 'components': {
+        k: i['components'][k] for k in ('create:schematic_file', 'create:schematic_owner')}} for i in items]
+    observed = {'State': 'STOPPED', 'AmountPlaced': 0, 'AmountToPlace': 0, 'FlyingBlocks': [], 'Inventory': {**inventory, 'Items': observed_items}}
+    guard = f'{prefix} if block {pos} create:schematicannon{dumps(observed)} unless data block {pos} Printer.Anchor unless data block {pos} Printer.CurrentPos'
     for slot in range(5):
         if slot not in by_slot:
             guard += f' unless data block {pos} Inventory.Items[{{Slot:{slot}}}]'
-    return f'{guard} run data merge block {pos} {dumps(payload)}'
+    key = storage_key(job)
+    command = f'{guard} run data modify block {pos} {{}} merge from storage campus:schematic_transfer {key}'
+    if len(command.encode('utf8')) > 950:
+        raise Waiting('Bücher oder umfangreiche Zusatzdaten aus dem Kanonen-Inventar nehmen und erneut vorbereiten.')
+    return command, payload
+
+
+def storage_key(job):
+    return 'j' + job['fileName'][7:-4].replace('-', '')
+
+
+def apply_command(block, job):
+    return prepare_update(block, job)[0]
+
+
+def staging_commands(block, job, payload):
+    prefix, pos = context(job)
+    target = 'campus:schematic_transfer ' + storage_key(job)
+    commands = [f'data modify storage {target} set value {{}}',
+                f'{prefix} run data modify storage {target}.Inventory set from block {pos} Inventory',
+                f'data modify storage {target}.Options set value {dumps(payload["Options"])}']
+    by_slot = {int(i['Slot']): i for i in block['Inventory']['Items']}
+    if 0 in by_slot:
+        commands.append(f'data remove storage {target}.Inventory.Items[{{Slot:0}}]')
+    elif 1 in by_slot and by_slot[1].get('id') == 'create:empty_schematic':
+        count = int(by_slot[1].get('count', 1))
+        commands.append(f'data modify storage {target}.Inventory.Items[{{Slot:1}}].count set value {count - 1}' if count > 1
+                        else f'data remove storage {target}.Inventory.Items[{{Slot:1}}]')
+    new_item = next(i for i in payload['Inventory']['Items'] if int(i['Slot']) == 0)
+    commands.append(f'data modify storage {target}.Inventory.Items append value {dumps(new_item)}')
+    if any(len(c.encode('utf8')) > 950 for c in commands):
+        raise ValueError('Schematic-Metadaten zu umfangreich.')
+    return commands
 
 
 def prepare_schematic(bridge, binding, desired, encoded, cannon_options, size):
@@ -148,7 +182,8 @@ def prepare_schematic(bridge, binding, desired, encoded, cannon_options, size):
         raise ValueError('Unsichere Schematic-Datei.')
     if installed(block, job) and bridge.file_hash(binding['owner'], desired['file']) == desired['sha256']:
         return {'binding': binding, 'observed': bridge.inspect(binding), 'applied': True}
-    command = apply_command(block, job)
+    command, payload = prepare_update(block, job)
+    stages = staging_commands(block, job, payload)
     directory.mkdir(parents=True, exist_ok=True)
     if target.exists() and hashlib.sha256(target.read_bytes()).hexdigest() != desired['sha256']:
         raise ValueError('Unveränderliche Schematic-Datei hat einen anderen Hash.')
@@ -164,7 +199,12 @@ def prepare_schematic(bridge, binding, desired, encoded, cannon_options, size):
     backup = backups / (desired['file'] + '.snbt')
     if not backup.exists():
         backup.write_text(dumps(block))
-    bridge.run(command)
+    try:
+        for stage in stages:
+            bridge.run(stage)
+        bridge.run(command)
+    finally:
+        bridge.run('data remove storage campus:schematic_transfer ' + storage_key(job))
     result = read()
     if not installed(result, job) or result.get('State') != 'STOPPED' or int(result.get('AmountPlaced', -1)) != 0 or int(result.get('AmountToPlace', -1)) != 0:
         raise ValueError('Kanone während Vorbereitung geändert. Keine Freigabe; bewusst stoppen und erneut versuchen.')

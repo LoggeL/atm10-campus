@@ -12,7 +12,7 @@
 +    campus_auth = RequestAuth(campus_secret)
 +    if campus_bridge is None and len(campus_secret) >= 32:
 +        campus_bridge = CannonBridge(base, lambda command: controller.run(
-+            'docker', 'exec', CONTAINER, 'rcon-cli', command, timeout=4))
++            'docker', 'exec', CONTAINER, 'timeout', '3s', 'rcon-cli', command, timeout=4))
 @@ -333,0 +343,4 @@
 +            if self.path.startswith('/campus/'):
 +                if campus_bridge is None:
