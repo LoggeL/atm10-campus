@@ -87,6 +87,19 @@ test('an untracked finish (no native history) becomes done once the newer world 
   assert.equal(c.schematic.job.state,'empty');
   assert.equal(f.s.calls.filter(a=>a==='prepare').length,1,'nothing left to prepare');
   assert.equal(c.blueprintChoices.items.length,0,'built plan is not offered again');
+  // The CC feeder treats any job other than "ready" as preparing and returns
+  // leftovers only for an aligned, done plan.
+  const plan=(await f.req('GET','/api/cannons/one/plan')).json();
+  assert.equal(plan.state,'done');assert.equal(plan.done,true);
+  assert.equal(plan.alignment.state,'aligned');assert.equal(plan.alignment.leaseSeconds,10);
+  assert.equal(plan.schematic.job,null,'feeder does not stay in its preparing branch');
+  assert.deepEqual(plan.items,[]);assert.equal(plan.options.autoCraft,false);assert.equal(plan.options.gunpowder,0);
+  for(const mode of ['ready','running']) {
+    f.s.mode=mode;
+    const held=(await f.req('GET','/api/cannons/one/plan')).json();
+    assert.notEqual(held.alignment.state,'aligned',`${mode}: a loaded cannon keeps the gate closed`);
+    assert.equal(held.done,false);assert.equal(held.schematic.job.state,'empty');assert.deepEqual(held.items,[]);
+  }
 });
 
 test('a world-confirmed finished plan is done even while its schematic is still loaded',async t=>{

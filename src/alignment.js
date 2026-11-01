@@ -191,6 +191,10 @@ export function registerAlignment(app, campus, schematics) {
     if(alignment.enabled && (row(name)?.assignment!==plan.assignment || applying.has(name.toLowerCase()))) {alignment.state='pending';alignment.message='Auftrag geändert oder Apply läuft; Plan erneut abrufen.';}
     if(alignment.enabled){alignment.leaseSeconds=10;plan={...plan,intervals:{...plan.intervals,plan:5}};}
     if(alignment.state==='aligned'&&alignment.completed)return {...plan,alignment,nativeProgress:alignment.nativeProgress,state:'done',message:alignment.message,done:true,items:[],totals:{...plan.totals,needed:0,kinds:0},options:{...plan.options,gunpowder:0,autoCraft:false}};
+    // World says built and the cannon provably holds nothing: the feeder may
+    // finish (leftovers back to ME). Without items this releases no material.
+    if(plan.done&&['empty','consumed'].includes(plan.schematic?.job?.state)&&emptyStopped(alignment.observed)&&row(name)?.assignment===plan.assignment&&!applying.has(name.toLowerCase()))
+      return {...plan,alignment:{...alignment,state:'aligned'},schematic:{...plan.schematic,job:null},state:'done',message:'Laut Weltabgleich ist für diesen Auftrag nichts mehr zu bauen.',items:[],totals:{...plan.totals,needed:0,kinds:0},options:{...plan.options,gunpowder:0,autoCraft:false}};
     if(plan.state!=='outofrange' && (!alignment.enabled || alignment.state==='aligned'))return {...plan,alignment};
     return {...plan,state:plan.state==='outofrange'?'outofrange':'alignment',message:alignment.message,items:[],done:false,alignment,options:{...plan.options,paused:true,gunpowder:0,autoCraft:false}};
   };
