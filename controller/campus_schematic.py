@@ -4,7 +4,7 @@ import math
 import os
 import re
 
-from campus_snbt import loads, dumps, Array
+from campus_snbt import loads, dumps, Array, Number
 
 
 class Waiting(ValueError):
@@ -64,6 +64,23 @@ def same(actual, expected):
 def installed(block, job):
     return block.get('id') == 'create:schematicannon' and any(int(i['Slot']) == 0 and i.get('id') == 'create:schematic' and same(i.get('components'), components(job))
                for i in block.get('Inventory', {}).get('Items', [])) and same(block.get('Options'), options(job))
+
+
+def freshly_prepared(state, status, placed, remaining, flying, printer, origin):
+    """Accept Create's automatic checklist initialization, never printing progress."""
+    def number(value):
+        return value.value if isinstance(value, Number) else value
+    def coordinates(value, expected):
+        return isinstance(value, list) and len(value) == 3 and all(number(a) == b for a, b in zip(value, expected))
+    placed, remaining = number(placed), number(remaining)
+    if placed != 0 or type(remaining) not in (int, float) or not math.isfinite(remaining) or remaining < 0 or remaining != int(remaining) or flying != 0 or not isinstance(printer, dict):
+        return False
+    if printer.get('DeferredBlocks') != [] or number(printer.get('EntityProgress')) != -1 or printer.get('PrintStage') != 'BLOCKS':
+        return False
+    if state == 'STOPPED':
+        return remaining == 0 and 'Anchor' not in printer and 'CurrentPos' not in printer
+    return (state == 'PAUSED' and status == 'ready'
+            and coordinates(printer.get('Anchor'), origin) and coordinates(printer.get('CurrentPos'), [-1, 0, 0]))
 
 
 def prepare_update(block, job):
@@ -206,10 +223,15 @@ def prepare_schematic(bridge, binding, desired, encoded, cannon_options, size):
     finally:
         bridge.run('data remove storage campus:schematic_transfer ' + storage_key(job))
     result = read()
-    if not installed(result, job) or result.get('State') != 'STOPPED' or int(result.get('AmountPlaced', -1)) != 0 or int(result.get('AmountToPlace', -1)) != 0:
+    if not installed(result, job) or not freshly_prepared(result.get('State'), result.get('Status'), result.get('AmountPlaced'), result.get('AmountToPlace'),
+            len(result['FlyingBlocks']) if isinstance(result.get('FlyingBlocks'), list) else None, result.get('Printer'), job['origin']):
         raise ValueError('Kanone während Vorbereitung geändert. Keine Freigabe; bewusst stoppen und erneut versuchen.')
     observed = bridge.inspect(binding)
     if observed['fileHash'] != desired['sha256']:
         raise ValueError('Schematic-Dateihash nach Vorbereitung abweichend.')
+    if (observed.get('item') != 'create:schematic' or not same(observed.get('components'), components(job)) or not same(observed.get('options'), options(job))
+            or not freshly_prepared(observed.get('state'), observed.get('status'), observed.get('amountPlaced'), observed.get('amountToPlace'),
+                                    observed.get('flyingBlocks'), observed.get('printer'), job['origin'])):
+        raise ValueError('Kanone während Readback geändert. Keine Freigabe; nativen Zustand prüfen.')
     return {'binding': binding, 'observed': observed, 'applied': True}
 

@@ -135,6 +135,52 @@ class BridgeTest(unittest.TestCase):
                 bridge.prepare_schematic(controller, binding, desired, base64.b64encode(data).decode(), bridge.options(JOB), JOB['size'])
             self.assertFalse(bridge.installed(state, JOB))
 
+    def test_fresh_checklist_initialization_is_acknowledged_but_progress_and_races_are_not(self):
+        from campus_cannon import CannonBridge
+        ready = {'State': 'PAUSED', 'Status': 'ready', 'AmountPlaced': 0, 'AmountToPlace': 400, 'FlyingBlocks': [],
+                 'Printer': {'Anchor': JOB['origin'], 'CurrentPos': [-1, 0, 0], 'DeferredBlocks': [], 'EntityProgress': -1, 'PrintStage': 'BLOCKS'}}
+        cases = [({}, None, True), ({'State': 'RUNNING'}, None, False), ({'AmountPlaced': 1}, None, False),
+                 ({'FlyingBlocks': [{}]}, None, False), ({'Status': 'missingBlock'}, None, False),
+                 ({'Printer': {**ready['Printer'], 'CurrentPos': [0, 0, 0]}}, None, False),
+                 ({'Printer': {**ready['Printer'], 'Anchor': [1, 2, 3]}}, None, False),
+                 ({'Printer': {**ready['Printer'], 'EntityProgress': 0}}, None, False),
+                 ({'Printer': {**ready['Printer'], 'PrintStage': 'ENTITIES'}}, None, False),
+                 ({'Printer': {**ready['Printer'], 'DeferredBlocks': [{}]}}, None, False),
+                 ({}, {'State': 'RUNNING'}, False), ({}, {'AmountPlaced': 1}, False)]
+        for patch, final_patch, allowed in cases:
+            with self.subTest(patch=patch, final_patch=final_patch), tempfile.TemporaryDirectory() as directory:
+                state=loads(BLOCK);_,payload=bridge.prepare_update(state,JOB)
+                calls=[];written=False;readbacks=0
+                def run(command):
+                    nonlocal written,readbacks
+                    calls.append(command)
+                    if ' run data modify block ' in command:
+                        state.update(copy.deepcopy(payload));state.update(copy.deepcopy(ready));state.update(copy.deepcopy(patch))
+                        written=True
+                        return 'Modified block data'
+                    if ' run data get block ' in command:
+                        if written:
+                            readbacks+=1
+                            if readbacks==2 and final_patch:state.update(copy.deepcopy(final_patch))
+                        return '0, 64, 0 has the following block data: ' + dumps(state)
+                    return 'Modified storage'
+                controller=CannonBridge(directory,run)
+                binding=dict(dimension='minecraft:overworld',x=0,y=64,z=0,owner='Owner')
+                data=gzip.compress(b'\x0a\x00\x00\x00')
+                desired=dict(file=JOB['fileName'],sha256=hashlib.sha256(data).hexdigest(),owner='Owner',anchor=JOB['origin'],rotation='none',mirror='none',blueprint='test',version=1)
+                execute=lambda:bridge.prepare_schematic(controller,binding,desired,base64.b64encode(data).decode(),bridge.options(JOB),JOB['size'])
+                if allowed:
+                    result=execute()
+                    self.assertEqual(result['observed']['state'],'PAUSED')
+                    self.assertEqual(result['observed']['amountToPlace'],400)
+                    self.assertTrue(result['applied'])
+                    mutations=len([c for c in calls if ' run data modify block ' in c])
+                    # A retry keeps the existing read-only, installed/hash fast path.
+                    self.assertTrue(execute()['applied'])
+                    self.assertEqual(len([c for c in calls if ' run data modify block ' in c]),mutations)
+                else:
+                    with self.assertRaisesRegex(ValueError,'Keine Freigabe'):execute()
+
 
 if __name__ == '__main__':
     unittest.main()

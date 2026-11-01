@@ -53,7 +53,7 @@ class StartTests(unittest.TestCase):
             self.assertLessEqual(len(command.encode()), 950)
 
     def test_resume_preserves_progress_and_running_is_idempotent(self):
-        o = observed('PAUSED');o.update(amountPlaced=100, amountToPlace=1000, flyingBlocks=3)
+        o = observed('PAUSED');o.update(amountPlaced=100, amountToPlace=1000, flyingBlocks=0)
         after = copy.deepcopy(o);after['state'] = 'RUNNING';after['amountPlaced'] = 101
         self.bridge.inspect = lambda _: after
         result = start(self.bridge, BINDING, DESIRED, OPTIONS, o)
@@ -61,9 +61,15 @@ class StartTests(unittest.TestCase):
         self.assertEqual(len(self.calls), 1)
         self.assertIn('AmountPlaced:100', self.calls[0])
         self.assertIn('CurrentPos:[I;0,0,0]', self.calls[0])
+        self.assertIn('FlyingBlocks:[]', self.calls[0])
         self.calls.clear()
+        after['flyingBlocks'] = 3
         self.assertTrue(start(self.bridge, BINDING, DESIRED, OPTIONS, after)['alreadyRunning'])
         self.assertEqual(self.calls, [])
+        o['flyingBlocks'] = 3
+        with self.assertRaisesRegex(ValueError,'im Flug'):
+            start(self.bridge, BINDING, DESIRED, OPTIONS, o)
+        self.assertEqual(self.calls, [], 'resume with flights must never rewrite block NBT')
 
     def test_drift_cached_stopped_and_untrusted_inputs_never_write(self):
         for patch in [dict(fileHash='0'*64), dict(options={**OPTIONS, 'skip_missing':True}), dict(amountPlaced=1),

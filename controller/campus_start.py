@@ -49,18 +49,21 @@ def verify(bridge, binding, desired, options, observed):
 
 
 def start_command(binding, desired, options, observed):
+    # Loading updated block NBT makes Create append serialized flights to its
+    # existing flight list. A state write must therefore wait until all land.
+    if observed['flyingBlocks'] != 0:
+        raise ValueError('Noch Blöcke im Flug. Nach der Landung erneut starten oder fortsetzen.')
     pos = ' '.join(str(binding[k]) for k in ('x', 'y', 'z'))
     components = expected_components(desired)
     components['create:schematic_anchor'] = Array('I', desired['anchor'])
     components['create:schematic_deployed'] = True
-    guard = {'State': observed['state'], 'AmountPlaced': observed['amountPlaced'], 'AmountToPlace': observed['amountToPlace'],
+    guard = {'State': observed['state'], 'AmountPlaced': observed['amountPlaced'], 'AmountToPlace': observed['amountToPlace'], 'FlyingBlocks': [],
              'Options': options, 'Inventory': {'Items': [{'Slot': 0, 'id': 'create:schematic', 'components': components}]}}
     printer = observed['printer']
     suffix = ''
     if observed['state'] == 'STOPPED':
         if observed['amountPlaced'] or observed['amountToPlace'] or observed['flyingBlocks'] or any(k in printer for k in ('Anchor', 'CurrentPos')) or printer.get('DeferredBlocks') != [] or printer.get('EntityProgress') != -1 or printer.get('PrintStage') != 'BLOCKS':
             raise ValueError('Gestoppte Kanone ist noch nicht zurückgesetzt. Kein automatischer Reset.')
-        guard['FlyingBlocks'] = []
         guard['Printer'] = {'DeferredBlocks': [], 'EntityProgress': -1, 'PrintStage': 'BLOCKS'}
         suffix = f' unless data block {pos} Printer.Anchor unless data block {pos} Printer.CurrentPos'
     elif observed['state'] == 'PAUSED':
