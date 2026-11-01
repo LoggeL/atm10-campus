@@ -140,5 +140,9 @@
   "minecraft:verdant_froglight": {
     "name": "Verdant Froglight",
     "icon": "/assets/material-icons/minecraft__verdant_froglight.png"
+  },
+  "minecraft:quartz_slab": {
+    "name": "Quartz Slab",
+    "icon": "/assets/material-icons/minecraft__quartz_slab.png"
   }
 }
