@@ -1,4 +1,4 @@
-import { esc } from './format.js?v=20261101-polish-1';
+import { esc } from './format.js?v=20261101-polish-2';
 
 // Always pin the image to the displayed version, including older cannon assignments.
 export function blueprintPreview(bp, {size = 'thumbnail', eager = false} = {}) {

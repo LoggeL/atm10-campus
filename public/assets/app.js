@@ -1,9 +1,9 @@
-import { esc, fmt } from './format.js?v=20261101-polish-1';
-import { renderChoicePreview, cannonSelectionPayload, updateCannonPicker } from './cannon-picker.js?v=20261101-polish-1';
-import { renderCannon, cannonSettingsPayload, cannonStartState, updateCannonLive } from './cannon-ui.js?v=20261101-polish-1';
-import { coordinateFields, placementCard, placementValues, coordinateListText } from './placement.js?v=20261101-polish-1';
-import { blueprintPreview, installPreviewFallbacks } from './blueprint-preview.js?v=20261101-polish-1';
-import { connectPolling, createRefreshQueue } from './live-updates.js?v=20261101-polish-1';
+import { esc, fmt } from './format.js?v=20261101-polish-2';
+import { renderChoicePreview, cannonSelectionPayload, updateCannonPicker } from './cannon-picker.js?v=20261101-polish-2';
+import { renderCannon, cannonSettingsPayload, cannonStartState, updateCannonLive } from './cannon-ui.js?v=20261101-polish-2';
+import { coordinateFields, placementCard, placementValues, coordinateListText } from './placement.js?v=20261101-polish-2';
+import { blueprintPreview, installPreviewFallbacks } from './blueprint-preview.js?v=20261101-polish-2';
+import { connectPolling, createRefreshQueue } from './live-updates.js?v=20261101-polish-2';
 installPreviewFallbacks();
 const $ = id => document.getElementById(id);
 const when = t => t ? new Date(t).toLocaleString('de-DE', { dateStyle: 'short', timeStyle: 'short' }) : '–';

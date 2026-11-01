@@ -92,6 +92,7 @@ test('a world-finished job with a consumed schematic reads as done, not as a mat
   assert.match(html,/badge built">Fertig</);
   assert.match(html,/Abgearbeitet oder entnommen/);
   assert.doesNotMatch(html,/Material gesperrt/);
+  assert.match(html,/class="notice success" role="status">Laut Weltabgleich/,'a finished job is no warning');
   assert.doesNotMatch(html.split('data-section="diagnostics"')[0],/Nach dem nächsten Weltabgleich/,'job detail only in diagnostics once done');
   assert.deepEqual(cannonStartState(c,true),{visible:true,enabled:false,label:'Fertig',reason:'Für diesen Auftrag ist nichts mehr zu bauen.'});
   const waiting=station();Object.assign(waiting,{state:'preparing',message:'Wartet auf eine vollständig gestoppte Kanone.'});

@@ -211,10 +211,6 @@ button { cursor: pointer; }
 .tooltip .pos { color: var(--muted); font-variant-numeric: tabular-nums; font-family: ui-monospace, Menlo, monospace; font-size: 11px; margin-top: 4px; }
 .hud { position: fixed; z-index: 8; right: 16px; bottom: 70px; color: rgba(231,240,245,.5); font: 11px ui-monospace, Menlo, monospace; text-align: right; pointer-events: none; white-space: pre; }
 .toast { position: fixed; z-index: 45; left: 50%; top: 76px; transform: translateX(-50%); background: var(--glass-strong); border: 1px solid var(--line-strong); padding: 8px 14px; border-radius: var(--radius-sm); box-shadow: var(--shadow); }
-.crosshair { position: fixed; left: 50%; top: 50%; width: 14px; height: 14px; margin: -7px; pointer-events: none; z-index: 7; }
-.crosshair::before, .crosshair::after { content: ""; position: absolute; background: rgba(255,255,255,.7); }
-.crosshair::before { left: 6px; top: 0; width: 2px; height: 14px; }
-.crosshair::after { top: 6px; left: 0; height: 2px; width: 14px; }
 
 .brand-short{display:none}
 
