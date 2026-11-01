@@ -1,9 +1,9 @@
-import { renderChoicePreview, cannonSelectionPayload, updateCannonPicker } from './cannon-picker.js?v=20261101-progress-1';
+import { renderChoicePreview, cannonSelectionPayload, updateCannonPicker } from './cannon-picker.js?v=20261101-progress-2';
 'use strict';
-import { renderCannon, cannonSettingsPayload, cannonStartState, updateCannonLive } from './cannon-ui.js?v=20261101-progress-1';
-import { coordinateFields, placementCard, placementValues, coordinateListText } from './placement.js?v=20261101-progress-1';
-import { blueprintPreview, installPreviewFallbacks } from './blueprint-preview.js?v=20261101-progress-1';
-import { connectPolling, createRefreshQueue } from './live-updates.js?v=20261101-progress-1';
+import { renderCannon, cannonSettingsPayload, cannonStartState, updateCannonLive } from './cannon-ui.js?v=20261101-progress-2';
+import { coordinateFields, placementCard, placementValues, coordinateListText } from './placement.js?v=20261101-progress-2';
+import { blueprintPreview, installPreviewFallbacks } from './blueprint-preview.js?v=20261101-progress-2';
+import { connectPolling, createRefreshQueue } from './live-updates.js?v=20261101-progress-2';
 installPreviewFallbacks();
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));

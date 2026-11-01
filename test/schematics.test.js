@@ -55,7 +55,8 @@ test('bound automatic Schematic preparation, immutable rest plan, settings, safe
   assert.equal(first.state, 'waiting');
   assert.deepEqual(first.origin, [4, 64, 4]);
   assert.match(first.message, /stoppen/);
-  assert.equal(waiting.json().state, 'alignment');
+  assert.equal(waiting.json().state, 'preparing', 'a waiting rest plan is shown as such, not as an alignment fault');
+  assert.match(waiting.json().message, /stoppen/);
   const blocked = (await request('GET', name + '/plan', undefined, station)).json();
   assert.deepEqual(blocked.items, []);
   assert.equal(blocked.options.autoCraft, false);
@@ -77,7 +78,8 @@ test('bound automatic Schematic preparation, immutable rest plan, settings, safe
   const next = (await request('GET', name)).json();
   assert.equal(next.blueprint.version, 1, 'feeder version waits for physical handoff');
   assert.equal(next.schematic.job.version, 2);
-  assert.equal(next.state, 'alignment');
+  assert.equal(next.state, 'preparing');
+  assert.equal((await request('GET', name + '/plan', undefined, station)).json().items.length, 0, 'old schematic gets no material for the new version');
   let release;
   held = new Promise(resolve => { release = resolve; });
   const arrived = new Promise(resolve => { entered = resolve; });

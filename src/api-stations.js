@@ -134,18 +134,26 @@ export function registerStationRoutes(app, campus, mat, alignment, schematics) {
   };
 
   const cannonView = async (row, snap) => {
-    let plan = null;
-    try { plan = planFor(row, snap); } catch (e) { plan = { state: 'error', message: e.message }; }
+    const planOf = () => { try { return planFor(row, snap); } catch (e) { return { state: 'error', message: e.message }; } };
+    let plan = planOf();
     const status = JSON.parse(row.status_json || 'null');
     const alignmentView = await alignment.view(row.name);
+    // The live read may have just found the schematic consumed.
+    if (alignmentView.consumed) plan = planOf();
     const blocked = alignmentView.enabled && alignmentView.state !== 'aligned';
     if(alignmentView.completed&&!blocked)plan={...plan,state:'done',message:alignmentView.message,done:true,items:[],totals:{...plan.totals,needed:0,kinds:0}};
+    // Nothing left to deliver according to the world snapshot: the material
+    // gate is irrelevant, so a consumed or empty schematic is not a lock.
+    else if(plan.done)plan={...plan,state:'done',message:'Laut Weltabgleich ist für diesen Auftrag nichts mehr zu bauen.'};
+    // A rest plan still waiting for a stopped/empty cannon is no alignment fault.
+    else if(blocked&&plan.state==='preparing')plan={...plan,message:plan.schematic?.job?.message??alignmentView.message};
+    const state = plan.state === 'outofrange' ? 'outofrange' : plan.done || plan.state === 'preparing' ? plan.state : blocked ? 'alignment' : plan.state;
     return {
       name: row.name, assignment: row.assignment, alignment: alignmentView, createdAt: row.created_at, updatedAt: row.updated_at, lastSeenAt: row.last_seen_at,
       nativeProgress:alignmentView.nativeProgress??null,
       online: !!row.last_seen_at && Date.now() - new Date(row.last_seen_at) < ONLINE_MS,
       options: normalizeOptions(JSON.parse(row.options_json || '{}')),
-      blueprint: plan.blueprint ?? null, state: plan.state === 'outofrange' ? 'outofrange' : blocked ? 'alignment' : plan.state, message: plan.state === 'outofrange' ? plan.message : blocked ? alignmentView.message : plan.message ?? null, totals: plan.totals ?? null, done: !blocked && !!plan.done,
+      blueprint: plan.blueprint ?? null, state, message: state === 'alignment' ? alignmentView.message : plan.message ?? null, totals: plan.totals ?? null, done: !!plan.done,
       restNbt: plan.restNbt ?? null, items: plan.items ?? [],
       schematic: plan.schematic ?? schematics.view(row.name),
       range: plan.range ?? rangeFor(row),

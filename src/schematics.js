@@ -62,7 +62,10 @@ export function createSchematics(campus, mat) {
     const skipBlocked = JSON.parse(row.options_json || '{}').skipBlocked !== false;
     const signature = hash(JSON.stringify({ blueprint: bp.id, version: v.version, settings, skipBlocked, binding }));
     const old = jobFor(row.name);
-    if (!force && old?.signature === signature) return view(row.name);
+    // A consumed schematic is rebuilt only from a world saved after it left the
+    // cannon, so blocks it just placed are not planned (and supplied) again.
+    const rebuild = old?.state === 'consumed' && snap.worldStamp > old.consumedAt;
+    if (!force && old?.signature === signature && !rebuild) return view(row.name);
     const range = cannonRange(binding, v.origin);
     if (range.state === 'outofrange') {
       saveJob(row.name, { id: randomUUID(), signature, state: 'outofrange', message: range.message, cannon: row.name,
@@ -93,5 +96,12 @@ export function createSchematics(campus, mat) {
     const job = jobFor(name);
     if (job?.id === id) saveJob(name, { ...job, state: 'waiting', message: String(message).slice(0, 400), updatedAt: now() });
   };
-  return { view, configure, enableDefault, sync, ready, waiting, settingsFor, clear: name => saveJob(name, null), bytes: job => readFileSync(join(dir, job.fileName)) };
+  const consumed = (name, id, observed) => {
+    const job = jobFor(name);
+    if (job?.id !== id || job.state !== 'ready') return;
+    const message = (observed.status === 'finished' ? 'Die Kanone hat das Schematic abgearbeitet.' : 'Das Schematic ist nicht mehr in der Kanone.')
+      + ' Nach dem nächsten Weltabgleich wird automatisch ein neuer Rest-Plan eingesetzt, falls noch etwas fehlt.';
+    saveJob(name, { ...job, state: 'consumed', consumedAt: Math.round(observed.at * 1000), message, updatedAt: now() });
+  };
+  return { view, configure, enableDefault, sync, ready, waiting, consumed, settingsFor, clear: name => saveJob(name, null), bytes: job => readFileSync(join(dir, job.fileName)) };
 }

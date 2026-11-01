@@ -1,13 +1,13 @@
-import { renderCannonPicker, renderNativeProgress, nativeProgressLabel } from './cannon-picker.js?v=20261101-progress-1';
-import { cannonRangeCard, distanceText } from './cannon-range.js?v=20261101-progress-1';
-import { coordinateFields, placementValues } from './placement.js?v=20261101-progress-1';
-import { blueprintPreview } from './blueprint-preview.js?v=20261101-progress-1';
+import { renderCannonPicker, renderNativeProgress, nativeProgressLabel } from './cannon-picker.js?v=20261101-progress-2';
+import { cannonRangeCard, distanceText } from './cannon-range.js?v=20261101-progress-2';
+import { coordinateFields, placementValues } from './placement.js?v=20261101-progress-2';
+import { blueprintPreview } from './blueprint-preview.js?v=20261101-progress-2';
 
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
 const fmt = n => n == null ? '–' : Number(n).toLocaleString('de-DE');
 const checked = value => value ? ' checked' : '';
 const states = { outofrange:'Außer Reichweite', alignment:'Material gesperrt', offline:'Computer offline', nocomputer:'Kein Computer', feeding:'Aktiv', preparing:'Wartet auf Schematic', waiting:'Wartet auf Material', full:'Kiste voll', done:'Fertig', paused:'Pausiert', unassigned:'Kein Bauplan', missing:'Bauplan fehlt', nosnapshot:'Kein Live-Bestand', error:'Fehler', start:'Startet', unknown:'Status ausstehend' };
-const jobs = { outofrange:'Außer Reichweite', queued:'Wartet auf Vorbereitung', applying:'Wird eingesetzt', waiting:'Wartet auf Kanone', ready:'Vorbereitet', empty:'Kein Rest zu bauen', error:'Vorbereitung fehlgeschlagen' };
+const jobs = { outofrange:'Außer Reichweite', queued:'Wartet auf Vorbereitung', applying:'Wird eingesetzt', waiting:'Wartet auf Kanone', ready:'Vorbereitet', empty:'Kein Rest zu bauen', consumed:'Abgearbeitet oder entnommen', error:'Vorbereitung fehlgeschlagen' };
 const discoveryUnresolved = d => !!(d?.automatic && d.state && !['bound','found','disabled'].includes(d.state));
 const supplyState = c => !c.online && c.blueprint && !['done','paused','outofrange'].includes(c.state) ? 'offline' : c.state === 'feeding' && c.online && c.status && !c.status.stale ? c.status.state : c.state;
 
@@ -35,12 +35,12 @@ export function cannonStartState(c, isAdmin) {
   const label = c?.done ? 'Fertig' : native === 'RUNNING' ? 'Läuft' : native === 'PAUSED' ? 'Fortsetzen' : 'Kanone starten';
   const reason = !visible ? 'Automatische Vorbereitung und erkannte Kanonen-Position erforderlich.'
     : !c.online ? 'Der Minecraft-Computer ist offline.'
+    : c.done ? 'Für diesen Auftrag ist nichts mehr zu bauen.'
     : discoveryUnresolved(c.alignment.discovery) ? c.alignment.discovery.message || 'Die Kanonen-Position ist noch nicht eindeutig erkannt.'
     : c.range?.state !== 'inrange' ? 'Das Bauziel ist nicht als erreichbar bestätigt.'
-    : c.schematic.job?.state !== 'ready' || c.schematic.job?.version !== c.blueprint.version ? 'Der gewählte Bauplan ist noch nicht eingesetzt.'
+    : c.schematic.job?.state !== 'ready' || c.schematic.job?.version !== c.blueprint.version ? c.schematic.job?.message || 'Der gewählte Bauplan ist noch nicht eingesetzt.'
     : c.alignment.state !== 'aligned' ? c.alignment.message || 'Die Live-Prüfung der Kanone fehlt.'
     : c.options?.paused ? 'Die Materialzufuhr ist pausiert.'
-    : c.done ? 'Für diesen Auftrag ist nichts mehr zu bauen.'
     : native === 'RUNNING' ? 'Die Kanone baut bereits.'
     : !['STOPPED','PAUSED'].includes(native) ? 'Der Zustand der Kanone ist noch nicht bestätigt.'
     : '';
@@ -136,7 +136,7 @@ export function renderCannon(c, bpOptions, { isAdmin, alignmentHtml, ago }) {
     <div data-cannon-progress>${renderCannonProgress(c)}</div>
     ${r && ['outofrange','dimension'].includes(r.state) ? cannonRangeCard(c, isAdmin) : ''}
     ${c.message && c.state !== 'outofrange' ? `<p class="notice${c.state === 'error' ? ' error' : ''}" role="status">${esc(c.message)}</p>` : ''}
-    ${sc.enabled && job && !['ready','empty','outofrange'].includes(job.state) ? `<p class="notice" role="status">${esc(job.message || jobs[job.state])}</p>` : ''}
+    ${sc.enabled && job && !c.done && !['ready','empty','outofrange'].includes(job.state) && job.message !== c.message ? `<p class="notice" role="status">${esc(job.message || jobs[job.state])}</p>` : ''}
     ${live?.message && live.message !== c.message ? `<p class="muted">${esc(live.message)}</p>` : ''}
     ${shortages ? `<details data-section="shortages"${live.shortages.length <= 3 ? ' open' : ''}><summary>Fehlendes Material (${live.shortages.length})</summary><ul class="short">${shortages}</ul></details>` : ''}
     <details class="settings" data-section="settings"><summary>Einstellungen</summary>

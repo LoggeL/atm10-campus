@@ -1,4 +1,4 @@
-import { blueprintPreview } from './blueprint-preview.js?v=20261101-progress-1';
+import { blueprintPreview } from './blueprint-preview.js?v=20261101-progress-2';
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const fmt=n=>Number(n).toLocaleString('de-DE',{maximumFractionDigits:1});
 const choices=c=>(c.blueprintChoices?.items||[]).filter(b=>b.nativeProgress?.state!=='completed'&&Number.isFinite(b.progress)&&b.progress<100&&b.remaining>0&&Number.isFinite(b.distance)&&b.distance<256);

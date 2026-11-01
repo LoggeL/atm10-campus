@@ -83,6 +83,24 @@ test('web start requires a live verified automatic plan and distinguishes runnin
   }
 });
 
+test('a world-finished job with a consumed schematic reads as done, not as a material lock', () => {
+  const c=station();
+  Object.assign(c,{state:'done',done:true,message:'Laut Weltabgleich ist für diesen Auftrag nichts mehr zu bauen.',totals:{start:100,needed:0,kinds:0}});
+  c.alignment={enabled:true,state:'pending',message:'Das Schematic ist nicht mehr in der Kanone.',observed:{state:'STOPPED'}};
+  c.schematic.job={state:'consumed',version:2,message:'Die Kanone hat das Schematic abgearbeitet. Nach dem nächsten Weltabgleich …'};
+  const html=render(c);
+  assert.match(html,/badge built">Fertig</);
+  assert.match(html,/Abgearbeitet oder entnommen/);
+  assert.doesNotMatch(html,/Material gesperrt/);
+  assert.doesNotMatch(html.split('data-section="diagnostics"')[0],/Nach dem nächsten Weltabgleich/,'job detail only in diagnostics once done');
+  assert.deepEqual(cannonStartState(c,true),{visible:true,enabled:false,label:'Fertig',reason:'Für diesen Auftrag ist nichts mehr zu bauen.'});
+  const waiting=station();Object.assign(waiting,{state:'preparing',message:'Wartet auf eine vollständig gestoppte Kanone.'});
+  waiting.alignment={enabled:true,state:'pending',observed:{state:'RUNNING'}};waiting.schematic.job={state:'queued',version:2,message:waiting.message};
+  assert.match(render(waiting),/Wartet auf Schematic/);
+  assert.equal(render(waiting).match(/class="notice" role="status">Wartet auf eine vollständig gestoppte Kanone/g).length,1,'no duplicate job notice');
+  assert.equal(cannonStartState(waiting,true).reason,'Wartet auf eine vollständig gestoppte Kanone.');
+});
+
 test('automatic location failures show a retry while explicit schematic auto-off stays optional', () => {
   const c=station();c.schematic.settings.enabled=false;c.alignment={enabled:false};
   assert.match(render(c),/Kanonen-Position noch nicht ermittelt/);assert.match(render(c),/data-act="discover"/);

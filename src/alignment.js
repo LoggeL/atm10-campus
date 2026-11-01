@@ -23,6 +23,15 @@ export function bridgeClient(config) {
 }
 
 const same=isDeepStrictEqual;
+// Create clears slot 0 on finish/expiry, and players may take the schematic out.
+// A fully stopped, reset cannon without input cannot print anything: the old
+// receipt is void, but nothing about the build result is inferred from it.
+export function emptyStopped(o) {
+  const p=o?.printer;
+  return !!o&&Number.isFinite(o.at)&&Math.abs(Date.now()/1000-o.at)<=15&&o.state==='STOPPED'&&o.inputEmpty===true&&!o.item&&
+    o.amountPlaced===0&&o.amountToPlace===0&&o.flyingBlocks===0&&!!p&&typeof p==='object'&&!('Anchor' in p)&&!('CurrentPos' in p)&&
+    Array.isArray(p.DeferredBlocks)&&p.DeferredBlocks.length===0&&p.EntityProgress===-1&&p.PrintStage==='BLOCKS';
+}
 export function verifyAlignment(desired,o,receipt) {
   if(!receipt || !same(desired,receipt))return 'Gewählte Bauplanversion noch nicht sicher angewendet. Stoppen/zurücksetzen und Anwenden wiederholen.';
   if(!o || !Number.isFinite(o.at) || Math.abs(Date.now()/1000-o.at)>15)return 'Live-Probe fehlt oder ist veraltet.';
@@ -99,9 +108,20 @@ export function registerAlignment(app, campus, schematics) {
       const mismatch=desired?verifyAlignment(desired,result.observed,JSON.parse(rec.applied_json||'null')):'Kein Bauplan gewählt.';
       const nativeProgress=progress.observe({name:r.name,job:rangeJob,desired,receipt:JSON.parse(rec.applied_json||'null'),binding,observed:result.observed,aligned:!mismatch});
       if(nativeProgress?.state==='completed')return finish({enabled:true,state:'aligned',completed:true,binding,desired,observed:result.observed,nativeProgress,message:'Kanonen-Auftrag abgeschlossen. Der Bauplan ist aus der Auswahl entfernt.'});
-      // A transient discovery/transport failure must not mask a later complete
-      // native proof. Keep its diagnosis only while the actual alignment fails.
-      const message=rangeJob?.state==='outofrange' && schematics.settingsFor(name).enabled ? rangeJob.message : mismatch ? (rec.last_error || mismatch) : null;
+      const enabled=schematics.settingsFor(name).enabled;
+      if(enabled&&rangeJob?.state==='ready'&&rec.applied_json&&emptyStopped(result.observed)&&!applying.has(name.toLowerCase())) {
+        // The next world snapshot decides whether a new rest plan is needed.
+        schematics.consumed(name,rangeJob.id,result.observed);
+        db.prepare('UPDATE cannon_alignment SET applied_json=NULL,last_error=NULL,updated_at=? WHERE name=? AND applied_json=?').run(now(),name,rec.applied_json);
+        logActivity(db,null,'schematic.consumed',name,{job:rangeJob.id,version:rangeJob.version,status:result.observed.status});
+        return finish({enabled:true,state:'pending',consumed:true,binding,desired,observed:result.observed,nativeProgress,message:schematics.view(name).job?.message});
+      }
+      // Report the cause found by this live read. A stored refusal from an
+      // earlier attempt (e.g. one bridge timeout) must not mask it later.
+      const message=rangeJob?.state==='outofrange'&&enabled ? rangeJob.message
+        : !mismatch ? null
+        : enabled&&rangeJob&&rangeJob.state!=='ready' ? rangeJob.message||mismatch
+        : !rec.applied_json&&rec.last_error ? rec.last_error : mismatch;
       return finish({enabled:true,state:message?'pending':'aligned',binding,desired,observed:result.observed,nativeProgress,message:nativeProgress?.state==='finishing'?'Die letzten Blöcke sind noch unterwegs.':message||'Live geprüft: exakte Revision, Owner und Ausrichtung stimmen.'});
     }catch(e){
       const nativeProgress=progress.observe({name,job:schematics.view(name).job,desired,receipt:JSON.parse(rec.applied_json||'null'),binding,observed:null,aligned:false});
@@ -125,7 +145,7 @@ export function registerAlignment(app, campus, schematics) {
       const rec=record(name),r=check(name);
       if(!rec)throw new HttpError(409,'Zuerst den Kanonen-Block bestätigen.');
       const sc=schematics.sync(r,campus.latestSnapshot('live'),bindingFor(name),force);job=sc.job;
-      if(!sc.settings.enabled || !job || ['empty','ready','outofrange'].includes(job.state))return view(name,{notify:true});
+      if(!sc.settings.enabled || !job || ['empty','ready','outofrange','consumed'].includes(job.state))return view(name,{notify:true});
       const desired=desiredFor(r,rec),{assignment,options,...target}=desired;
       db.prepare('UPDATE cannon_alignment SET applied_json=NULL,last_error=NULL WHERE name=?').run(name);
       const result=await request('prepare',{station:r.name,desired:target,options,size:job.size,nbtBase64:schematics.bytes(job).toString('base64')});
@@ -252,7 +272,8 @@ export function registerAlignment(app, campus, schematics) {
         const sc=schematics.sync(r,campus.latestSnapshot('live'),bindingFor(r.name));
         // Ready jobs are observed by feeder requests and visible UI refreshes.
         // Preparation retries must not rediscover/probe them continuously.
-        if(!sc.job||['ready','empty','outofrange'].includes(sc.job.state))continue;
+        // Consumed jobs wait until sync() sees a newer world snapshot.
+        if(!sc.job||['ready','empty','outofrange','consumed'].includes(sc.job.state))continue;
         await prepare(r.name,null);
       }catch{/* Fail closed; the next poll retries at a safe stop. */}
     }
