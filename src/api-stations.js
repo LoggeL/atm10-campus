@@ -241,6 +241,8 @@ export function registerStationRoutes(app, campus, mat, alignment, schematics) {
         throw new HttpError(409, 'Auftrag, Position oder Baustand wurde geändert. Auswahl verwerfen und neu wählen.');
       const choice = catalog.items.find(item => item.id === b.blueprint && item.version === selected.version);
       if (!choice) throw new HttpError(409, 'Dieser Bauplan ist inzwischen fertig, vergeben, geändert oder nicht baubar. Auswahl verwerfen und neu wählen.');
+      if (db.prepare('SELECT 1 FROM cannons WHERE name<>? COLLATE NOCASE AND blueprint_id=?').get(name, b.blueprint))
+        throw new HttpError(409, 'Dieser Bauplan wurde gerade einer anderen Kanone zugewiesen. Auswahl verwerfen und neu wählen.');
     }
     const options = normalizeOptions(b.options, JSON.parse(row.options_json || '{}'));
     let { blueprint_id: bpId, version, assignment, start_json: start } = row;

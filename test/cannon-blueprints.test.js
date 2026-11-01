@@ -62,5 +62,11 @@ test('per-cannon choices use current world, range, assignment and settings, and 
   assert.equal((await req('PUT','/api/cannons/a',select)).statusCode,409,'new blueprint version cannot silently replace selection');
   const valid=await req('PUT','/api/cannons/a',{...select,version:2,selection:{...select.selection,version:2}});
   assert.equal(valid.statusCode,200,valid.body);assert.equal(valid.json().blueprint.version,2);
+  add('race',[10,64,4],stone);
+  app.campus.db.prepare('INSERT INTO cannon_alignment(name,binding_json,updated_at) VALUES(?,?,?)').run('b',JSON.stringify({...binding,z:1}),new Date().toISOString());
+  app.campus.db.prepare('UPDATE cannons SET version=1 WHERE name=?').run('b');
+  const [a,b]=await Promise.all(['a','b'].map(async n=>(await req('GET','/api/cannons/'+n)).json()));
+  const competing=await Promise.all([a,b].map(c=>req('PUT','/api/cannons/'+c.name,{blueprint:'race',version:1,selection:{assignment:c.assignment,version:1}})));
+  assert.deepEqual(competing.map(r=>r.statusCode).sort(),[200,409],'simultaneous selections cannot claim the same plan twice: '+competing.map(r=>r.json().error||r.statusCode).join(' / '));
   assert.equal((await app.inject({url:'/api/cannons/a'})).statusCode,401);
 });
