@@ -110,6 +110,9 @@ export function openapi(baseUrl) {
       '/api/blueprints/{id}/layers': { get: { summary: 'Bauplan als ASCII-Schichten (eine Y-Ebene pro Block, Legende) – gut lesbar für LLMs', parameters: [id,
         { name: 'y', in: 'query', schema: { type: 'string' }, description: 'Y oder Bereich "a..b"' }, { name: 'coords', in: 'query', schema: { type: 'string', enum: ['world', 'local'], default: 'world' } }, { name: 'version', in: 'query', schema: { type: 'integer' } }],
         responses: { 200: { description: 'text/plain' } } } },
+      '/api/world/terrain': { get: { summary: 'Nur lesende Standortprüfung außerhalb der Campus-Aufnahme: Höhenstichproben und Block-Entities aus gespeicherten Overworld-Regionen. Fehlende Chunks sind unbekannt, nicht leer. Max. 1536 × 1536 Blöcke/40.000 Proben.', parameters: [
+        { name: 'from', in: 'query', required: true, schema: { type: 'string' }, example: '-1564,-484' }, { name: 'to', in: 'query', required: true, schema: { type: 'string' }, example: '-365,715' },
+        { name: 'step', in: 'query', schema: { type: 'integer', minimum: 4, maximum: 64, default: 16 } }, { name: 'y', in: 'query', description: 'Zusätzliche Blockprobe auf dieser Höhe', schema: { type: 'integer', minimum: -64, maximum: 319, default: 87 } }], responses: { ...ok, 429: { description: 'Geländeabfrage läuft bereits' }, 503: { description: 'Welt nicht verfügbar oder Zeitlimit' } } } },
       '/api/world/blocks': { get: { summary: 'Echte Welt (Snapshot) in einem Quader: JSON oder ASCII-Schichten, inkl. Block-Entities. Max. 2 Mio. Zellen.', parameters: [
         { name: 'from', in: 'query', required: true, schema: { type: 'string' }, example: '100,64,-40' }, { name: 'to', in: 'query', required: true, schema: { type: 'string' }, example: '120,70,-20' },
         { name: 'format', in: 'query', schema: { type: 'string', enum: ['json', 'layers'] } }, { name: 'snapshot', in: 'query', schema: { type: 'integer' } }], responses: ok } },
