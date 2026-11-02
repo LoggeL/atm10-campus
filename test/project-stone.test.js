@@ -39,6 +39,10 @@ test('project exports require authentication and exact plan version; save remain
   assert.equal((await app.inject({url:'/api/projects/erebor/stone/manifest?version=0',headers})).statusCode,409);
   r=await app.inject({url:'/api/projects/erebor/stone/manifest?version=1',headers});assert.equal(r.statusCode,200,r.body);assert.ok(r.json().tiles.length);
   assert.equal((await app.inject({url:'/api/projects/erebor/stone/missing.nbt?version=1',headers})).statusCode,404);
+  assert.equal((await app.inject({url:'/api/projects/erebor/stone/count?version=1&region=0,0'})).statusCode,401);
+  assert.equal((await app.inject({url:'/api/projects/erebor/stone/count?version=0&region=0,0',headers})).statusCode,409);
+  assert.equal((await app.inject({url:'/api/projects/erebor/stone/count?version=1&region=100,100',headers})).statusCode,400);
+  r=await app.inject({url:'/api/projects/erebor/stone/count?version=1&region=0,0',headers});assert.equal(r.statusCode,200,r.body);assert.equal(r.json().remaining,0);assert.ok(r.json().unknownCells>0);
   assert.deepEqual(app.campus.listBlueprints(),[]);assert.equal(app.campus.db.prepare('SELECT COUNT(*) AS n FROM cannons').get().n,0);
  }finally{await app.close();app.campus.db.close();rmSync(dir,{recursive:true,force:true});}
 });

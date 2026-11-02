@@ -1,6 +1,7 @@
 import {Worker} from 'node:worker_threads';
 import {createHash} from 'node:crypto';
 import {requireActor,HttpError} from './auth.js';
+import {countRegionQuery} from './project-stone-count.js';
 
 export function registerProjectStoneRoutes(app,campus){
  const cache=new Map();let active=0;
@@ -25,6 +26,13 @@ export function registerProjectStoneRoutes(app,campus){
  app.get('/api/projects/:id/stone/manifest',async(req,reply)=>{
   const p=project(req),m=await manifest(p);
   return reply.header('Cache-Control','private, no-store').send({project:p.id,version:p.version,...m,export:'NBT enthält nur gespeicherte Luft/Wasser. Bestehende Blöcke, Schutzbereiche und Platz um Block-Entities werden ausgelassen. Unbekannte Chunks verhindern den Download.',cannon:{replaceMode:0,replaceBlockEntities:false,rotation:'NONE',mirror:'NONE'}});
+ });
+ app.get('/api/projects/:id/stone/count',async(req,reply)=>{
+  const p=project(req);let countRegion;
+  try{countRegion=countRegionQuery(p.plan,req.query.region);}catch(e){throw new HttpError(400,e.message);}
+  if(!campus.config.worldSources.live)throw new HttpError(503,'Gespeicherte Welt nicht verfügbar.');
+  const result=await run({plan:p.plan,worldDir:campus.config.worldSources.live,countRegion});
+  return reply.header('Cache-Control','private, no-store').send({project:p.id,version:p.version,...result});
  });
  app.get('/api/projects/:id/stone/:tile.nbt',async(req,reply)=>{
   const p=project(req),m=await manifest(p),tile=m.tiles.find(t=>t.id===req.params.tile);
