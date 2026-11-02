@@ -53,6 +53,21 @@ CREATE TABLE IF NOT EXISTS blueprints (
   updated_at TEXT NOT NULL,
   archived_at TEXT
 );
+CREATE TABLE IF NOT EXISTS build_projects (
+  id TEXT PRIMARY KEY,
+  current_version INTEGER NOT NULL,
+  plan_json TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS build_project_versions (
+  project_id TEXT NOT NULL REFERENCES build_projects(id),
+  version INTEGER NOT NULL,
+  plan_json TEXT NOT NULL,
+  saved_at TEXT NOT NULL,
+  user_id INTEGER REFERENCES users(id),
+  PRIMARY KEY (project_id, version)
+);
 CREATE TABLE IF NOT EXISTS blueprint_versions (
   id INTEGER PRIMARY KEY,
   blueprint_id TEXT NOT NULL REFERENCES blueprints(id),

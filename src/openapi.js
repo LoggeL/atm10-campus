@@ -39,6 +39,16 @@ export function openapi(baseUrl) {
     },
     security: [{ bearer: [] }],
     paths: {
+      '/api/projects': { get: { summary: 'Unplatzierte Bauprojekte / Masterpläne auflisten (keine Schematics)', responses: ok } },
+      '/api/projects/{id}': {
+        get: { summary: 'Vollständigen Masterplan mit Version lesen', parameters: [{ ...id, description: 'Projekt-ID, z. B. erebor' }], responses: { ...ok, 404: { description: 'Unbekanntes Projekt' } } },
+        put: { summary: 'Masterplan speichern: erst dryRun, danach mit baseVersion. Keine Welt- oder Kanonenaktion.', parameters: [{ ...id, description: 'Projekt-ID, Kleinbuchstaben/Ziffern/_/-' }],
+          requestBody: json({ type: 'object', required: ['baseVersion', 'plan'], properties: {
+            baseVersion: { type: 'integer', minimum: 0, description: '0 bei Neuanlage; sonst aktuelle Version' }, dryRun: { type: 'boolean' },
+            plan: { type: 'object', required: ['title', 'summary', 'status', 'worldOrigin'], properties: { title: { type: 'string', minLength: 1, maxLength: 160 }, summary: { type: 'string', maxLength: 4000 }, status: { const: 'planning' }, worldOrigin: { type: 'null' } }, additionalProperties: true }
+          } }), responses: { ...ok, 400: { description: 'Ungültiger Plan' }, 409: { description: 'baseVersion ist veraltet' }, 413: { description: 'Max. 512 KiB' } }
+        }
+      },
       '/api/me': { get: { summary: 'Wer bin ich (User, Token-Scope)', responses: ok } },
       '/api/status': { get: { summary: 'Gesamtstatus: Live-Snapshot, Edition, Fortschritt und Konflikte je Bauplan, Überlappungen', responses: ok } },
       '/api/events': { get: { summary: 'Authentifizierter SSE-Statuskanal', description: 'sync bei jeder Verbindung: vollständigen aktuellen Stand per REST laden. change: topics (blueprints, snapshots, cannons, stock, activity), optional cannons mit betroffenen Stationsnamen; ohne Namen alle Kanonen aktualisieren. heartbeat alle 15 Sekunden. auth beendet eine abgelaufene oder widerrufene Sitzung. Keine Ereigniswiederholung: Reconnect lädt den aktuellen Stand.', responses: { 200: { description: 'Offener Event-Stream', content: { 'text/event-stream': { schema: { type: 'string' } } } }, 401: { description: 'Anmeldung erforderlich' }, 429: { description: 'Zu viele offene Verbindungen' } } } },

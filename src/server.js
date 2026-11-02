@@ -22,6 +22,7 @@ import { registerStationRoutes, endCannonJobs } from './api-stations.js';
 import { sceneJson, blueprintsBinary } from './viewer-data.js';
 import { registerPreviewRoutes } from './preview/service.js';
 import { registerRealtime } from './realtime.js';
+import { registerProjectRoutes } from './api-projects.js';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const page = name => readFileSync(join(root, 'public', name), 'utf8');
@@ -66,6 +67,7 @@ export async function buildServer(config = defaultConfig) {
   app.get('/login', async (req, reply) => html(reply, page('login.html')));
   app.get('/invite/:code', async (req, reply) => html(reply, page('invite.html')));
   app.get('/app', async (req, reply) => (req.actor?.via === 'session' ? html(reply, page('app.html')) : reply.redirect('/login')));
+  app.get('/projects', async (req, reply) => (req.actor?.via === 'session' ? html(reply, page('projects.html')) : reply.redirect('/login')));
   app.get('/docs', async (req, reply) => html(reply, page('docs.html')));
   app.get('/viewer', async (req, reply) => (req.actor?.via === 'session' ? html(reply, page('viewer/index.html')) : reply.redirect('/login')));
   app.get('/healthz', async () => ({ ok: true, version, time: now(), live: campus.latestSnapshot('live')?.capturedAt ?? null }));
@@ -196,6 +198,7 @@ export async function buildServer(config = defaultConfig) {
   });
 
   registerPreviewRoutes(app, campus);
+  registerProjectRoutes(app, campus);
 
   // ---------- blueprints ----------
   const actorVia = a => (a.via === 'token' ? 'api' : 'web');
