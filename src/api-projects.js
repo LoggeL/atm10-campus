@@ -1,5 +1,7 @@
 import { requireActor, HttpError } from './auth.js';
 import { now, tx, logActivity } from './db.js';
+import { validPlacement } from './project-placement.js';
+import { validateMountain } from './project-stone.js';
 
 // Concept plans deliberately have no blueprint/cannon/world side effects.
 export function registerProjectRoutes(app, campus) {
@@ -27,7 +29,8 @@ export function registerProjectRoutes(app, campus) {
     if (body.dryRun !== undefined && typeof body.dryRun !== 'boolean') throw new HttpError(400, 'dryRun muss boolean sein.');
     const plan = body.plan;
     if (!plan || typeof plan !== 'object' || Array.isArray(plan) || typeof plan.title !== 'string' || !plan.title.trim() || plan.title.length > 160 || typeof plan.summary !== 'string' || plan.summary.length > 4000) throw new HttpError(400, 'plan benötigt title (1–160 Zeichen) und summary (max. 4000).');
-    if (plan.status !== 'planning' || plan.worldOrigin !== null) throw new HttpError(400, 'Bauprojekte sind Planungen ohne Weltplatzierung: status=planning, worldOrigin=null.');
+    if (plan.status !== 'planning' || !validPlacement(plan)) throw new HttpError(400, 'Planung benötigt worldOrigin=null oder einen geplanten Standort mit rotationDegrees (0/90/180/270) und site.status=planned.');
+    if (plan.mountainFill) { try { validateMountain(plan); } catch(e) { throw new HttpError(400,e.message); } }
     // Validation/dryRun and the compare-and-swap use the same transaction.
     return tx(db, () => {
       const old = get(id), currentVersion = old?.current_version ?? 0;

@@ -24,6 +24,7 @@ import { registerPreviewRoutes } from './preview/service.js';
 import { registerRealtime } from './realtime.js';
 import { registerProjectRoutes } from './api-projects.js';
 import { registerTerrainRoutes } from './api-terrain.js';
+import { registerProjectStoneRoutes } from './api-project-stone.js';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const page = name => readFileSync(join(root, 'public', name), 'utf8');
@@ -281,6 +282,7 @@ export async function buildServer(config = defaultConfig) {
   });
 
   registerAgentRoutes(app, campus);
+  registerProjectStoneRoutes(app, campus);
   registerTerrainRoutes(app, campus);
   const materials = registerMaterialRoutes(app, campus);
   const schematics = createSchematics(campus, materials);
