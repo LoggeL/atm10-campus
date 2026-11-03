@@ -33,12 +33,17 @@ test('project exports require authentication and exact plan version; save remain
  try{
   assert.equal((await app.inject('/api/projects/erebor/stone/manifest?version=1')).statusCode,401);
   const reg=await app.inject({method:'POST',url:'/api/auth/register',payload:{code:'stone-test-bootstrap',username:'planner',password:'stone-test-password'}});const headers={cookie:'campus_session='+reg.cookies.find(c=>c.name==='campus_session').value,'x-campus-csrf':'1'};
-  const p=plan();let r=await app.inject({method:'PUT',url:'/api/projects/erebor',headers,payload:{baseVersion:0,dryRun:true,plan:p}});assert.equal(r.statusCode,200,r.body);assert.equal(r.json().worldPlacement,false);
+  const p=plan();p.cannonLayout={stations:[{id:'K01',position:[32,64,32]}]};let r=await app.inject({method:'PUT',url:'/api/projects/erebor',headers,payload:{baseVersion:0,dryRun:true,plan:p}});assert.equal(r.statusCode,200,r.body);assert.equal(r.json().worldPlacement,false);
   assert.equal((await app.inject({url:'/api/projects/erebor',headers})).statusCode,404);
   r=await app.inject({method:'PUT',url:'/api/projects/erebor',headers,payload:{baseVersion:0,plan:p}});assert.equal(r.statusCode,200,r.body);
   assert.equal((await app.inject({url:'/api/projects/erebor/stone/manifest?version=0',headers})).statusCode,409);
   r=await app.inject({url:'/api/projects/erebor/stone/manifest?version=1',headers});assert.equal(r.statusCode,200,r.body);assert.ok(r.json().tiles.length);
   assert.equal((await app.inject({url:'/api/projects/erebor/stone/missing.nbt?version=1',headers})).statusCode,404);
+  assert.match(r.json().tiles[0].fileName,/^EREBOR_STEIN_K01_/);
+  assert.equal((await app.inject('/api/projects/erebor/stone/batch.zip?version=1&cannon=K01&part=1')).statusCode,401);
+  assert.equal((await app.inject({url:'/api/projects/erebor/stone/batch.zip?version=0&cannon=K01&part=1',headers})).statusCode,409);
+  assert.equal((await app.inject({url:'/api/projects/erebor/stone/batch.zip?version=1&cannon=K99&part=1',headers})).statusCode,400);
+  const batch=await app.inject({url:'/api/projects/erebor/stone/batch.zip?version=1&cannon=K01&part=1',headers});assert.equal(batch.statusCode,200,batch.body);assert.equal(batch.headers['x-campus-schematic-count'],'0');assert.ok(Number(batch.headers['x-campus-unknown-tiles'])>0);
   assert.equal((await app.inject({url:'/api/projects/erebor/stone/count?version=1&region=0,0'})).statusCode,401);
   assert.equal((await app.inject({url:'/api/projects/erebor/stone/count?version=0&region=0,0',headers})).statusCode,409);
   assert.equal((await app.inject({url:'/api/projects/erebor/stone/count?version=1&region=100,100',headers})).statusCode,400);
