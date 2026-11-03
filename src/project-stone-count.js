@@ -17,8 +17,14 @@ export function countMountainRegion(worldDir,plan,regionCoords){
  const started=Date.now(),[rx,rz]=countRegionQuery(plan,regionCoords.join(','));
  const [a,b]=plan.mountainFill.bounds,x0=Math.max(a[0],rx*512),x1=Math.min(b[0],(rx+1)*512),z0=Math.max(a[2],rz*512),z1=Math.min(b[2],(rz+1)*512);
  const cx0=Math.floor(x0/16),cx1=Math.floor((x1-1)/16),cz0=Math.floor(z0/16),cz1=Math.floor((z1-1)/16);
- const stamps=new Map(),entityBoxes=new Map();
- const open=(x,z)=>{const key=x+','+z;if(!stamps.has(key))stamps.set(key,regionMtime(worldDir,x,z));return Region.open(worldDir,x,z);};
+ const stamps=new Map(),entityBoxes=new Map();let mainRegion,mainRead=false;
+ const open=(x,z)=>{
+  if(x===rx&&z===rz&&mainRead)return mainRegion;
+  const before=regionMtime(worldDir,x,z),snapshot=Region.open(worldDir,x,z),after=regionMtime(worldDir,x,z);
+  stamps.set(x+','+z,{region:[x,z],savedAt:before?new Date(before).toISOString():null,capturedAt:new Date().toISOString(),changedDuringRead:before!==after});
+  if(x===rx&&z===rz){mainRegion=snapshot;mainRead=true;}
+  return snapshot;
+ };
  // Read each neighboring region once for entity buffers, retaining metadata only.
  for(let rz2=(cz0-1)>>5;rz2<=((cz1+1)>>5);rz2++)for(let rx2=(cx0-1)>>5;rx2<=((cx1+1)>>5);rx2++){
   const r=open(rx2,rz2);if(!r)continue;
@@ -73,7 +79,9 @@ export function countMountainRegion(worldDir,plan,regionCoords){
    }
   }
  }
- const sourceRegions=[...stamps].map(([key,time])=>{const [x,z]=key.split(',').map(Number);return{region:[x,z],savedAt:time?new Date(time).toISOString():null,changedDuringRead:time!==regionMtime(worldDir,x,z)};});
+ // Each Region owns an immutable Buffer. Later saves do not invalidate that
+ // captured image, and the main image is shared by both entity and block passes.
+ const sourceRegions=[...stamps.values()];
  const remaining=counts.air+counts.water;
  if(counts.geometryBlocks!==remaining+counts.protectedCells+counts.existingSkipped+counts.unknownCells)throw Error('Zählung ist nicht ausgeglichen.');
  return{region:[rx,rz],bounds:[[x0,a[1],z0],[x1,b[1],z1]],...counts,remaining,maximumRemaining:remaining+counts.unknownCells,complete:counts.unknownCells===0,stable:sourceRegions.every(r=>!r.changedDuringRead),missingChunks,sourceRegions,capturedAt:new Date().toISOString(),durationMs:Date.now()-started,source:'saved-region-files',note:'Blockgenau für gespeicherte volle Chunks. Unbekannte Zellen sind keine Luft. Teilabfragen bilden keine atomare Gesamtaufnahme.'};
