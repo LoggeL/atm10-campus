@@ -291,10 +291,10 @@ export async function buildServer(config = defaultConfig) {
 
   // ---------- viewer data ----------
   const snapParam = q => (q.snapshot && q.snapshot !== 'none' ? campus.getSnapshot(Number(q.snapshot)).id : q.snapshot === 'none' ? null : campus.latestSnapshot('live')?.id ?? null);
-  app.get('/api/viewer/scene', async req => { requireActor(req, 'read'); return sceneJson(campus, snapParam(req.query)); });
+  app.get('/api/viewer/scene', async req => { requireActor(req, 'read'); return sceneJson(campus, snapParam(req.query), req.query.project); });
   app.get('/api/viewer/blueprints.bin', async (req, reply) => {
     requireActor(req, 'read');
-    const bin = blueprintsBinary(campus, snapParam(req.query));
+    const bin = blueprintsBinary(campus, snapParam(req.query), req.query.project);
     reply.header('ETag', bin.etag).header('Cache-Control', 'private, no-cache').type('application/octet-stream');
     if (req.headers['if-none-match'] === bin.etag) return reply.code(304).send();
     if (/\bgzip\b/.test(req.headers['accept-encoding'] || '')) return reply.header('Content-Encoding', 'gzip').send(bin.gzip);

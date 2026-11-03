@@ -1,6 +1,6 @@
-import { installStoneControls, buildingModsHtml } from './project-stone-ui.js?v=20261101-select-1&revision=prepared-1';
-import { renderExistingProject } from './project-existing.js?v=20261101-select-1';
-import { coordinateFields } from './placement.js?v=20261101-select-1';
+import { installStoneControls, buildingModsHtml } from './project-stone-ui.js?v=20261104-project-viewer-2&revision=prepared-1';
+import { renderExistingProject } from './project-existing.js?v=20261104-project-viewer-2';
+import { coordinateFields } from './placement.js?v=20261104-project-viewer-2';
 
 const $ = s => document.querySelector(s);
 const esc = v => String(v ?? '').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -62,8 +62,9 @@ function render() {
   if(placed() && p.zones.some(z=>!Array.isArray(z.worldBounds)||z.worldBounds.length!==2||z.worldBounds.some(v=>!Array.isArray(v)||v.length!==3||!v.every(integer))||z.worldFootprint?.some(v=>!Array.isArray(v)||v.length!==2||!v.every(integer)))) throw Error('Ungültige Weltkoordinaten.');
   if(p.cannonLayout&&(!Array.isArray(p.cannonLayout.stations)||p.cannonLayout.stations.length>100||p.cannonLayout.stations.some(s=>!/^K[0-9]{2}$/.test(s.id)||!Array.isArray(s.position)||s.position.length!==3||!s.position.every(integer))))throw Error('Ungültige Kanonenstandorte.');
   $('#modelLink')?.remove();
-  if(p.blockPreview){const link=document.createElement('a');link.id='modelLink';link.className='btn primary';link.href='/assets/project-model.html?id='+encodeURIComponent(current.id);link.textContent='Minecraft-Blockvorschau öffnen';document.querySelector('.project-toolbar .row').prepend(link);}
+  if(p.zones?.length){const link=document.createElement('a');link.id='modelLink';link.className='btn primary';link.href='/viewer?project='+encodeURIComponent(current.id);link.textContent='Projekt im 3D-Viewer öffnen';document.querySelector('.project-toolbar .row').prepend(link);}
   if(placed()&&selected===null){floor='all';selectedCannon=p.cannonLayout?.nearEntrance||null;}selected=p.zones.some(z=>z.id===selected)?selected:'E02';
+  document.getElementById('projectViewerLink').href='/viewer?project='+encodeURIComponent(current.id);
   $('#content').innerHTML=`<div class="project-hero"><p class="project-status">Masterplan · ${placed()?"Standort festgelegt · Tor nach Osten":"Standort offen"} · Version ${current.version}</p><h1>${esc(p.title)}</h1><p>${esc(p.summary)}</p><div class="project-metrics"><div><strong>${(p.envelope.bounds[1][0]-p.envelope.bounds[0][0]).toLocaleString("de-DE")} × ${(p.envelope.bounds[1][2]-p.envelope.bounds[0][2]).toLocaleString("de-DE")}</strong><span>Bergmassiv in Blöcken</span></div><div><strong>600 × 800</strong><span>Reservat der unterirdischen Stadt</span></div><div><strong>${p.packages.length} Bauabschnitte</strong><span>mit Reihenfolge und Raumprogramm</span></div><div><strong>${placed()?"Y−40 bis Y312":"−128 bis +224"}</strong><span>${placed()?"Welt-Blockhöhen des Berges":"lokale Blockhöhen"}</span></div></div></div>
   <p><a class="btn primary" href="/app?project=erebor#overview">Baupläne · Erebor öffnen</a></p><nav class="project-nav" aria-label="Projektbereiche">${[['stone','Stein-Schematics'],...(p.cannonLayout?[["cannon-sites","Kanonenstandorte"]]:[]),['layout',p.cannonLayout?'Karte & Kanonen':'Grundriss'],['height','Höhen'],...(p.buildingMods?[["building-mods","Baumods & Formen"]]:[]),['palette','Materialien'],['packages','Bauumfang'],['routes','Wege'],['phases','Baufolge'],['export','Schematics'],['sources','Referenzen']].map(([id,n])=>`<a href="#${id}">${n}</a>`).join('')}</nav>
   <p class="project-note">${esc(p.scope)}</p>

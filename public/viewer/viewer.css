@@ -243,3 +243,35 @@ button { cursor: pointer; }
 .viewer-refresh .tool-btn{min-height:28px;padding:4px 7px;font-size:11px}
 @media(max-width:760px){.viewer-refresh{position:fixed;right:12px;top:70px;padding:8px;background:var(--glass);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow)}}
 @media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+
+/* Project planning uses the same viewer shell and controls. */
+.project-select { flex-shrink:1; min-width:130px; }
+.project-select select { width:100%; max-width:250px; }
+.project-note { color:var(--muted); font-size:12px; margin:0 0 14px; }
+.project-level { display:grid; gap:5px; margin:16px 0; color:var(--muted); font-size:12px; }
+.project-level select,.project-layer select { background:var(--bg); border:1px solid var(--line-strong); border-radius:var(--radius-sm); padding:6px; min-width:0; color:var(--text); }
+.project-layer { display:flex; align-items:center; justify-content:space-between; gap:8px; padding:10px 0; border-bottom:1px solid var(--line); }
+.project-layer span { flex:1; }
+.project-layer small { display:block; font-size:11px; color:var(--muted); margin-top:3px; }
+.project-layer select { width:80px; font-size:12px; }
+.project-area { display:flex; align-items:center; gap:8px; margin:2px 0; border:1px solid transparent; border-radius:var(--radius-sm); }
+.project-area.selected { background:var(--cyan-soft); border-color:var(--cyan); }
+.project-area input { accent-color:var(--cyan); margin-left:8px; }
+.project-area button { flex:1; text-align:left; border:0; background:none; padding:9px 5px; }
+.project-area b,.project-area small { display:block; }
+.project-area small { color:var(--muted); font-size:11px; margin-top:3px; }
+.project-coordinates { font-variant-numeric:tabular-nums; }
+#nav-mode button:disabled { cursor:not-allowed; color:var(--muted); text-decoration:line-through; opacity:.6; }
+.planning-viewer .detail .status-tag { color:var(--amber); }
+.planning-viewer #hud { padding:6px 8px; border-radius:6px; background:rgba(16,24,33,.8); color:#e8f0f5; }
+@media(max-width:1450px){.edition{display:none}.viewer-refresh{margin-left:auto}}
+@media(max-width:1100px){.topbar{gap:8px}.topbar .brand-text{display:none}.topbar .brand-short{display:inline}.links a{padding:5px}}
+@media(max-width:760px){
+  .project-select { min-width:0; flex:1; }
+  .project-select select { max-width:100%; }
+  .snap .select select { max-width:24vw; }
+  .planning-viewer .project-select { max-width:60vw; }
+  .planning-viewer .tabs button { padding:7px 3px; }
+  .planning-viewer .detail { z-index:12; }
+  .planning-viewer .detail:not(.hidden) ~ .toolbar { display:none; }
+}

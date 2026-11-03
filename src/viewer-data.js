@@ -6,8 +6,16 @@ import { createHash } from 'node:crypto';
 import { cellStatuses, overlapCellKeys } from './analysis.js';
 import { blockStyle, MATERIALS } from './blockstyle.js';
 import { loadViewerExtras } from './importer.js';
+import { viewerProject, viewerProjects, projectScene } from './project-viewer.js';
 
-export function sceneJson(campus, snapshotId) {
+export function sceneJson(campus, snapshotId, projectId) {
+  const project = viewerProject(campus, projectId), projects = viewerProjects(campus);
+  const projectMeta = project && { id: project.id, title: project.plan.title, version: project.version };
+  if (project && project.plan.kind !== 'blueprint_collection') return {
+    project: projectMeta, projects, planning: projectScene(project),
+    context: null, blueprints: [], snapshots: [], snapshot: null, live: null,
+  };
+  const ids = project && new Set(project.plan.blueprintIds);
   const status = campus.status();
   const snap = snapshotId ? campus.getSnapshot(snapshotId) : null;
   let context = null;
@@ -16,7 +24,7 @@ export function sceneJson(campus, snapshotId) {
     context = { origin: c.origin, size: c.size, palette: c.palette, recordCount: c.recordCount, url: `/api/snapshots/${snap.id}/surfaces.bin.gz` };
   }
   const names = new Set(context?.palette || []);
-  const blueprints = campus.listBlueprints().filter(b => b.current).map(b => {
+  const blueprints = campus.listBlueprints().filter(b => b.current && (!ids || ids.has(b.id))).map(b => {
     const s = status.blueprints.find(x => x.id === b.id);
     for (const n of Object.keys(b.current.stats.materials || {})) names.add(n);
     return {
@@ -32,24 +40,28 @@ export function sceneJson(campus, snapshotId) {
     id: String(d.id), label: d.label || String(d.id), position: d.position, direction: d.direction || [0, 0, -1],
   }));
   return {
+    project: projectMeta, projects,
     generatedAt: new Date().toISOString(),
     snapshot: snap && { id: snap.id, label: snap.label, source: snap.source, capturedAt: snap.capturedAt, worldTime: snap.worldTime },
     snapshots: campus.listSnapshots(40).map(s => ({ id: s.id, label: s.label, source: s.source, capturedAt: s.capturedAt, worldTime: s.worldTime, pinned: s.pinned })),
     live: campus.latestSnapshot('live')?.id ?? null,
     context, blueprints, styles, materials: MATERIALS, pois,
     overlaps: status.overlaps.map(o => ({ blueprints: o.blueprints, cells: o.cells })),
-    blueprintsUrl: `/api/viewer/blueprints.bin?snapshot=${snap?.id ?? 'none'}`,
+    blueprintsUrl: `/api/viewer/blueprints.bin?snapshot=${snap?.id ?? 'none'}${project ? '&project=' + encodeURIComponent(project.id) : ''}`,
   };
 }
 
 // Layout: u32 header length, header JSON, padding to 4, then per blueprint:
 // Uint16 positions (placed+clear)*3 (local), Uint16 palette index per placed cell, Uint8 status per cell.
-export function blueprintsBinary(campus, snapshotId) {
-  const key = campus.status().edition.versionsKey + ':' + snapshotId;
+export function blueprintsBinary(campus, snapshotId, projectId) {
+  const project = viewerProject(campus, projectId);
+  const ids = project && new Set(project.plan.kind === 'blueprint_collection' ? project.plan.blueprintIds : []);
+  const key = campus.status().edition.versionsKey + ':' + snapshotId + ':' + (project ? project.id + ':' + project.version : '');
   if (campus.binCache?.key === key) return campus.binCache.value;
   const bps = campus.listBlueprints().filter(b => b.current);
-  const entries = bps.map(b => ({ id: b.id, origin: b.current.origin, structure: campus.structureFor(b.id, b.current), base: b.current.baseSnapshotId }));
-  const overlaps = overlapCellKeys(entries);
+  const allEntries = bps.map(b => ({ id: b.id, origin: b.current.origin, structure: campus.structureFor(b.id, b.current), base: b.current.baseSnapshotId }));
+  const overlaps = overlapCellKeys(allEntries);
+  const entries = allEntries.filter(e => !ids || ids.has(e.id));
   const live = snapshotId ? campus.grid(snapshotId) : null;
   const palette = [], palIndex = new Map();
   const parts = [], index = [];

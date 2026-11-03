@@ -209,6 +209,9 @@ export class VoxelRenderer {
     this.lo = lo; this.size = size;
     this.center = new THREE.Vector3(lo[0] + size[0] / 2, lo[1] + 64, lo[2] + size[2] / 2);
     const span = Math.max(size[0], size[2]);
+    this.camera.far = Math.max(4000, span * 10);
+    this.camera.updateProjectionMatrix();
+    this.sky.scale.setScalar(Math.max(1, span / 300));
     this.grid.geometry.dispose();
     const g = new THREE.GridHelper(Math.ceil(span / 16) * 16 + 64, Math.ceil(span / 16) + 4, 0x3c6f7a, 0x22414a);
     this.grid.geometry = g.geometry;

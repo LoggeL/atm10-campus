@@ -113,3 +113,13 @@ Feeder 1.4.0 sendet erkannte Statusänderungen unmittelbar nach der Prüfung im 
 ## Neue Version von Jonnys HTML
 
 Als Admin unter **Mehr → Verwaltung → Campus importieren**. Geänderte NBTs werden neue Versionen. Was seit dem letzten Import in der App geändert wurde, wird nicht überschrieben und als Konflikt gemeldet.
+
+## Bauprojekte im 3D-Viewer
+
+Der Projektwähler unter `/viewer` öffnet auch Masterpläne wie `/viewer?project=erebor`. Bestehende Bauprojekte filtern ihre verknüpften Baupläne samt Viewer-Binärdaten; Material- und Rest-NBT-Abfragen bleiben auf diese Auswahl beschränkt. Die bisherigen Viewer- und Snapshot-Links funktionieren weiter.
+
+Planungsprojekte verwenden dieselbe Oberfläche, Orbit-/Flugsteuerung, Tageszeit, Bildexport und Höhenschnitt. Für Erebor stehen Gesamtplan, Bergmassiv, Innenräume und Kanonenstandorte zur Auswahl. Bereiche lassen sich suchen, einzeln ausblenden, fokussieren und isolieren. Details zeigen Weltkoordinaten, Laufhöhen und die gespeicherten Planungshinweise. Der texturierte Torprototyp wird bei Bedarf unter „Orte / Kanonen“ geladen. Projektseiten und die Erebor-Bauplanansicht verlinken direkt in den passenden Viewer.
+
+Räume sind Planungsvolumen; die Bergform wird aus derselben Höhenfunktion wie der Steinexport im 16-Block-Raster abgeleitet. Schutzbereiche bleiben konservativ ausgespart. Die Geländeebene zeigt gespeicherte Höhenstichproben mit Lücken, keine laufende Weltaufnahme. Kanonenmarker sind geplante Arbeitsplätze. Diese Daten erhalten keinen erfundenen Baufortschritt und keine Kollisionsprüfung; Laufen bleibt den blockgenauen Campus-Szenen vorbehalten. Es werden keine Blueprints importiert, Kanonen zugewiesen oder Bauten gestartet.
+
+Kamera, Ebenen, ausgeblendete Bereiche, Auswahl und Höhenschnitt werden in der Viewer-URL gespeichert. Beispiel: `/viewer?project=erebor#area=cannon:K19&pv=cannons`. Die 30-Sekunden-Prüfung meldet neue Projektversionen, ohne die Ansicht zurückzusetzen.

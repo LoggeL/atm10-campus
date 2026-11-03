@@ -1,11 +1,12 @@
 // Campus viewer: loads scene + data, feeds the mesher worker, drives UI, layers, picking and camera.
 import * as THREE from 'three';
-import { VoxelRenderer } from './renderer.js';
+import { installViewerControls } from './controls.js?v=20261104-project-viewer-2';
+import { VoxelRenderer } from './renderer.js?v=20261104-project-viewer-2';
 import { Navigation } from './navigation.js';
 import { buildAtlas } from './atlas.js';
 import { LAYERS, PRESETS, MODES, CAT, categoryModes, categoryColors, statusLabel, statusColor } from './layers.js';
-import { blueprintPreview, installPreviewFallbacks } from '/assets/blueprint-preview.js?v=20261101-select-1';
-import { connectPolling } from '/assets/live-updates.js?v=20261101-select-1';
+import { blueprintPreview, installPreviewFallbacks } from '/assets/blueprint-preview.js?v=20261104-project-viewer-2';
+import { connectPolling } from '/assets/live-updates.js?v=20261104-project-viewer-2';
 installPreviewFallbacks();
 
 const $ = s => document.querySelector(s);
@@ -90,14 +91,23 @@ function cellCounts(b) {
 // ---------- startup ----------
 async function main() {
   const snapQ = params.get('snapshot');
-  const qs = snapQ ? `?snapshot=${encodeURIComponent(snapQ)}` : '';
+  const query = new URLSearchParams();
+  if (snapQ) query.set('snapshot', snapQ);
+  if (params.get('project')) query.set('project', params.get('project'));
+  const qs = query.size ? '?' + query : '';
   loading('Lade Szene …', 4);
   const scene = await (await api('/api/viewer/scene' + qs)).json();
   state.scene = scene;
+  setupProjectSelector(scene);
   view = new VoxelRenderer($('#scene'));
   nav = new Navigation(view.camera, $('#scene'));
   view.resize();
   new ResizeObserver(() => view.resize()).observe($('#scene'));
+
+  if (scene.planning) {
+    const { startProjectViewer } = await import('./project-viewer.js?v=20261104-project-viewer-2');
+    return startProjectViewer({view,nav,scene,hash,api,loading,toast});
+  }
 
   loading('Lade Bestand und Baupläne …', 12);
   const [records, binBuf, atlas] = await Promise.all([
@@ -135,7 +145,7 @@ async function main() {
     workerBps.push({ ...b, origin: m.origin, size: m.size });
   }
   const want = hash.get('bps');
-  state.visible = new Set(want ? want.split(',').filter(id => state.bps.has(id)) : state.bps.keys());
+  state.visible = new Set(want !== null ? want.split(',').filter(id => state.bps.has(id)) : state.bps.keys());
 
   loading('Erzeuge Geometrie …', 35);
   worker = new Worker('/viewer/mesher.worker.js');
@@ -207,10 +217,10 @@ function onWorker(e) {
 // ---------- camera ----------
 function setupCamera() {
   const { lo, size } = bounds;
-  const c = [lo[0] + size[0] / 2, 66, lo[2] + size[2] / 2];
-  const span = Math.max(size[0], size[2]);
+  const c = [lo[0] + size[0] / 2, state.scene.context ? 66 : lo[1] + size[1] / 2, lo[2] + size[2] / 2];
+  const span = Math.max(48, ...size);
   const k = Math.min(2.2, Math.max(1, 1.25 / view.camera.aspect)); // portrait screens need more distance
-  home = { pos: [c[0] - span * 0.42 * k, 66 + span * 0.5 * k, c[2] + span * 0.62 * k], target: c };
+  home = { pos: [c[0] - span * 0.42 * k, c[1] + span * 0.5 * k, c[2] + span * 0.62 * k], target: c };
   const cam = (hash.get('cam') || '').split(',').map(Number);
   if (cam.length === 6 && cam.every(Number.isFinite)) nav.lookAt(cam.slice(0, 3), cam.slice(3));
   else nav.lookAt(home.pos, home.target);
@@ -397,7 +407,7 @@ function renderDetail() {
 // ---------- materials ----------
 const mat = { ids: [], data: null };
 const joinQs = (...parts) => parts.filter(Boolean).join('&');
-const idsQuery = ids => (ids.length === state.bps.size ? '' : 'ids=' + ids.map(encodeURIComponent).join(','));
+const idsQuery = ids => (!state.scene.project && ids.length === state.bps.size ? '' : 'ids=' + ids.map(encodeURIComponent).join(','));
 const snapQuery = () => (state.scene.snapshot ? 'snapshot=' + state.scene.snapshot.id : '');
 const restQuery = () => joinQs(snapQuery(), $('#mat-clear').checked ? 'clear=1' : '', $('#mat-skip-blocked').checked ? '' : 'skipBlocked=0');
 const visibleIds = () => [...state.bps.keys()].filter(id => state.visible.has(id));
@@ -649,44 +659,27 @@ function buildUi() {
     if (nav.mode === 'orbit') nav.flyTo([p.position[0] - d[0] * 6, p.position[1] + 4, p.position[2] - d[2] * 6], [p.position[0] + d[0] * 10, p.position[1], p.position[2] + d[2] * 10]);
     else nav.flyTo(p.position, [p.position[0] + d[0] * 10, p.position[1] + (d[1] || 0) * 10, p.position[2] + d[2] * 10]);
   };
-  $('#snapshot').onchange = e => { location.search = '?snapshot=' + e.target.value; };
+  $('#snapshot').onchange = e => { const url = new URL(location.href); url.searchParams.set('snapshot', e.target.value); location.href = url; };
   $('#toast').onclick = e => { if (e.target.id === 'reload') { e.preventDefault(); location.reload(); } };
 
-  $('#nav-mode').onclick = e => { const b = e.target.closest('[data-mode]'); if (b) { nav.setMode(b.dataset.mode); syncNavButtons(); } };
-  nav.on(type => { if (type === 'moved') saveHash(); });
-  const tod = $('#tod');
-  tod.oninput = () => {
-    const h = Number(tod.value);
-    view.setTimeOfDay(h);
-    $('#tod-val').textContent = `${String(Math.floor(h) % 24).padStart(2, '0')}:${String(Math.round((h % 1) * 60)).padStart(2, '0')}`;
-  };
-  const toggle = (id, fn) => { const b = $(id); b.onclick = () => { b.classList.toggle('active'); b.setAttribute('aria-pressed', String(b.classList.contains('active'))); fn(b.classList.contains('active')); }; };
-  toggle('#t-shadows', on => view.setShadows(on));
-  toggle('#t-bloom', on => { view.bloomEnabled = on; });
-  toggle('#t-grid', on => { view.grid.visible = on; });
-  $('#reset-cam').onclick = () => { if (nav.mode !== 'orbit') { nav.setMode('orbit'); syncNavButtons(); } nav.flyTo(home.pos, home.target); };
-  $('#shot').onclick = () => {
-    view.render(0);
-    view.canvas.toBlob(blob => {
-      const a = document.createElement('a');
-      a.href = URL.createObjectURL(blob);
-      a.download = `campus-${new Date().toISOString().slice(0, 16).replace(/[T:]/g, '-')}.png`;
-      a.click();
-      setTimeout(() => URL.revokeObjectURL(a.href), 2000);
-    });
-  };
-  $('#panel-toggle').onclick = () => { const open = $('#panel').classList.toggle('open'); $('#panel-toggle').setAttribute('aria-expanded', String(open)); };
-  addEventListener('keydown', e => {
-    if (e.key === 'Escape' && !$('#materials').classList.contains('hidden')) { closeMaterials(); return; }
-    if (e.target.closest?.('input, select, textarea')) return;
-    if (e.key === 'Escape') select(null);
-    if (e.key === '1') { nav.setMode('orbit'); syncNavButtons(); }
-    if (e.key === '2') { nav.setMode('fly'); syncNavButtons(); }
-    if (e.key === '3') { nav.setMode('walk'); syncNavButtons(); }
-  });
+  installViewerControls({view,nav,home:()=>home,saveHash,syncNavButtons,onEscape:()=>{
+    if (!$('#materials').classList.contains('hidden')) closeMaterials(); else select(null);
+  }});
   setupMaterials();
   setupPicking();
   checkLive();
+}
+
+function setupProjectSelector(scene) {
+  const select = $('#project');
+  select.innerHTML = '<option value="">Campus · alle Baupläne</option>' + scene.projects.map(p => `<option value="${esc(p.id)}">${esc(p.title)}</option>`).join('');
+  select.value = scene.project?.id || '';
+  select.onchange = () => { location.href = select.value ? '/viewer?project=' + encodeURIComponent(select.value) : '/viewer'; };
+  $('#project-link').href = scene.project ? '/projects?id=' + encodeURIComponent(scene.project.id) : '/projects';
+  if (scene.project) {
+    document.title = scene.project.title + ' · 3D-Viewer';
+    $('#scene').setAttribute('aria-label','3D-Ansicht · ' + scene.project.title);
+  }
 }
 
 main().catch(fail);
