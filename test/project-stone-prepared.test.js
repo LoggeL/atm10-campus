@@ -35,6 +35,14 @@ test('prepared stone packages require write/dryRun/current world, persist, and n
   const zip=await app.inject({url:file,headers});assert.equal(zip.statusCode,200);assert.equal(createHash('sha256').update(zip.rawPayload).digest('hex'),saved.json().package.sha256);
   let offset=0,total=0;while(zip.rawPayload.readUInt32LE(offset)===0x04034b50){const b=zip.rawPayload,size=b.readUInt32LE(offset+18),len=b.readUInt16LE(offset+26),start=offset+30+len+b.readUInt16LE(offset+28),name=b.subarray(offset+30,offset+30+len).toString();if(name.endsWith('.nbt')){const n=parseStructure(b.subarray(start,start+size));assert.equal(n.clear.length,0);assert.deepEqual(n.materials,{'minecraft:stone':n.placed.length});total+=n.placed.length;}offset=start+size;}
   assert.equal(total,saved.json().package.blocks);
+  const first=saved.json().package.files[0],single=`/api/projects/erebor/stone/prepared/K19/1/${first.tile}.nbt?version=1`;
+  assert.equal((await app.inject(single)).statusCode,401);
+  assert.equal((await app.inject({url:single.replace('version=1','version=0'),headers})).statusCode,409);
+  assert.equal((await app.inject({url:'/api/projects/erebor/stone/prepared/K19/1/absent.nbt?version=1',headers})).statusCode,404);
+  const nbt=await app.inject({url:single,headers});assert.equal(nbt.statusCode,200,nbt.body);
+  assert.equal(nbt.headers['x-campus-origin'],first.origin.join(','));assert.equal(nbt.headers['x-campus-cannon'],'K19');
+  assert.equal(createHash('sha256').update(nbt.rawPayload).digest('hex'),first.sha256);
+  assert.deepEqual(parseStructure(nbt.rawPayload).materials,{'minecraft:stone':first.blocks});
   assert.equal((await post({...body,dryRun:false,preview:'already-saved'})).json().unchanged,true);
   assert.deepEqual(readFileSync(region),worldBefore);assert.deepEqual(app.campus.listBlueprints(),[]);assert.equal(app.campus.db.prepare('SELECT COUNT(*) AS n FROM cannons').get().n,0);
   await app.close();app.campus.db.close();app=await buildServer(config);

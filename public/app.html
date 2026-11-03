@@ -25,14 +25,17 @@
     <span class="refresh-last" id="refreshLast" role="status">Noch nicht aktualisiert</span>
     <button class="small" id="refreshNow">Jetzt aktualisieren</button>
   </div>
+  <div class="toolbar" id="blueprintProjectBar"><label class="row">Bauprojekt <select id="blueprintProject" aria-label="Bauprojekt wählen"><option value="campus">Campus</option><option value="erebor">Erebor</option></select></label><a id="blueprintProjectLink" href="/projects?id=campus">Projekt öffnen</a></div>
   <section data-pane="overview">
     <div class="page-heading"><h1>Baupläne</h1><button class="primary" id="newBp">Neuer Bauplan</button></div>
     <div class="summary-line" id="cards" aria-label="Campus-Status"></div>
     <div class="toolbar">
       <input class="search" id="search" type="search" placeholder="Bauplan suchen …" aria-label="Bauplan suchen">
       <select id="filter" aria-label="Status filtern"><option value="">Alle Status</option><option value="conflict">Konflikt</option><option value="warning">Geändert seit Planung</option><option value="ok">Offen</option><option value="built">Gebaut</option></select>
-      <details class="menu toolbar-end"><summary>Downloads</summary><div class="menu-content"><a href="/api/remaining.zip" download>Rest-Baupläne (.zip)</a><a href="/api/blueprints.zip" download>Alle Baupläne (.zip)</a></div></details>
+      <select id="stonePacket" class="hide" aria-label="Erebor-Paket filtern"><option value="">Alle Pakete</option></select>
+      <details class="menu toolbar-end" id="blueprintDownloads"><summary>Downloads</summary><div class="menu-content"><a href="/api/remaining.zip" download>Rest-Baupläne (.zip)</a><a href="/api/blueprints.zip" download>Alle Baupläne (.zip)</a></div></details>
     </div>
+    <p id="stoneBlueprintCount" class="muted hide"></p>
     <div class="table-wrap" role="region" aria-label="Baupläne" tabindex="0"><table class="blueprint-table stack-table">
       <thead><tr><th>Bauplan</th><th>Status</th><th>Version</th><th>Fortschritt</th><th>Aktion</th></tr></thead><tbody id="bpRows"></tbody>
     </table></div>
@@ -110,5 +113,5 @@
 <dialog class="form-dialog" id="editDialog" aria-labelledby="editTitle"></dialog>
 <dialog class="picker-dialog" id="cannonPickerDialog" aria-labelledby="pickerTitle"></dialog>
 <input type="file" id="hiddenFile" accept=".nbt" class="hide">
-<script type="module" src="/assets/app.js?v=20261101-select-1"></script>
+<script type="module" src="/assets/app.js?v=20261101-select-1&amp;revision=project-blueprints-1"></script>
 </body></html>

@@ -1,3 +1,4 @@
+import { createProjectBlueprints } from './project-blueprints.js?v=20261101-select-1';
 import { esc, fmt } from './format.js?v=20261101-select-1';
 import { updateCannonPicker } from './cannon-picker.js?v=20261101-select-1';
 import { createCannonPickerDialog } from './cannon-picker-dialog.js?v=20261101-select-1';
@@ -38,6 +39,25 @@ const guard = fn => async (...a) => { try { await fn(...a); } catch (e) { toast(
 
 let me = null, status = null, activeTab = 'overview', polling = null;
 
+let blueprintProject=new URL(location.href).searchParams.get('project')==='erebor'?'erebor':'campus';
+const ereborBlueprints=createProjectBlueprints({api,isSelected:()=>blueprintProject==='erebor',closeDrawer});
+function configureBlueprintProject(){
+  const erebor=blueprintProject==='erebor';
+  $('blueprintProject').value=blueprintProject;
+  $('blueprintProjectLink').href='/projects?id='+blueprintProject;
+  for(const id of ['filter','blueprintDownloads','overlapPanel','newBp'])$(id).classList.toggle('hide',erebor);
+  for(const id of ['stonePacket','stoneBlueprintCount'])$(id).classList.toggle('hide',!erebor);
+}
+$('blueprintProject').addEventListener('change',guard(async()=>{
+  blueprintProject=$('blueprintProject').value==='erebor'?'erebor':'campus';
+  const url=new URL(location.href);url.searchParams.set('project',blueprintProject);history.replaceState(null,'',url);
+  closeDrawer();configureBlueprintProject();$('bpRows').innerHTML='<tr><td colspan="5">Baupläne werden geladen …</td></tr>';
+  await loadStatus();
+}));
+$('stonePacket').addEventListener('change',()=>ereborBlueprints.rows());
+configureBlueprintProject();
+
+
 // ---------- tabs ----------
 document.querySelectorAll('nav.tabs [data-tab]').forEach(b => b.addEventListener('click', e => {
   e.preventDefault(); closeDrawer(); showTab(b.dataset.tab);
@@ -45,6 +65,7 @@ document.querySelectorAll('nav.tabs [data-tab]').forEach(b => b.addEventListener
 function showTab(tab) {
   if (tab === 'admin' && me?.user?.role !== 'admin') tab = 'overview';
   activeTab = tab;
+  $('blueprintProjectBar').classList.toggle('hide',!['overview','coordinates'].includes(tab));
   document.querySelectorAll('nav.tabs [data-tab]').forEach(b => {
     if (b.dataset.tab === tab) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current');
   });
@@ -62,7 +83,8 @@ document.addEventListener('keydown', e => { if (e.key === 'Escape') document.que
 
 // ---------- overview ----------
 async function loadStatus() {
-  status = await api('/api/status');
+  if(blueprintProject==='erebor')return ereborBlueprints.load();
+  const next=await api('/api/status');if(blueprintProject!=='campus')return;status=next;
   const live = status.live, t = status.edition.totals;
   $('liveLine').innerHTML = live
     ? `Live-Bestand #${live.id}: Welt gespeichert ${esc(ago(live.worldTime))}, erfasst ${esc(ago(live.capturedAt))}`
@@ -85,6 +107,7 @@ async function loadStatus() {
     : 'Keine Überlappungen. Kein Bauplan setzt einen anderen Block in eine Zelle, die ein anderer schon belegt.';
 }
 function renderRows() {
+  if(blueprintProject==='erebor')return ereborBlueprints.rows();
   if (!status) return;
   const q = $('search').value.trim().toLowerCase(), f = $('filter').value;
   const order = { conflict: 0, warning: 1, ok: 2, unknown: 3, built: 4 };
@@ -104,6 +127,7 @@ $('bpRows').addEventListener('click', e => { const tr = e.target.closest('tr[dat
 
 // ---------- placement coordinates ----------
 function renderCoordinates() {
+  if(blueprintProject==='erebor')return ereborBlueprints.coordinates();
   if (!status) return;
   const q = $('coordinateSearch').value.trim().toLowerCase();
   const rows = status.blueprints.filter(b => !q || `${b.name} ${b.id} ${b.fileName}`.toLowerCase().includes(q))
@@ -114,10 +138,11 @@ function renderCoordinates() {
 $('coordinateSearch').addEventListener('input', renderCoordinates);
 $('coordinateRows').addEventListener('click', e => { const b = e.target.closest('[data-open-blueprint]'); if (b) openBlueprint(b.dataset.openBlueprint); });
 $('coordinateDownload').onclick = () => {
-  if (!status) return;
-  const rows = [...status.blueprints].sort((a,b) => a.fileName.localeCompare(b.fileName, 'de', {numeric:true}));
-  const url = URL.createObjectURL(new Blob([coordinateListText(rows)], {type:'text/plain;charset=utf-8'}));
-  const a = document.createElement('a'); a.href=url; a.download='CAMPUS_KOORDINATEN_AKTUELL.txt'; a.click();
+  if (blueprintProject==='campus'&&!status) return;
+  const rows = [...(status?.blueprints||[])].sort((a,b) => a.fileName.localeCompare(b.fileName, 'de', {numeric:true}));
+  const text=blueprintProject==='erebor'?ereborBlueprints.coordinateText():coordinateListText(rows);
+  const url = URL.createObjectURL(new Blob([text], {type:'text/plain;charset=utf-8'}));
+  const a = document.createElement('a'); a.href=url; a.download=blueprintProject.toUpperCase()+'_KOORDINATEN_AKTUELL.txt'; a.click();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 };
 document.addEventListener('click', guard(async e => {
