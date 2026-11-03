@@ -68,6 +68,18 @@ CREATE TABLE IF NOT EXISTS build_project_versions (
   user_id INTEGER REFERENCES users(id),
   PRIMARY KEY (project_id, version)
 );
+CREATE TABLE IF NOT EXISTS project_stone_packages (
+  project_id TEXT NOT NULL REFERENCES build_projects(id),
+  version INTEGER NOT NULL,
+  cannon TEXT NOT NULL,
+  part INTEGER NOT NULL,
+  sha256 TEXT NOT NULL,
+  zip BLOB NOT NULL,
+  report_json TEXT NOT NULL,
+  saved_at TEXT NOT NULL,
+  user_id INTEGER REFERENCES users(id),
+  PRIMARY KEY (project_id, version, cannon, part)
+);
 CREATE TABLE IF NOT EXISTS blueprint_versions (
   id INTEGER PRIMARY KEY,
   blueprint_id TEXT NOT NULL REFERENCES blueprints(id),

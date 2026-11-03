@@ -1,9 +1,11 @@
 import {esc,fmt} from './format.js?v=20261101-select-1';
 import {STONE_BATCH_SIZE} from './stone-placement.js?v=20261101-select-1';
+import {showPreparedStone} from './prepared-stone-ui.js?v=20261101-select-1';
 
 const $=s=>document.querySelector(s);
 function download(blob,name){const u=URL.createObjectURL(blob),a=document.createElement('a');a.href=u;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(u),30000);}
 export function installStoneControls(project,api,selectCannon){
+ showPreparedStone(project,api);
  let manifest=null,busy=false;
  const endpoint='/api/projects/'+encodeURIComponent(project.id)+'/stone/';
  const stationOptions=project.plan.cannonLayout?.stations||[];
