@@ -1,11 +1,11 @@
-import { createProjectBlueprints } from './project-blueprints.js?v=20261104-project-viewer-2';
-import { esc, fmt } from './format.js?v=20261104-project-viewer-2';
-import { updateCannonPicker } from './cannon-picker.js?v=20261104-project-viewer-2';
-import { createCannonPickerDialog } from './cannon-picker-dialog.js?v=20261104-project-viewer-2';
-import { renderCannon, cannonSettingsPayload, cannonStartState, updateCannonLive } from './cannon-ui.js?v=20261104-project-viewer-2';
-import { coordinateFields, placementCard, placementValues, coordinateListText } from './placement.js?v=20261104-project-viewer-2';
-import { blueprintPreview, installPreviewFallbacks } from './blueprint-preview.js?v=20261104-project-viewer-2';
-import { connectPolling, createRefreshQueue } from './live-updates.js?v=20261104-project-viewer-2';
+import { createProjectBlueprints } from './project-blueprints.js?v=20261104-erebor-architecture-1&revision=erebor-architecture-1';
+import { esc, fmt } from './format.js?v=20261104-erebor-architecture-1';
+import { updateCannonPicker } from './cannon-picker.js?v=20261104-erebor-architecture-1';
+import { createCannonPickerDialog } from './cannon-picker-dialog.js?v=20261104-erebor-architecture-1';
+import { renderCannon, cannonSettingsPayload, cannonStartState, updateCannonLive } from './cannon-ui.js?v=20261104-erebor-architecture-1';
+import { coordinateFields, placementCard, placementValues, coordinateListText } from './placement.js?v=20261104-erebor-architecture-1';
+import { blueprintPreview, installPreviewFallbacks } from './blueprint-preview.js?v=20261104-erebor-architecture-1';
+import { connectPolling, createRefreshQueue } from './live-updates.js?v=20261104-erebor-architecture-1';
 installPreviewFallbacks();
 const $ = id => document.getElementById(id);
 const when = t => t ? new Date(t).toLocaleString('de-DE', { dateStyle: 'short', timeStyle: 'short' }) : '–';
@@ -41,7 +41,7 @@ let me = null, status = null, activeTab = 'overview', polling = null;
 
 let blueprintProject=new URL(location.href).searchParams.get('project')==='erebor'?'erebor':'campus';
 const ereborBlueprints=createProjectBlueprints({api,isSelected:()=>blueprintProject==='erebor',closeDrawer});
-function configureBlueprintProject(){
+function configureBlueprintProject(){document.getElementById('ereborMode')?.classList.toggle('hide',blueprintProject!=='erebor');
   const erebor=blueprintProject==='erebor';
   $('blueprintProject').value=blueprintProject;
   $('blueprintProjectLink').href='/projects?id='+blueprintProject;

@@ -1,4 +1,4 @@
-import { esc } from './format.js?v=20261104-project-viewer-2';
+import { esc } from './format.js?v=20261104-erebor-architecture-1';
 
 // Always pin the image to the displayed version, including older cannon assignments.
 export function blueprintPreview(bp, {size = 'thumbnail', eager = false} = {}) {
