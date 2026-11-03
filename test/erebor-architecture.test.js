@@ -29,6 +29,14 @@ test('route endpoints have floors and headroom; protected village and waystone r
 test('every stair flight has four blocks headroom and a reachable landing',()=>{
  for(const zone of plan.zones.filter(z=>z.id.startsWith('S'))){const [[x,,z],[X,,Z]]=zone.bounds;for(let y=zone.floors[0];y<zone.floors.at(-1);y+=16){for(let i=0;i<8;i++){for(let dy=1;dy<=4;dy++){assert.equal(local(x+3,y+i+dy,Z-5-i),'minecraft:air',zone.id+' first flight');assert.equal(local(X-4,y+8+i+dy,z+4+i),'minecraft:air',zone.id+' return flight');}}assert.equal(local(x+6,y+8,z+2),'minecraft:air');assert.notEqual(local(x+6,y+7,z+2),'minecraft:air');}}
 });
+test('roads and tunnels remain continuous through intersections and elevation changes',()=>{
+ for(const r of scene.design.routes)for(let k=1;k<r.points.length;k++){
+  const a=r.points[k-1],b=r.points[k],n=Math.max(Math.abs(b[0]-a[0]),Math.abs(b[2]-a[2]));
+  for(let i=0;i<=n;i++){const t=i/Math.max(1,n),x=Math.round(a[0]+(b[0]-a[0])*t),z=Math.round(a[2]+(b[2]-a[2])*t),rise=Math.max(0,Math.min(1,(i-Math.floor(r.width/2))/Math.max(1,n-r.width))),y=Math.round(a[1]+(b[1]-a[1])*rise),label=`${r.group} ${x}/${y}/${z}`;
+   assert.ok(local(x,y-1,z)&&local(x,y-1,z)!=='minecraft:air','floor '+label);assert.equal(local(x,y,z),'minecraft:air','feet '+label);assert.equal(local(x,y+1,z),'minecraft:air','head '+label);
+  }
+ }
+});
 test('architecture listing retains exact anchors and separates excavation from build',()=>{
  const f={id:'EREBOR_E02_BAU_K19_X-992_Y64_Z448_R1',fileName:'x.nbt',kind:'build',origin:[-992,64,448],cannon:'K19',cannonPosition:[-1152,96,448],blocks:12};
  const items=architectureBlueprints({id:'erebor'},[{id:'E02_001',group:'E02',title:'Großes Tor',version:6,revision:1,files:[f],sourceRegions:[]}]);

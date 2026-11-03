@@ -72,7 +72,7 @@ function residential(d,p){for(const id of ['E08','E11','E13','E16','E17','E18','
  for(let f=0;f<zone.floors.length-1;f++){const yy=zone.floors[f],rise=zone.floors[f+1]-yy;d.stairs(x+4,yy,Z-8,4,rise);}
  }}
 
-function kernels(d,p){for(const zone of p.zones.filter(z=>z.id.startsWith('S'))){const {x,X,z,Z}=d.shell(zone,{columns:false});const low=zone.floors[0],high=zone.floors.at(-1);d.clear(x+2,low,z+2,X-2,high+6,Z-2);for(let yy=low;yy<high;yy+=16){d.box(x+2,yy-1,Z-4,X-2,yy,Z-2,M.dark);d.box(x+2,yy+7,z+2,X-2,yy+8,z+4,M.dark);for(let i=0;i<8;i++){d.box(x+2,yy+i,Z-5-i,x+5,yy+i+1,Z-4-i,stair());d.box(X-5,yy+8+i,z+4+i,X-2,yy+9+i,z+5+i,stair('minecraft:deepslate_tile_stairs','south'));d.box(x+5,yy+i,Z-5-i,x+6,yy+i+2,Z-4-i,M.dark);d.box(X-6,yy+8+i,z+4+i,X-5,yy+10+i,z+5+i,M.dark);}d.p(x+1,yy+6,z+2,M.light);d.p(X-2,yy+14,Z-3,M.light);}for(const yy of zone.floors){d.box(x+2,yy-1,Z-4,X-2,yy,Z-2,M.dark);d.door(x,yy,Z-3,3,5,'x',4);d.door(X,yy,Z-3,3,5,'x',4);}}
+function kernels(d,p){for(const zone of p.zones.filter(z=>z.id.startsWith('S'))){const {x,X,z,Z}=d.shell(zone,{columns:false});const low=zone.floors[0],high=zone.floors.at(-1);d.clear(x+2,low,z+2,X-2,high+6,Z-2);for(let yy=low;yy<high;yy+=16){d.box(x+2,yy-1,Z-4,X-2,yy,Z-2,M.dark);d.box(x+2,yy+7,z+2,X-2,yy+8,z+4,M.dark);for(let i=0;i<8;i++){d.box(x+2,yy+i,Z-5-i,x+5,yy+i+1,Z-4-i,stair());d.box(X-5,yy+8+i,z+4+i,X-2,yy+9+i,z+5+i,stair('minecraft:deepslate_tile_stairs','south'));d.box(x+5,yy+i,Z-5-i,x+6,yy+i+2,Z-4-i,M.dark);d.box(X-6,yy+8+i,z+4+i,X-5,yy+10+i,z+5+i,M.dark);}d.p(x+1,yy+6,z+2,M.light);d.p(X-2,yy+14,Z-3,M.light);}for(const yy of zone.floors){d.box(x+2,yy-1,Z-4,X-2,yy,Z-2,M.dark);d.door(x,yy,Z-3,3,5,'x',4);d.door(X,yy,Z-3,3,5,'x',4);d.door(Math.floor((x+X)/2),yy,Z,3,5,'z',8);}}
 }
 function stairsAndLinks(d,p){
  d.group='E29';const r=(points,w=8)=>d.path(points,w);
@@ -85,19 +85,19 @@ function stairsAndLinks(d,p){
  for(const yy of [-32,-48])r([[112,yy,-219],[112,yy,-196]]);
  for(const xx of [112,216])r([[xx,-32,-184],[xx,0,-144]],6);
  r([[-112,-32,-411],[-128,-32,-411]]);
- r([[-112,0,-411],[-112,0,-552],[-204,0,-552],[-204,0,-568]]);
- r([[112,32,-531],[112,32,-552],[96,32,-552],[96,32,-560]]);
+ r([[-112,0,-411],[-128,0,-411],[-128,0,-552],[-204,0,-552],[-204,0,-568]]);
+ r([[112,32,-531],[100,32,-531],[100,32,-552],[96,32,-552],[96,32,-560]]);
  r([[-112,-64,-411],[0,-64,-411],[0,-64,-562]],12);
  r([[-92,-96,-680],[-132,-96,-680]],12);
  r([[92,-96,-680],[120,-96,-680],[144,-112,-680]],8);
  r([[-204,-64,-526],[-204,-64,-548],[204,-64,-548],[204,-112,-612]],8);
- r([[112,-32,-531],[112,-32,-624],[172,-32,-624]],6);r([[112,-32,-624],[112,-32,-704],[172,-32,-704]],6);
+ r([[112,-32,-531],[128,-32,-531],[128,-32,-624],[172,-32,-624]],6);r([[128,-32,-624],[128,-32,-704],[172,-32,-704]],6);
  // Connecting every floor to its kernel must preserve the stair landing, not cut its runs.
  d.group='E15';r([[-400,-32,-660],[-300,-32,-660],[-300,-64,-568],[-112,-64,-568],[-112,-96,-620],[-92,-96,-620]],3);
  d.box(-416,-35,-676,-384,-32,-644,M.pillar);d.door(-400,-32,-660,3,4,'x',8);
 }
 
-function mines(d,p){d.group='E14';const z=p.zones.find(z=>z.id==='E14');d.rooms.push({id:z.id,title:z.title,bounds:z.bounds,floors:z.floors});d.path([[144,-112,-576],[204,-112,-576],[204,-112,-776]],8);for(const zz of [-600,-628,-656,-684,-712,-740]){d.path([[140,-112,zz],[276,-112,zz]],5);for(let x=144;x<278;x+=16){d.box(x,-112,zz-3,x+2,-106,zz-2,M.log);d.box(x,-112,zz+2,x+2,-106,zz+3,M.log);d.box(x,-107,zz-3,x+2,-106,zz+3,M.log);d.p(x+1,-110,zz-2,M.light);}}d.room(216,-112,-780,48,48,20,{kind:'sorting'});d.room(132,-112,-644,32,48,16,{kind:'station'});for(const xx of [164,252]){d.box(xx,-116,-594,xx+12,-64,-582,M.pillar);d.clear(xx+2,-112,-592,xx+10,-64,-584);for(let yy=-112;yy<-64;yy++)d.p(xx+2,yy,-590,{name:'minecraft:ladder',props:{facing:'east',waterlogged:'false'}});}}
+function mines(d,p){d.group='E14';const z=p.zones.find(z=>z.id==='E14');d.rooms.push({id:z.id,title:z.title,bounds:z.bounds,floors:z.floors});d.path([[144,-112,-576],[220,-112,-576],[220,-112,-632],[204,-112,-632],[204,-112,-776]],8);for(const zz of [-600,-628,-656,-684,-712,-740]){d.path([[140,-112,zz],[276,-112,zz]],5);for(let x=144;x<278;x+=16){d.box(x,-112,zz-3,x+2,-106,zz-2,M.log);d.box(x,-112,zz+2,x+2,-106,zz+3,M.log);d.box(x,-107,zz-3,x+2,-106,zz+3,M.log);d.p(x+1,-110,zz-2,M.light);}}d.room(216,-112,-780,48,48,20,{kind:'sorting'});d.room(132,-112,-644,32,48,16,{kind:'station'});for(const xx of [164,252]){d.box(xx,-116,-594,xx+12,-64,-582,M.pillar);d.clear(xx+2,-112,-592,xx+10,-64,-584);for(let yy=-112;yy<-64;yy++)d.p(xx+2,yy,-590,{name:'minecraft:ladder',props:{facing:'east',waterlogged:'false'}});}}
 
 function outside(d,p){
  d.group='E03';// Use the surveyed stepped footprint, not its rectangular reservation.
@@ -134,6 +134,6 @@ function landscape(d){
 export function buildEreborDesign(plan){if(plan.rotationDegrees!==90||!plan.blockPreview?.dataGzipBase64)throw Error('Erebor-Standort oder Skinmodell fehlt');const d=new Design(plan);landscape(d);outside(d,plan);gate(d,plan);grandHalls(d,plan);residential(d,plan);mines(d,plan);stairsAndLinks(d,plan);
  // Hard exclusions are last, so no decorative detail can intrude into protected buildings.
  // P-SEE protects against MOUNTAIN filling only; the requested lake architecture is allowed.
- d.group='E03';d.path([[100,0,16],[100,4,-10],[84,4,-10]],6,{roof:false});for(const r of [...d.routes]){d.group=r.group;d.path(r.points,r.width,{roof:r.roof,wood:r.wood,light:false,finalOnly:true});}kernels(d,plan);d.group='E02';d.clear(-15,0,-30,15,48,1);d.group='PROTECTED';for(const q of plan.site.protectedAreas.filter(q=>q.id!=='P-SEE')){const [a,b]=q.bounds,[ox,oy,oz]=plan.worldOrigin;const lo=[oz-b[2],a[1]-oy,a[0]-ox],hi=[oz-a[2],b[1]-oy,b[0]-ox];d.box(...lo,...hi,'minecraft:structure_void');}
+ d.group='E03';d.path([[100,0,16],[100,4,-10],[84,4,-10]],6,{roof:true});for(const r of [...d.routes]){d.group=r.group;d.path(r.points,r.width,{roof:r.roof,wood:r.wood,light:false,finalOnly:true});}kernels(d,plan);d.group='E02';d.clear(-15,0,-30,15,48,1);d.group='PROTECTED';for(const q of plan.site.protectedAreas.filter(q=>q.id!=='P-SEE')){const [a,b]=q.bounds,[ox,oy,oz]=plan.worldOrigin;const lo=[oz-b[2],a[1]-oy,a[0]-ox],hi=[oz-a[2],b[1]-oy,b[0]-ox];d.box(...lo,...hi,'minecraft:structure_void');}
  return d;
 }
