@@ -39,13 +39,13 @@ export function openapi(baseUrl) {
     },
     security: [{ bearer: [] }],
     paths: {
-      '/api/projects': { get: { summary: 'Bauprojekte / Masterpläne mit oder ohne geplantem Standort auflisten', responses: ok } },
+      '/api/projects': { get: { summary: 'Bauprojekte auflisten: Masterpläne und bestehende Anlagen mit verknüpften Bauplänen', responses: ok } },
       '/api/projects/{id}': {
         get: { summary: 'Vollständigen Masterplan mit Version lesen', parameters: [{ ...id, description: 'Projekt-ID, z. B. erebor' }], responses: { ...ok, 404: { description: 'Unbekanntes Projekt' } } },
         put: { summary: 'Masterplan speichern: erst dryRun, danach mit baseVersion. Keine Welt- oder Kanonenaktion.', parameters: [{ ...id, description: 'Projekt-ID, Kleinbuchstaben/Ziffern/_/-' }],
           requestBody: json({ type: 'object', required: ['baseVersion', 'plan'], properties: {
             baseVersion: { type: 'integer', minimum: 0, description: '0 bei Neuanlage; sonst aktuelle Version' }, dryRun: { type: 'boolean' },
-            plan: { type: 'object', required: ['title', 'summary', 'status', 'worldOrigin'], properties: { title: { type: 'string', minLength: 1, maxLength: 160 }, summary: { type: 'string', maxLength: 4000 }, status: { const: 'planning' }, worldOrigin: { type: ['array','null'], items:{type:'integer'},minItems:3,maxItems:3 }, rotationDegrees:{enum:[0,90,180,270]},site:{type:'object',properties:{status:{const:'planned'}}} }, additionalProperties: true }
+            plan: { type: 'object', required: ['title', 'summary', 'status', 'worldOrigin'], properties: { title: { type: 'string', minLength: 1, maxLength: 160 }, summary: { type: 'string', maxLength: 4000 }, status: { enum: ['planning','existing'] }, kind: { type: 'string', description: 'Für bestehende Anlagen: blueprint_collection. Dann worldOrigin=null und aktive blueprintIds erforderlich; keine Bergfüllung.' }, blueprintIds: { type: 'array', minItems: 1, maxItems: 2000, uniqueItems: true, items: { type: 'string', minLength: 1, maxLength: 200 } }, worldOrigin: { type: ['array','null'], items:{type:'integer'},minItems:3,maxItems:3 }, rotationDegrees:{enum:[0,90,180,270]},site:{type:'object',properties:{status:{const:'planned'}}} }, additionalProperties: true }
           } }), responses: { ...ok, 400: { description: 'Ungültiger Plan' }, 409: { description: 'baseVersion ist veraltet' }, 413: { description: 'Max. 512 KiB' } }
         }
       },

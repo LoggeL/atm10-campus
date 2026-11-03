@@ -1,3 +1,5 @@
+import { renderExistingProject } from './project-existing.js?v=20261101-select-1';
+
 const $ = s => document.querySelector(s);
 const esc = v => String(v ?? '').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const list = items => `<ul>${(items || []).map(t=>`<li>${esc(t)}</li>`).join('')}</ul>`;
@@ -102,9 +104,10 @@ async function load() {
   $('#error').textContent='';$('#reload').disabled=true;
   try {
     const id=new URL(location.href).searchParams.get('id');
-    if(!id) { current=null; const all=await api('/api/projects');$('#content').innerHTML=`<h1>Bauprojekte</h1><p class="muted">Masterpläne mit oder ohne Standort. Verfügbare Projekt-Exporte stehen im jeweiligen Projekt.</p><div class="project-cards">${all.map(p=>`<a class="project-card" href="/projects?id=${encodeURIComponent(p.id)}"><p class="tag">MASTERPLAN · V${p.version}</p><h2>${esc(p.title)}</h2><p>${esc(p.summary)}</p></a>`).join('')||'<p>Noch keine Bauprojekte vorhanden.</p>'}</div>`;}
-    else { current=await api('/api/projects/'+encodeURIComponent(id));render(); }
+    if(!id) { current=null; const all=await api('/api/projects');$('#content').innerHTML=`<h1>Bauprojekte</h1><p class="muted">Eure bestehenden Anlagen und neuen Großprojekte. Koordinaten, Baufortschritt und Downloads stehen im jeweiligen Projekt.</p><div class="project-cards">${all.map(p=>`<a class="project-card" href="/projects?id=${encodeURIComponent(p.id)}"><p class="tag">${p.status==='existing'?'BESTEHENDE ANLAGE · '+Number(p.blueprintCount)+' BAUPLÄNE':'MASTERPLAN · V'+p.version}</p><h2>${esc(p.title)}</h2><p>${esc(p.summary)}</p></a>`).join('')||'<p>Noch keine Bauprojekte vorhanden.</p>'}</div>`;}
+    else { current=await api('/api/projects/'+encodeURIComponent(id));if(current.plan.kind==='blueprint_collection'){ $('#modelLink')?.remove();renderExistingProject($('#content'),current,await api('/api/status')); }else render(); }
     $('#download').hidden=!current;$('#print').hidden=!current;
+    if(location.hash)document.getElementById(location.hash.slice(1))?.scrollIntoView();
   } catch(e) { $('#error').textContent=e.message; $('#content').textContent=''; }
   finally { $('#reload').disabled=false; }
 }
