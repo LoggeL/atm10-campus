@@ -5,7 +5,7 @@ import {countRegionQuery} from './project-stone-count.js';
 import {nearestStoneCannon,stoneFileName,stoneBatchTiles} from '../public/assets/stone-placement.js';
 import {registerPreparedStoneRoutes} from './api-project-stone-prepared.js';
 
-export function registerProjectStoneRoutes(app,campus){
+export function registerProjectStoneRoutes(app,campus,blueprintPreviews){
  const cache=new Map();let active=0;
  const run=async(data)=>{
   if(active>=2)throw new HttpError(429,'Zwei Bergexporte laufen bereits. Bitte kurz warten.');active++;
@@ -30,7 +30,7 @@ export function registerProjectStoneRoutes(app,campus){
   return{plan,version,id:row.id};
  };
  const manifest=async p=>{const key=p.id+':'+p.version;if(cache.has(key))return cache.get(key);const m=await run({plan:p.plan});cache.set(key,m);while(cache.size>3)cache.delete(cache.keys().next().value);return m;};
- registerPreparedStoneRoutes(app,campus,{project,manifest,run});
+ registerPreparedStoneRoutes(app,campus,{project,manifest,run,blueprintPreviews});
  app.get('/api/projects/:id/stone/manifest',async(req,reply)=>{
   const p=project(req),m=await manifest(p);
   return reply.header('Cache-Control','private, no-store').send({project:p.id,version:p.version,...m,tiles:m.tiles.map(t=>({...t,fileName:stoneFileName(p.id,p.version,t,p.plan),cannon:nearestStoneCannon(p.plan,t.origin)})),export:'NBT enthält nur gespeicherte Luft/Wasser. Bestehende Blöcke, Schutzbereiche und Platz um Block-Entities werden ausgelassen. Unbekannte Chunks verhindern den Download.',cannon:{replaceMode:0,replaceBlockEntities:false,rotation:'NONE',mirror:'NONE'}});

@@ -31,7 +31,7 @@ export function createPreviewService(campus, { timeoutMs = 30_000 } = {}) {
   function pump() {
     if(active||closed||!queue.length)return;
     const task=queue.shift();
-    const worker=new Worker(new URL('./worker.js',import.meta.url),{workerData:{file:task.file},resourceLimits:{maxOldGenerationSizeMb:512}});
+    const worker=new Worker(new URL('./worker.js',import.meta.url),{workerData:task.source,resourceLimits:{maxOldGenerationSizeMb:512}});
     active={worker,task};
     let finished=false;
     const finish=async(error,image)=>{
@@ -45,19 +45,19 @@ export function createPreviewService(campus, { timeoutMs = 30_000 } = {}) {
     worker.once('error',error=>finish(new HttpError(503,'Vorschau konnte nicht erstellt werden: '+error.message)));
     worker.once('exit',code=>{if(!finished)finish(new HttpError(503,'Vorschau-Prozess wurde beendet ('+code+').'));});
   }
-  function render(file) {
+  function render(source) {
     if(closed)return Promise.reject(new HttpError(503,'Vorschau-Dienst wird beendet.'));
     if(queue.length>=128)return Promise.reject(new HttpError(503,'Vorschauen werden noch erstellt. Bitte kurz warten.'));
-    return new Promise((resolve,reject)=>{queue.push({file,resolve,reject});pump();});
+    return new Promise((resolve,reject)=>{queue.push({source,resolve,reject});pump();});
   }
-  function get(bpId,version) {
-    const key=`${PREVIEW_REVISION}-${version.sha256}`;
+  function getContent(sha256,source) {
+    const key=`${PREVIEW_REVISION}-${sha256}`;
     if(pending.has(key))return pending.get(key);
     const operation=(async()=>{
       await mkdir(dir,{recursive:true});
       const path=join(dir,key+'.png');
       try{return await readFile(path);}catch(error){if(error.code!=='ENOENT')throw error;}
-      const image=await render(campus.versionPath(bpId,version.version));
+      const image=await render(await source());
       const temp=join(dir,key+'.'+randomUUID()+'.tmp');
       try{await writeFile(temp,image,{flag:'wx'});await rename(temp,path);}
       finally{await unlink(temp).catch(()=>{});}
@@ -76,7 +76,17 @@ export function createPreviewService(campus, { timeoutMs = 30_000 } = {}) {
     await Promise.allSettled([...pending.values()]);
     if(pruning)await pruning;
   }
-  return {get,close};
+  const get=(bpId,version)=>getContent(version.sha256,()=>({file:campus.versionPath(bpId,version.version)}));
+  const getBytes=(sha256,readBytes)=>getContent(sha256,async()=>({bytes:await readBytes()}));
+  return {get,getBytes,close};
+}
+
+// The route must authenticate and resolve the immutable package before calling this.
+export async function sendPackagePreview(req,reply,previews,file,readBytes) {
+  const etag=`"${PREVIEW_REVISION}-${file.sha256}"`;
+  reply.header('ETag',etag).header('Cache-Control','private, no-cache');
+  if(req.headers['if-none-match']?.split(',').map(s=>s.trim().replace(/^W\//,'')).includes(etag))return reply.code(304).send();
+  return reply.type('image/png').send(await previews.getBytes(file.sha256,readBytes));
 }
 
 export function registerPreviewRoutes(app,campus) {
@@ -94,4 +104,5 @@ export function registerPreviewRoutes(app,campus) {
     const image=await previews.get(bp.id,version);
     return reply.type('image/png').send(image);
   });
+  return previews;
 }
