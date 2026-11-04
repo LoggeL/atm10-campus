@@ -10,6 +10,15 @@ import {writeWorld} from './helpers.js';
 import {buildServer} from '../src/server.js';
 
 const plan=()=>({title:'Erebor Test',summary:'Standort und Stein',status:'planning',worldOrigin:[100,88,32],rotationDegrees:90,site:{status:'planned'},mountainFill:{algorithm:'erebor-massif-v1',bounds:[[0,0,0],[64,128,64]],peak:[32,120,32],roofReserves:[],protectedBoxes:[]}});
+test('coastal forecourt is supported under the full symmetric terrace and stays open above it',()=>{
+ const p=plan();p.worldOrigin=[1500,88,1000];p.mountainFill={...p.mountainFill,bounds:[[0,-40,0],[2000,313,2000]],peak:[1000,312,1000],entranceFill:true};
+ for(let d=0;d<108;d++){
+  const half=d<36?68:24,expected=87+(d<36?0:Math.min(24,1+Math.floor((d-36)/3)));
+  for(let x=-half;x<half;x++)assert.equal(mountainTop(p,1500+d,1000-x),expected);
+  assert.equal(mountainTop(p,1500+d,1000-half),null,'outside terrace remains open');
+ }
+ assert.equal(mountainTop(p,1608,1000),null);
+});
 test('planned placement is explicit; rotation changes points without changing world state',()=>{
  assert.equal(validPlacement({worldOrigin:null}),true);assert.equal(validPlacement({worldOrigin:[0,64,0]}),false);assert.equal(validPlacement(plan()),true);assert.deepEqual(worldPoint(plan(),[10,5,-20]),[80,93,22]);
 });
