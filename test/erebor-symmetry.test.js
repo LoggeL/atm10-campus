@@ -1,7 +1,7 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
-import {expandedPlan,interiorBasis,expandPoint} from '../src/erebor-expansion.js';
+import {expandedPlan,interiorBasis,expandPoint,expandCorePoint} from '../src/erebor-expansion.js';
 import {compileErebor,readDesignBlock} from '../src/erebor-tiles.js';
 import {auditRoomSymmetry,SYMMETRIC_ROOMS,reflectState} from '../src/erebor-symmetry.js';
 const original=JSON.parse(readFileSync(new URL('./fixtures/erebor-plan.json',import.meta.url),'utf8'));
@@ -38,5 +38,24 @@ test('every paired hall staircase survives all connecting routes with standing h
 test('the corrected side stair and gallery in the treasure hall meet without a gap',()=>{
  for(const x of [-132,-130,129,131])for(const z of [-900,-901,-902]){
   assert.notEqual(at(x,-65,z)?.name,'minecraft:air');assert.equal(at(x,-64,z)?.name,'minecraft:air');
+ }
+});
+
+test('all four expanded stair cores have equally wide mirrored flights and four blocks headroom',()=>{
+ for(const zone of interiorBasis(plan).zones.filter(z=>z.id.startsWith('S'))){
+  const [[x,,z],[X,,Z]]=zone.bounds,ex=p=>expandCorePoint(zone,p),sum=ex([x,0,0])[0]+ex([X,0,0])[0],sumZ=ex([0,0,z])[2]+ex([0,0,Z])[2];
+  let checked=0;
+  for(let y=zone.floors[0];y<zone.floors.at(-1);y+=16)for(let i=0;i<8;i++){
+   const a=ex([x+2,y+i,Z-5-i]),b=ex([x+5,y+i+1,Z-4-i]);
+   const c=ex([X-5,y+8+i,z+4+i]),d=ex([X-2,y+9+i,z+5+i]);
+   assert.equal(b[0]-a[0],d[0]-c[0],zone.id+' flight width');assert.equal(b[2]-a[2],d[2]-c[2],zone.id+' tread depth');
+   assert.equal(c[0],sum-b[0]);assert.equal(c[2],sumZ-b[2]);
+   for(const [lo,hi]of [[a,b],[c,d]])for(let xx=lo[0];xx<hi[0];xx++)for(let zz=lo[2];zz<hi[2];zz++){
+    assert.match(at(xx,lo[1],zz)?.name||'',/_stairs$/,`${zone.id} ${xx}/${lo[1]}/${zz}`);
+    for(let dy=1;dy<=4;dy++)assert.equal(at(xx,lo[1]+dy,zz)?.name,'minecraft:air',`${zone.id} head ${xx}/${lo[1]+dy}/${zz}`);
+    checked++;
+   }
+  }
+  assert.ok(checked>500);
  }
 });

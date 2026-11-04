@@ -32,7 +32,15 @@ export function interiorBasis(plan){
 
 export function appendExpandedOps(target,source){
  const remap=source.palette.map(s=>s.name==='minecraft:air'?0:target.state(s));
- for(const o of source.ops)target.ops.push({...o,a:expandPoint(o.a),b:expandPoint(o.b),s:remap[o.s]});
+ for(const o of source.ops){
+  const core=o.g.startsWith('S')&&source.plan.zones.find(z=>z.id===o.g);
+  const expand=core?p=>expandCorePoint(core,p):expandPoint;
+  target.ops.push({...o,a:expand(o.a),b:expand(o.b),s:remap[o.s]});
+ }
+}
+export function expandCorePoint(zone,p){
+ const center=zone.bounds[0].map((v,i)=>(v+zone.bounds[1][i])/2),target=expandPoint(center);
+ return p.map((v,i)=>i===1?v:target[i]+Math.sign(v-center[i])*Math.round(Math.abs(v-center[i])*1.5));
 }
 export function appendExpandedInterior(target,source){
  appendExpandedOps(target,source);

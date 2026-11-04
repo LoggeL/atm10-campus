@@ -1,11 +1,11 @@
-// Erebor architecture, revision 3. Integer, half-open cuboids; local +Z faces east.
+// Erebor architecture, revision 4. Integer, half-open cuboids; local +Z faces east.
 // Empty cells are excavation intent, NEVER implicitly part of a placement file.
 import {gunzipSync} from 'node:zlib';
 import {appendExpandedInterior,appendExpandedOps,addExpansion,interiorBasis} from './erebor-expansion.js';
 
 import {balanceRooms,centeredStarts} from './erebor-symmetry.js';
 
-export const DESIGN_REVISION=3;
+export const DESIGN_REVISION=4;
 export const M={stone:'minecraft:stone_bricks',smooth:'chipped:smooth_stone_bricks',pillar:'create:polished_cut_tuff',dark:'rechiseled:blackstone_tiles_connecting',jade:'rechiseled:dark_prismarine_large_tiles_connecting',green:'rechiseledcreate:veridium_cut_polished_connecting',rune:'chipped:runic_carved_dark_prismarine',gold:'rechiseled:gold_block_polished_connecting',light:'chipped:inlayed_glowstone',black:'create:polished_cut_deepslate',wood:'minecraft:spruce_planks',log:'minecraft:stripped_spruce_log',roof:'minecraft:deepslate_tiles',glass:'minecraft:light_gray_stained_glass',air:'minecraft:air'};
 export const stair=(name='minecraft:stone_brick_stairs',facing='north')=>({name,props:{facing,half:'bottom',shape:'straight',waterlogged:'false'}});
 export const slab=(name='minecraft:stone_brick_slab',type='bottom')=>({name,props:{type,waterlogged:'false'}});
