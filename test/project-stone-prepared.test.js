@@ -8,6 +8,7 @@ import {buildServer} from '../src/server.js';
 import {createApiToken} from '../src/auth.js';
 import {writeWorld} from './helpers.js';
 import {parseStructure} from '../src/nbt.js';
+import {decodePng} from '../src/preview/png.js';
 
 test('prepared stone packages require write/dryRun/current world, persist, and never overwrite a saved package',async()=>{
  const dir=mkdtempSync(join(tmpdir(),'prepared-stone-')),world=join(dir,'world');
@@ -43,6 +44,11 @@ test('prepared stone packages require write/dryRun/current world, persist, and n
   assert.equal(nbt.headers['x-campus-origin'],first.origin.join(','));assert.equal(nbt.headers['x-campus-cannon'],'K19');
   assert.equal(createHash('sha256').update(nbt.rawPayload).digest('hex'),first.sha256);
   assert.deepEqual(parseStructure(nbt.rawPayload).materials,{'minecraft:stone':first.blocks});
+  const imageUrl=single.replace('.nbt?','/preview.png?');
+  assert.equal((await app.inject(imageUrl)).statusCode,401);
+  const image=await app.inject({url:imageUrl,headers});assert.equal(image.statusCode,200,image.body);assert.equal(decodePng(image.rawPayload).width,640);
+  assert.equal(image.headers['x-blueprint-version'],'1');
+  assert.equal((await app.inject({url:imageUrl,headers:{...headers,'if-none-match':image.headers.etag}})).statusCode,304);
   assert.equal((await post({...body,dryRun:false,preview:'already-saved'})).json().unchanged,true);
   assert.deepEqual(readFileSync(region),worldBefore);assert.deepEqual(app.campus.listBlueprints(),[]);assert.equal(app.campus.db.prepare('SELECT COUNT(*) AS n FROM cannons').get().n,0);
   await app.close();app.campus.db.close();app=await buildServer(config);
@@ -54,6 +60,7 @@ test('prepared stone packages require write/dryRun/current world, persist, and n
   const inherited=await app.inject({url:url.replace('version=1','version=2'),headers});
   assert.equal(inherited.json().packages.length,1);assert.equal(inherited.json().packages[0].version,1);
   assert.deepEqual((await app.inject({url:file,headers})).rawPayload,zip.rawPayload,'immutable stone downloads survive an interior-only project revision');
+  assert.deepEqual((await app.inject({url:imageUrl,headers})).rawPayload,image.rawPayload,'image stays pinned to the prepared stone version');
   assert.equal((await post(body)).statusCode,409,'historical project versions cannot be written');
  }finally{await app.close();app.campus.db.close();rmSync(dir,{recursive:true,force:true});}
 });

@@ -8,6 +8,7 @@ import {architecturePackage} from '../src/erebor-export.js';
 import {storedZipEntry} from '../src/zip.js';
 import {parseStructure} from '../src/nbt.js';
 import {buildServer} from '../src/server.js';
+import {decodePng} from '../src/preview/png.js';
 
 test('architecture protects machines and inventories, excludes unknown excavation, leaves the world unchanged',()=>{
  const dir=mkdtempSync(join(tmpdir(),'erebor-protection-'));
@@ -33,6 +34,13 @@ test('architecture API requires dryRun, publishes immutable authenticated downlo
   assert.equal((await app.inject({url:'/api/projects/erebor/architecture',headers})).json().packages.length,0);
   const saved=await post({baseVersion:1,dryRun:false,package:'E02_001',preview:dry.json().preview});assert.equal(saved.statusCode,200,saved.body);assert.equal(saved.json().worldPlacement,false);
   const f=saved.json().package.files[0],url=`/api/projects/erebor/architecture/E02_001/${f.id}.nbt?version=1&revision=${saved.json().package.revision}`;assert.equal((await app.inject(url)).statusCode,401);const n=await app.inject({url,headers});assert.equal(n.statusCode,200);assert.equal(n.headers['x-campus-sha256'],f.sha256);assert.equal(n.headers['x-campus-origin'],f.origin.join(','));
+  const imageUrl=url.replace('.nbt?','/preview.png?');
+  assert.equal((await app.inject(imageUrl)).statusCode,401);
+  const image=await app.inject({url:imageUrl,headers});assert.equal(image.statusCode,200,image.body);assert.equal(image.headers['content-type'],'image/png');assert.equal(decodePng(image.rawPayload).width,640);
+  assert.equal(image.headers['x-architecture-revision'],String(saved.json().package.revision));
+  assert.equal((await app.inject({url:imageUrl,headers:{...headers,'if-none-match':image.headers.etag}})).statusCode,304);
+  assert.equal((await app.inject({url:imageUrl,headers:{'if-none-match':image.headers.etag}})).statusCode,401);
+  assert.equal((await app.inject({url:imageUrl.replace('revision='+saved.json().package.revision,'revision=99'),headers})).statusCode,404);
   const again=await post({baseVersion:1,dryRun:false,package:'E02_001',preview:'old'});assert.equal(again.json().unchanged,true);
   assert.equal(app.campus.listBlueprints().length,0);assert.equal(app.campus.db.prepare('SELECT COUNT(*) n FROM cannons').get().n,0);
  }finally{await app.close();app.campus.db.close();rmSync(dir,{recursive:true,force:true});}

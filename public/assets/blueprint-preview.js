@@ -1,12 +1,13 @@
-import { esc } from './format.js?v=20261104-erebor-rooms-3';
+import { esc } from './format.js?v=20261104-erebor-thumbnails-1';
 
 // Always pin the image to the displayed version, including older cannon assignments.
-export function blueprintPreview(bp, {size = 'thumbnail', eager = false} = {}) {
+export function blueprintPreview(bp, {size = 'thumbnail', eager = false, source = null} = {}) {
   const version = bp?.version ?? bp?.currentVersion;
-  const valid = bp?.id && Number.isSafeInteger(version) && version > 0;
+  const url=source??`/api/blueprints/${encodeURIComponent(bp?.id||'')}/preview.png?version=${version}`;
+  const valid = bp?.id && Number.isSafeInteger(version) && version > 0 && /^\/api\/(projects|blueprints)\//.test(url) && !/[\\#]/.test(url);
   const variant = ['thumbnail','small','large'].includes(size) ? size : 'thumbnail';
   const label = `Vorschau: ${bp?.name || bp?.id || 'Bauplan'}, Version ${version}`;
-  return `<span class="blueprint-preview ${variant}${valid ? '' : ' unavailable'}">${valid ? `<img data-blueprint-preview src="/api/blueprints/${esc(encodeURIComponent(bp.id))}/preview.png?version=${version}" width="640" height="400" alt="${esc(label)}" loading="${eager ? 'eager' : 'lazy'}" decoding="async">` : ''}<span class="preview-placeholder">${valid ? 'Vorschau lädt …' : 'Keine Vorschau'}</span></span>`;
+  return `<span class="blueprint-preview ${variant}${valid ? '' : ' unavailable'}">${valid ? `<img data-blueprint-preview src="${esc(url)}" width="640" height="400" alt="${esc(label)}" loading="${eager ? 'eager' : 'lazy'}" decoding="async">` : ''}<span class="preview-placeholder">${valid ? 'Vorschau lädt …' : 'Keine Vorschau'}</span></span>`;
 }
 
 export function installPreviewFallbacks(root = document) {

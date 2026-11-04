@@ -200,7 +200,7 @@ export async function buildServer(config = defaultConfig) {
       LEFT JOIN users u ON u.id = a.user_id ORDER BY a.id DESC LIMIT ?`).all(limit).map(r => ({ ...r, detail: r.detail ? JSON.parse(r.detail) : null }));
   });
 
-  registerPreviewRoutes(app, campus);
+  const blueprintPreviews = registerPreviewRoutes(app, campus);
   registerProjectRoutes(app, campus);
 
   // ---------- blueprints ----------
@@ -283,8 +283,8 @@ export async function buildServer(config = defaultConfig) {
   });
 
   registerAgentRoutes(app, campus);
-  registerProjectStoneRoutes(app, campus);
-  registerEreborArchitectureRoutes(app, campus);
+  registerProjectStoneRoutes(app, campus, blueprintPreviews);
+  registerEreborArchitectureRoutes(app, campus, blueprintPreviews);
   registerTerrainRoutes(app, campus);
   const materials = registerMaterialRoutes(app, campus);
   const schematics = createSchematics(campus, materials);
