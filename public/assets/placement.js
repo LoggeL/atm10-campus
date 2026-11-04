@@ -1,4 +1,4 @@
-import { esc } from './format.js?v=20261104-erebor-architecture-1';
+import { esc } from './format.js?v=20261104-erebor-architecture-2';
 
 // Always use the origin of the version being displayed, including pinned cannon jobs.
 export function placementValues(bp) {

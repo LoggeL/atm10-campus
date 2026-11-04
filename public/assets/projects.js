@@ -1,6 +1,6 @@
-import { installStoneControls, buildingModsHtml } from './project-stone-ui.js?v=20261104-erebor-architecture-1&revision=prepared-1';
-import { renderExistingProject } from './project-existing.js?v=20261104-erebor-architecture-1';
-import { coordinateFields } from './placement.js?v=20261104-erebor-architecture-1';
+import { installStoneControls, buildingModsHtml } from './project-stone-ui.js?v=20261104-erebor-architecture-2&revision=prepared-1';
+import { renderExistingProject } from './project-existing.js?v=20261104-erebor-architecture-2';
+import { coordinateFields } from './placement.js?v=20261104-erebor-architecture-2';
 
 const $ = s => document.querySelector(s);
 const esc = v => String(v ?? '').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
