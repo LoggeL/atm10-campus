@@ -1,6 +1,7 @@
-import { installStoneControls, buildingModsHtml } from './project-stone-ui.js?v=20261104-erebor-thumbnails-1&revision=prepared-1';
-import { renderExistingProject } from './project-existing.js?v=20261104-erebor-thumbnails-1';
-import { coordinateFields } from './placement.js?v=20261104-erebor-thumbnails-1';
+import { withWorldCoordinates } from './project-coordinates.js?v=20261104-project-coordinates-1';
+import { installStoneControls, buildingModsHtml } from './project-stone-ui.js?v=20261104-project-coordinates-1&revision=prepared-1';
+import { renderExistingProject } from './project-existing.js?v=20261104-project-coordinates-1';
+import { coordinateFields } from './placement.js?v=20261104-project-coordinates-1';
 
 const $ = s => document.querySelector(s);
 const esc = v => String(v ?? '').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -53,6 +54,7 @@ function crossSection() {
   ${current.plan.zones.filter(z=>ids.includes(z.id)).map(z=>{const [a,b]=z.bounds;return `<rect x="${a[2]}" y="${-b[1]}" width="${b[2]-a[2]}" height="${b[1]-a[1]}" fill="${color(z.style)}" fill-opacity=".42" stroke="${color(z.style)}"/>${z.floors.map(f=>`<path d="M${a[2]} ${-f}H${b[2]}" stroke="#edce87" stroke-width="1.7"/>`).join('')}<text text-anchor="middle" x="${(a[2]+b[2])/2}" y="${-(a[1]+b[1])/2}">${z.id}</text>`}).join('')}<text x="${placed()?-1775:-812}" y="163">Gelb = Laufhöhen. Nur Räume auf X0; Seitenflügel sind im Grundriss sichtbar. Felsprofil ist schematisch.</text></svg></div>`;
 }
 function render() {
+  current={...current,plan:withWorldCoordinates(current.plan)};
   const p=current.plan; document.title=p.title+' · ATM10 Campus';
   if(!Array.isArray(p.zones)||!p.envelope) { $('#content').innerHTML=`<h1>${esc(p.title)}</h1><p>${esc(p.summary)}</p><pre>${esc(JSON.stringify(p,null,2))}</pre>`;return; }
   const integer = v => Number.isSafeInteger(v) && Math.abs(v) <= 1000000;
