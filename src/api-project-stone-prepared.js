@@ -12,7 +12,7 @@ export function registerPreparedStoneRoutes(app,campus,{project,manifest,run}) {
  const summary=row=>{const r=JSON.parse(row.report_json);return {cannon:row.cannon,part:row.part,version:row.version,savedAt:row.saved_at,sha256:row.sha256,fileCount:r.files.length,blocks:r.blocks,empty:r.skipped.filter(s=>s.reason==='empty').length,unknown:r.skipped.filter(s=>s.reason==='unknown').length,capturedFrom:r.capturedFrom,capturedTo:r.capturedTo,sourceRegions:r.sourceRegions,files:r.files,skipped:r.skipped};};
  const expire=()=>{for(const [key,value] of previews)if(value.expires<Date.now())previews.delete(key);};
  app.get('/api/projects/:id/stone/prepared/:cannon/:part/:tile.nbt',async(req,reply)=>{
-  const p=project(req),cannon=req.params.cannon,part=Number(req.params.part);
+  const p=project(req,{prepared:true}),cannon=req.params.cannon,part=Number(req.params.part);
   if(!/^K[0-9]{2}$/.test(cannon)||!Number.isSafeInteger(part)||part<1)throw new HttpError(400,'Ungültiges Paket.');
   const row=find(p,cannon,part);if(!row)throw new HttpError(404,'Paket nicht gefunden.');
   const report=JSON.parse(row.report_json),file=report.files.find(f=>f.tile===req.params.tile);
@@ -22,8 +22,16 @@ export function registerPreparedStoneRoutes(app,campus,{project,manifest,run}) {
   return reply.type('application/octet-stream').header('Cache-Control','private, no-store').header('Content-Disposition',`attachment; filename="${encodeURIComponent(file.fileName)}"`).header('X-Campus-SHA256',file.sha256).header('X-Campus-Origin',file.origin.join(',')).header('X-Campus-Cannon',cannon).header('X-Campus-Prepared-At',row.saved_at).send(bytes);
  });
  app.get('/api/projects/:id/stone/prepared',async(req,reply)=>{
-  const p=project(req);
+  const p=project(req,{prepared:true});
   const rows=db.prepare('SELECT project_id,version,cannon,part,sha256,report_json,saved_at FROM project_stone_packages WHERE project_id=? AND version=? ORDER BY cannon,part').all(p.id,p.version);
+  const source=p.plan.stoneStart?.preparedBaseVersion;
+  if(Number.isSafeInteger(source)&&source<p.version){
+   const prior=db.prepare('SELECT plan_json FROM build_project_versions WHERE project_id=? AND version=?').get(p.id,source),old=prior&&JSON.parse(prior.plan_json);
+   if(old&&['mountainFill','worldOrigin','rotationDegrees','cannonLayout'].every(k=>JSON.stringify(old[k])===JSON.stringify(p.plan[k]))){
+    const found=new Set(rows.map(r=>r.cannon+':'+r.part));
+    rows.push(...db.prepare('SELECT project_id,version,cannon,part,sha256,report_json,saved_at FROM project_stone_packages WHERE project_id=? AND version=? ORDER BY cannon,part').all(p.id,source).filter(r=>!found.has(r.cannon+':'+r.part)));
+   }
+  }
   return reply.header('Cache-Control','private, no-store').send({project:p.id,version:p.version,packages:rows.map(summary)});
  });
  app.post('/api/projects/:id/stone/prepared',async req=>{
@@ -60,7 +68,7 @@ export function registerPreparedStoneRoutes(app,campus,{project,manifest,run}) {
   });
  });
  app.get('/api/projects/:id/stone/prepared/:cannon/:part.zip',async(req,reply)=>{
-  const p=project(req),cannon=req.params.cannon,part=Number(req.params.part);
+  const p=project(req,{prepared:true}),cannon=req.params.cannon,part=Number(req.params.part);
   if(!/^K[0-9]{2}$/.test(cannon)||!Number.isSafeInteger(part)||part<1)throw new HttpError(400,'Ungültiges Paket.');
   const row=find(p,cannon,part);if(!row)throw new HttpError(404,'Dieses Paket ist noch nicht vorbereitet.');
   return reply.type('application/zip').header('Cache-Control','private, no-store').header('X-Campus-SHA256',row.sha256).header('X-Campus-Prepared-At',row.saved_at).header('Content-Disposition',`attachment; filename="${p.id.toUpperCase()}_STEIN_${cannon}_PAKET_${String(part).padStart(2,'0')}_V${p.version}.zip"`).send(Buffer.from(row.zip));

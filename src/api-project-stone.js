@@ -17,12 +17,17 @@ export function registerProjectStoneRoutes(app,campus){
    w.once('exit',c=>{clearTimeout(t);if(c!==0)reject(new HttpError(503,'Bergexport abgebrochen.'));});
   });}finally{active--;}
  };
- const project=req=>{
+ const project=(req,{prepared=false}={})=>{
   requireActor(req,'read');const row=campus.db.prepare('SELECT * FROM build_projects WHERE id=?').get(req.params.id);
   if(!row)throw new HttpError(404,'Projekt nicht gefunden.');
-  if(String(row.current_version)!==String(req.query.version))throw new HttpError(409,'Projektversion geändert. Projektseite neu laden.');
-  const plan=JSON.parse(row.plan_json);if(!plan.mountainFill)throw new HttpError(404,'Keine Steinfüllung geplant.');
-  return{plan,version:row.current_version,id:row.id};
+  let version=row.current_version,text=row.plan_json;
+  if(String(version)!==String(req.query.version)){
+   const old=prepared&&campus.db.prepare('SELECT plan_json FROM build_project_versions WHERE project_id=? AND version=?').get(row.id,Number(req.query.version));
+   if(!old)throw new HttpError(409,'Projektversion geändert. Projektseite neu laden.');
+   version=Number(req.query.version);text=old.plan_json;
+  }
+  const plan=JSON.parse(text);if(!plan.mountainFill)throw new HttpError(404,'Keine Steinfüllung geplant.');
+  return{plan,version,id:row.id};
  };
  const manifest=async p=>{const key=p.id+':'+p.version;if(cache.has(key))return cache.get(key);const m=await run({plan:p.plan});cache.set(key,m);while(cache.size>3)cache.delete(cache.keys().next().value);return m;};
  registerPreparedStoneRoutes(app,campus,{project,manifest,run});

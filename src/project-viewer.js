@@ -32,11 +32,15 @@ export function projectScene(project) {
     return [a.map((v, i) => Math.min(v, c[i])), a.map((v, i) => Math.max(v, c[i]))];
   };
   const styles = new Map(list(p.styles, 100).map(s => [s.id, /^#[a-f\d]{6}$/i.test(s.color) ? s.color : '#73d8e5']));
-  const zones = list(p.zones, 1000).filter(z => box(z.bounds)).map(z => ({
+  const zones = list(p.zones, 1000).filter(z => box(z.bounds)&&z.kind!=='corridor').map(z => ({
     id: text(z.id), title: text(z.title), bounds: transformBox(z.bounds),
     footprint: placed && Array.isArray(z.worldFootprint) && z.worldFootprint.length >= 3 && z.worldFootprint.length <= 100 && z.worldFootprint.every(v => Array.isArray(v) && v.length === 2 && v.every(Number.isSafeInteger)) ? z.worldFootprint : null,
     floors: list(z.floors, 100).filter(Number.isSafeInteger).map(y => y + (placed ? p.worldOrigin[1] : 0)),
     color: styles.get(z.style) || '#73d8e5', features: list(z.features, 100).map(text), kind: 'zone',
+  }));
+  const corridors=list(p.interiorExpansion?.routes,500).flatMap((r,n)=>list(r.points,100).slice(1).map((b,i)=>{
+    const a=r.points[i],w=Math.floor(r.width/2),lo=[Math.min(a[0],b[0])-w,Math.min(a[1],b[1])-1,Math.min(a[2],b[2])-w],hi=[Math.max(a[0],b[0])+w+1,Math.max(a[1],b[1])+7,Math.max(a[2],b[2])+w+1];
+    return{id:`G${n+1}-${i+1}`,title:`Verbindung ${n+1} · Y${a[1]+p.worldOrigin[1]}`,bounds:transformBox([lo,hi]),floors:[a[1]+p.worldOrigin[1]],color:'#d7b56d',features:['Architektur R2 · tatsächliche Gangführung im Übersichtsmaßstab'],kind:'zone',architectureZone:r.group};
   }));
   const cannons = placed ? list(p.cannonLayout?.stations, 100).filter(c => point(c.position)).map(c => ({
     id: text(c.id), title: text(c.id), position: c.position, setup: text(c.setup), assigned: c.assigned,
@@ -71,7 +75,7 @@ export function projectScene(project) {
   return {
     id: project.id, title: p.title, version: project.version, updatedAt: project.updatedAt,
     placed, origin: placed ? p.worldOrigin : [0, 0, 0], rotationDegrees: p.rotationDegrees || 0,
-    bounds, zones, cannons, protectedAreas, terrain, surveyedAt: p.site?.surveyedAt || null, mountain,
+    bounds, zones:[...zones,...corridors], cannons, protectedAreas, terrain, surveyedAt: p.site?.surveyedAt || null, mountain,
     levels: list(p.levels, 100).filter(l => Number.isSafeInteger(l.y)).map(l => ({ y: l.y + (placed ? p.worldOrigin[1] : 0), title: text(l.title) })),
     preview: p.blockPreview ? { title: text(p.blockPreview.title), description: text(p.blockPreview.description), revision: p.blockPreview.revision } : null,
   };

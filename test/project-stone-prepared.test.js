@@ -48,5 +48,12 @@ test('prepared stone packages require write/dryRun/current world, persist, and n
   await app.close();app.campus.db.close();app=await buildServer(config);
   const again=await app.inject({url:file,headers});assert.equal(again.statusCode,200);assert.deepEqual(again.rawPayload,zip.rawPayload);
   assert.equal((await app.inject({url,headers})).json().packages.length,1);
+  const current=(await app.inject({url:'/api/projects/erebor',headers})).json();
+  current.plan.stoneStart={preparedBaseVersion:1};current.plan.summary='Innenräume erweitert, Berg unverändert';
+  assert.equal((await app.inject({method:'PUT',url:'/api/projects/erebor',headers,payload:{baseVersion:1,plan:current.plan}})).statusCode,200);
+  const inherited=await app.inject({url:url.replace('version=1','version=2'),headers});
+  assert.equal(inherited.json().packages.length,1);assert.equal(inherited.json().packages[0].version,1);
+  assert.deepEqual((await app.inject({url:file,headers})).rawPayload,zip.rawPayload,'immutable stone downloads survive an interior-only project revision');
+  assert.equal((await post(body)).statusCode,409,'historical project versions cannot be written');
  }finally{await app.close();app.campus.db.close();rmSync(dir,{recursive:true,force:true});}
 });

@@ -1,8 +1,9 @@
-// Erebor architecture, revision 1. Integer, half-open cuboids; local +Z faces east.
+// Erebor architecture, revision 2. Integer, half-open cuboids; local +Z faces east.
 // Empty cells are excavation intent, NEVER implicitly part of a placement file.
 import {gunzipSync} from 'node:zlib';
+import {appendExpandedInterior,appendExpandedOps,addExpansion} from './erebor-expansion.js';
 
-export const DESIGN_REVISION=1;
+export const DESIGN_REVISION=2;
 export const M={stone:'minecraft:stone_bricks',smooth:'chipped:smooth_stone_bricks',pillar:'create:polished_cut_tuff',dark:'rechiseled:blackstone_tiles_connecting',jade:'rechiseled:dark_prismarine_large_tiles_connecting',green:'rechiseledcreate:veridium_cut_polished_connecting',rune:'chipped:runic_carved_dark_prismarine',gold:'rechiseled:gold_block_polished_connecting',light:'chipped:inlayed_glowstone',black:'create:polished_cut_deepslate',wood:'minecraft:spruce_planks',log:'minecraft:stripped_spruce_log',roof:'minecraft:deepslate_tiles',glass:'minecraft:light_gray_stained_glass',air:'minecraft:air'};
 export const stair=(name='minecraft:stone_brick_stairs',facing='north')=>({name,props:{facing,half:'bottom',shape:'straight',waterlogged:'false'}});
 export const slab=(name='minecraft:stone_brick_slab',type='bottom')=>({name,props:{type,waterlogged:'false'}});
@@ -131,9 +132,21 @@ function landscape(d){
  for(let z=84;z<1104;z+=4)for(let x=-1154;x<-334;x+=4){const dx=(x+744)/410,dz=(z-594)/510,r=Math.hypot(dx,dz),angle=Math.atan2(dz,dx),edge=1+.035*Math.sin(angle*5)+.025*Math.sin(angle*9);if(r>edge)continue;const depth=8+Math.floor(12*Math.max(0,1-r/edge)),y=-25-depth;d.box(x,y-2,z,x+4,y,z+4,r>edge-.08?'minecraft:gravel':'minecraft:stone');d.clear(x,y,z,x+4,-25,z+4);if(r>edge-.03){d.box(x,-26,z,x+4,-24,z+4,'minecraft:gravel');if((x+z)%20===0)d.box(x,-24,z,x+1,-21,z+1,'minecraft:sugar_cane');}}
 }
 
-export function buildEreborDesign(plan){if(plan.rotationDegrees!==90||!plan.blockPreview?.dataGzipBase64)throw Error('Erebor-Standort oder Skinmodell fehlt');const d=new Design(plan);landscape(d);outside(d,plan);gate(d,plan);grandHalls(d,plan);residential(d,plan);mines(d,plan);stairsAndLinks(d,plan);
- // Hard exclusions are last, so no decorative detail can intrude into protected buildings.
- // P-SEE protects against MOUNTAIN filling only; the requested lake architecture is allowed.
- d.group='E03';d.path([[100,0,16],[100,4,-10],[84,4,-10]],6,{roof:true});for(const r of [...d.routes]){d.group=r.group;d.path(r.points,r.width,{roof:r.roof,wood:r.wood,light:false,finalOnly:true});}kernels(d,plan);d.group='E02';d.clear(-15,0,-30,15,48,1);d.group='PROTECTED';for(const q of plan.site.protectedAreas.filter(q=>q.id!=='P-SEE')){const [a,b]=q.bounds,[ox,oy,oz]=plan.worldOrigin;const lo=[oz-b[2],a[1]-oy,a[0]-ox],hi=[oz-a[2],b[1]-oy,b[0]-ox];d.box(...lo,...hi,'minecraft:structure_void');}
+function interior(d,p){grandHalls(d,p);residential(d,p);mines(d,p);stairsAndLinks(d,p);for(const r of [...d.routes]){d.group=r.group;d.path(r.points,r.width,{roof:r.roof,wood:r.wood,light:false,finalOnly:true});}kernels(d,p);}
+export function buildEreborDesign(plan){
+ if(plan.rotationDegrees!==90||!plan.blockPreview?.dataGzipBase64)throw Error('Erebor-Standort oder Skinmodell fehlt');
+ const d=new Design(plan);landscape(d);outside(d,plan);gate(d,plan);
+ d.group='E03';d.path([[100,0,16],[100,4,-10],[84,4,-10]],6,{roof:true});
+ for(const r of [...d.routes]){d.group=r.group;d.path(r.points,r.width,{roof:r.roof,wood:r.wood,light:false,finalOnly:true});}
+ if(plan.interiorExpansion){
+  const basis={...plan,zones:plan.interiorExpansion.sourceZones},core=new Design(basis);interior(core,basis);appendExpandedInterior(d,core);const added=addExpansion(d,plan,M);
+  const merged=new Design(basis);for(const r of core.routes){merged.group=r.group;merged.path(r.points,r.width,{roof:r.roof,wood:r.wood,light:false,finalOnly:true});}appendExpandedOps(d,merged);
+  for(const r of added){d.group=r.group;d.path(r.points,r.width,{roof:true,light:false,finalOnly:true});}
+  const shafts=new Design(basis);kernels(shafts,basis);appendExpandedOps(d,shafts);
+ }
+ else interior(d,plan);
+ d.group='E02';d.clear(-15,0,-30,15,48,1);
+ // Hard exclusions remain last, after both the enlarged core and all new corridors.
+ d.group='PROTECTED';for(const q of plan.site.protectedAreas.filter(q=>q.id!=='P-SEE')){const [a,b]=q.bounds,[ox,oy,oz]=plan.worldOrigin;const lo=[oz-b[2],a[1]-oy,a[0]-ox],hi=[oz-a[2],b[1]-oy,b[0]-ox];d.box(...lo,...hi,'minecraft:structure_void');}
  return d;
 }

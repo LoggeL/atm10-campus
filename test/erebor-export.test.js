@@ -32,7 +32,7 @@ test('architecture API requires dryRun, publishes immutable authenticated downlo
   const dry=await post({baseVersion:1,dryRun:true,package:'E02_001'});assert.equal(dry.statusCode,200,dry.body);assert.ok(dry.json().report.files.length>0);
   assert.equal((await app.inject({url:'/api/projects/erebor/architecture',headers})).json().packages.length,0);
   const saved=await post({baseVersion:1,dryRun:false,package:'E02_001',preview:dry.json().preview});assert.equal(saved.statusCode,200,saved.body);assert.equal(saved.json().worldPlacement,false);
-  const f=saved.json().package.files[0],url=`/api/projects/erebor/architecture/E02_001/${f.id}.nbt?version=1&revision=1`;assert.equal((await app.inject(url)).statusCode,401);const n=await app.inject({url,headers});assert.equal(n.statusCode,200);assert.equal(n.headers['x-campus-sha256'],f.sha256);assert.equal(n.headers['x-campus-origin'],f.origin.join(','));
+  const f=saved.json().package.files[0],url=`/api/projects/erebor/architecture/E02_001/${f.id}.nbt?version=1&revision=${saved.json().package.revision}`;assert.equal((await app.inject(url)).statusCode,401);const n=await app.inject({url,headers});assert.equal(n.statusCode,200);assert.equal(n.headers['x-campus-sha256'],f.sha256);assert.equal(n.headers['x-campus-origin'],f.origin.join(','));
   const again=await post({baseVersion:1,dryRun:false,package:'E02_001',preview:'old'});assert.equal(again.json().unchanged,true);
   assert.equal(app.campus.listBlueprints().length,0);assert.equal(app.campus.db.prepare('SELECT COUNT(*) n FROM cannons').get().n,0);
  }finally{await app.close();app.campus.db.close();rmSync(dir,{recursive:true,force:true});}

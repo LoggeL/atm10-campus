@@ -1,7 +1,7 @@
 import * as THREE from 'three';
-import { ProjectGeometry } from './project-geometry.js?v=20261104-erebor-architecture-2';
-import { installViewerControls } from './controls.js?v=20261104-erebor-architecture-2';
-import { connectPolling } from '/assets/live-updates.js?v=20261104-erebor-architecture-2';
+import { ProjectGeometry } from './project-geometry.js?v=20261104-erebor-expansion-1';
+import { installViewerControls } from './controls.js?v=20261104-erebor-expansion-1';
+import { connectPolling } from '/assets/live-updates.js?v=20261104-erebor-expansion-1';
 
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -135,7 +135,7 @@ export async function startProjectViewer({view,nav,scene,hash,api,loading,toast}
     const label={zone:'Geplantes Bauvolumen',cannon:'Geplanter Kanonenstandort',protected:'Geschützter Bereich',preview:'Blockprototyp'}[item.kind];
     el.innerHTML=`<button class="close" data-close aria-label="Schließen">✕</button><span class="status-tag">${label}</span><h2>${item.kind==='zone'?esc(item.id)+' · ':''}${esc(item.title)}</h2>
       <p class="project-coordinates">${data.placed?'Welt':'Lokal'} X / Y / Z<br><strong>${position.join(' / ')}</strong>${item.position?'':`<br>bis ${b.map(v=>v-1).join(' / ')}`}</p>
-      ${item.kind==='zone'?`<p>Reservierter Raum, noch kein blockfertiger Bauplan.</p><p>Laufhöhen: ${item.floors.map(y=>'Y '+y).join(', ')||'nicht angegeben'}</p>${item.features.map(t=>`<p class="desc">${esc(t)}</p>`).join('')}`:''}
+      ${item.kind==='zone'?`<p>Übersichtsvolumen. Die blockgenauen Schematics stehen unter Baupläne / Erebor.</p><p>Laufhöhen: ${item.floors.map(y=>'Y '+y).join(', ')||'nicht angegeben'}</p>${item.features.map(t=>`<p class="desc">${esc(t)}</p>`).join('')}`:''}
       ${item.kind==='cannon'?`<p>${esc(item.setup)}</p><p>Fundament: Y ${position[1]-1}<br>${Number(item.assigned)||0} zugeordnete Steinabschnitte.</p><p class="desc">Geplanter Arbeitsplatz. Eine Kanone im Spiel ist damit nicht bestätigt.</p>`:''}
       ${item.kind==='protected'?`<p>${esc(item.reason)}</p>`:''}
       ${item.kind==='preview'?`<p>${esc(item.description)}</p><p>${item.blockCount.toLocaleString('de-DE')} Modellblöcke. Position an der geplanten Torachse; Fassadendetails sind noch nicht fertig.</p>`:''}
