@@ -261,6 +261,14 @@ button { cursor: pointer; }
 .project-area b,.project-area small { display:block; }
 .project-area small { color:var(--muted); font-size:11px; margin-top:3px; }
 .project-coordinates { font-variant-numeric:tabular-nums; }
+.architecture-viewer .preset { display:block; text-decoration:none; width:100%; }
+.architecture-viewer .project-level { min-width:0; }
+.architecture-viewer .project-level select { max-width:100%; }
+.architecture-viewer #architecture-title { font-size:16px; margin:8px 0 0; }
+.architecture-viewer #architecture-size { margin:0 0 8px; }
+.architecture-viewer #hud { padding:6px 8px; border-radius:6px; background:rgba(16,24,33,.8); color:#e8f0f5; }
+.architecture-viewer .project-area button { padding:10px; }
+.planning-viewer a.preset { display:block; text-decoration:none; }
 #nav-mode button:disabled { cursor:not-allowed; color:var(--muted); text-decoration:line-through; opacity:.6; }
 .planning-viewer .detail .status-tag { color:var(--amber); }
 .planning-viewer #hud { padding:6px 8px; border-radius:6px; background:rgba(16,24,33,.8); color:#e8f0f5; }

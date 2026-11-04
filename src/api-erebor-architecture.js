@@ -5,6 +5,7 @@ import {tx,logActivity} from './db.js';
 import {regionMtime} from './region.js';
 import {storedZipEntry} from './zip.js';
 import {DESIGN_REVISION} from './erebor-design.js';
+import {ereborViewTarget} from './erebor-view-target.js';
 
 export function registerEreborArchitectureRoutes(app,campus){const db=campus.db,previews=new Map(),manifests=new Map();let busy=false;
  db.exec(`CREATE TABLE IF NOT EXISTS project_architecture_packages(project_id TEXT NOT NULL REFERENCES build_projects(id),base_version INTEGER NOT NULL,revision INTEGER NOT NULL,package_id TEXT NOT NULL,sha256 TEXT NOT NULL,zip BLOB NOT NULL,report_json TEXT NOT NULL,saved_at TEXT NOT NULL,user_id INTEGER REFERENCES users(id),PRIMARY KEY(project_id,base_version,revision,package_id))`);
@@ -14,7 +15,7 @@ export function registerEreborArchitectureRoutes(app,campus){const db=campus.db,
  const row=(p,id,revision=DESIGN_REVISION,version=p.version)=>db.prepare('SELECT * FROM project_architecture_packages WHERE project_id=? AND base_version=? AND revision=? AND package_id=?').get(p.id,version,revision,id);
  const summary=r=>({...JSON.parse(r.report_json),savedAt:r.saved_at,sha256:r.sha256});
  app.get('/api/projects/:id/architecture/manifest',async(req,reply)=>{const p=project(req);return reply.header('Cache-Control','no-store').send({project:p.id,baseVersion:p.version,...await manifest(p)});});
- app.get('/api/projects/:id/architecture/preview',async(req,reply)=>{const p=project(req);if(!p.plan.zones.some(z=>z.id===req.query.zone))throw new HttpError(400,'Gültiger Bauteil erforderlich');return reply.header('Cache-Control','private, no-store').send(await run({project:p,preview:req.query.zone,cut:req.query.cut==='1'}));});
+ app.get('/api/projects/:id/architecture/preview',async(req,reply)=>{const p=project(req);if(!ereborViewTarget(p.plan,req.query.zone))throw new HttpError(400,'Gültiger Bauteil erforderlich');return reply.header('Cache-Control','private, no-store').send({baseVersion:p.version,...await run({project:p,preview:req.query.zone,cut:req.query.cut==='1',navigation:req.query.navigation==='1'})});});
  app.get('/api/projects/:id/architecture',async(req,reply)=>{const p=project(req),rows=db.prepare('SELECT report_json,saved_at,sha256 FROM project_architecture_packages WHERE project_id=? AND base_version=? AND revision=? ORDER BY package_id').all(p.id,p.version,DESIGN_REVISION);return reply.header('Cache-Control','no-store').send({project:p.id,baseVersion:p.version,revision:DESIGN_REVISION,packages:rows.map(summary)});});
  app.post('/api/projects/:id/architecture/prepare',async req=>{const actor=requireActor(req,'write'),p=project(req),b=req.body;if(!b||b.baseVersion!==p.version)throw new HttpError(409,'Aktuelle baseVersion verwenden.');if(typeof b.dryRun!=='boolean'||!/^([ES]\d{1,2}[AB]?)_\d{3}$/.test(b.package||''))throw new HttpError(400,'dryRun und gültige Paketkennung erforderlich.');const exists=row(p,b.package);if(exists)return{unchanged:true,package:summary(exists),worldPlacement:false};
   for(const [k,v]of previews)if(v.expires<Date.now())previews.delete(k);

@@ -60,7 +60,8 @@ export class Navigation {
     if (!s) return false;
     const lx = Math.floor(x) - s.lo[0], ly = Math.floor(y) - s.lo[1], lz = Math.floor(z) - s.lo[2];
     if (ly < 0) return true;
-    if (lx < 0 || lz < 0 || lx >= s.size[0] || ly >= s.size[1] || lz >= s.size[2]) return false;
+    if (lx < 0 || lz < 0 || lx >= s.size[0] || lz >= s.size[2]) return !!s.closedBounds;
+    if (ly >= s.size[1]) return false;
     const i = (ly * s.size[2] + lz) * s.size[0] + lx;
     return (s.bits[i >> 3] >> (i & 7)) & 1;
   }

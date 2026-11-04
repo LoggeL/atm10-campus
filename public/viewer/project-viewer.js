@@ -1,7 +1,7 @@
 import * as THREE from 'three';
-import { ProjectGeometry } from './project-geometry.js?v=20261104-erebor-expansion-1';
-import { installViewerControls } from './controls.js?v=20261104-erebor-expansion-1';
-import { connectPolling } from '/assets/live-updates.js?v=20261104-erebor-expansion-1';
+import { ProjectGeometry } from './project-geometry.js?v=20261104-erebor-rooms-1';
+import { installViewerControls } from './controls.js?v=20261104-erebor-rooms-1';
+import { connectPolling } from '/assets/live-updates.js?v=20261104-erebor-rooms-1';
 
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -88,7 +88,7 @@ export async function startProjectViewer({view,nav,scene,hash,api,loading,toast}
   const available=id=>id==='mountain'?!!data.mountain:id==='terrain'?data.terrain.length>0:id==='preview'?!!data.preview: true;
   function renderLayers() {
     $('#layers').innerHTML=LAYERS.filter(([id])=>available(id)).map(([id,label,hint])=>`<label class="project-layer"><span>${esc(label)}<small>${esc(hint)}</small></span><select data-project-layer="${id}" aria-label="${esc(label)}">${[['solid','Sichtbar'],['ghost','Geist'],['off','Aus']].map(([v,t])=>`<option value="${v}" ${modes[id]===v?'selected':''}>${t}</option>`).join('')}</select></label>`).join('');
-    $('#presets').innerHTML=PRESETS.map(p=>`<button class="preset ${activePreset===p.id?'active':''}" aria-pressed="${activePreset===p.id}" data-project-preset="${p.id}"><b>${p.label}</b><span>${p.hint}</span></button>`).join('');
+    $('#presets').innerHTML=(data.id==='erebor'?'<a class="preset active" href="/viewer?project=erebor&room=E05"><b>Räume begehen · Blockansicht</b><span>Planblöcke, Materialien, Laufen und Fliegen</span></a>':'')+PRESETS.map(p=>`<button class="preset ${activePreset===p.id?'active':''}" aria-pressed="${activePreset===p.id}" data-project-preset="${p.id}"><b>${p.label}</b><span>${p.hint}</span></button>`).join('');
   }
   function syncModes() {
     for(const [id] of LAYERS)geometry.setMode(id,modes[id]||'off');
@@ -135,7 +135,7 @@ export async function startProjectViewer({view,nav,scene,hash,api,loading,toast}
     const label={zone:'Geplantes Bauvolumen',cannon:'Geplanter Kanonenstandort',protected:'Geschützter Bereich',preview:'Blockprototyp'}[item.kind];
     el.innerHTML=`<button class="close" data-close aria-label="Schließen">✕</button><span class="status-tag">${label}</span><h2>${item.kind==='zone'?esc(item.id)+' · ':''}${esc(item.title)}</h2>
       <p class="project-coordinates">${data.placed?'Welt':'Lokal'} X / Y / Z<br><strong>${position.join(' / ')}</strong>${item.position?'':`<br>bis ${b.map(v=>v-1).join(' / ')}`}</p>
-      ${item.kind==='zone'?`<p>Übersichtsvolumen. Die blockgenauen Schematics stehen unter Baupläne / Erebor.</p><p>Laufhöhen: ${item.floors.map(y=>'Y '+y).join(', ')||'nicht angegeben'}</p>${item.features.map(t=>`<p class="desc">${esc(t)}</p>`).join('')}`:''}
+      ${item.kind==='zone'?`<p>Übersichtsvolumen.</p>${data.id==='erebor'?`<p><a class="primary" href="/viewer?project=erebor&room=${encodeURIComponent(item.id)}">Diesen Bereich als Blöcke ansehen und betreten</a></p>`:''}<p>Laufhöhen: ${item.floors.map(y=>'Y '+y).join(', ')||'nicht angegeben'}</p>${item.features.map(t=>`<p class="desc">${esc(t)}</p>`).join('')}`:''}
       ${item.kind==='cannon'?`<p>${esc(item.setup)}</p><p>Fundament: Y ${position[1]-1}<br>${Number(item.assigned)||0} zugeordnete Steinabschnitte.</p><p class="desc">Geplanter Arbeitsplatz. Eine Kanone im Spiel ist damit nicht bestätigt.</p>`:''}
       ${item.kind==='protected'?`<p>${esc(item.reason)}</p>`:''}
       ${item.kind==='preview'?`<p>${esc(item.description)}</p><p>${item.blockCount.toLocaleString('de-DE')} Modellblöcke. Position an der geplanten Torachse; Fassadendetails sind noch nicht fertig.</p>`:''}

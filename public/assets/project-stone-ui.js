@@ -1,6 +1,6 @@
-import {esc,fmt} from './format.js?v=20261104-erebor-expansion-1';
-import {STONE_BATCH_SIZE} from './stone-placement.js?v=20261104-erebor-expansion-1';
-import {showPreparedStone} from './prepared-stone-ui.js?v=20261104-erebor-expansion-1';
+import {esc,fmt} from './format.js?v=20261104-erebor-rooms-1';
+import {STONE_BATCH_SIZE} from './stone-placement.js?v=20261104-erebor-rooms-1';
+import {showPreparedStone} from './prepared-stone-ui.js?v=20261104-erebor-rooms-1';
 
 const $=s=>document.querySelector(s);
 function download(blob,name){const u=URL.createObjectURL(blob),a=document.createElement('a');a.href=u;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(u),30000);}

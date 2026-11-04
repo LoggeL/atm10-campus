@@ -1,11 +1,12 @@
 const $ = s => document.querySelector(s);
 
 // Shared navigation and display controls for blueprint and planning scenes.
-export function installViewerControls({view,nav,home,saveHash,syncNavButtons,onEscape,filename='campus',canWalk=true}) {
+export function installViewerControls({view,nav,home,saveHash,syncNavButtons,onEscape,filename='campus',canWalk=true,enterWalk=null}) {
   const walk = $('#nav-mode [data-mode="walk"]');
   walk.disabled = !canWalk;
   if (!canWalk) walk.title = 'Laufen benötigt einen blockgenauen Weltbestand. Für diesen Masterplan ist Fliegen verfügbar.';
-  $('#nav-mode').onclick = e => { const b = e.target.closest('[data-mode]'); if (b && !b.disabled) { nav.setMode(b.dataset.mode); syncNavButtons(); } };
+  const setMode=mode=>{if(mode==='walk'&&enterWalk)enterWalk();else nav.setMode(mode);syncNavButtons();};
+  $('#nav-mode').onclick = e => { const b = e.target.closest('[data-mode]'); if (b && !b.disabled) setMode(b.dataset.mode); };
   nav.on(type => { if (type === 'moved') saveHash(); });
   const tod = $('#tod');
   tod.oninput = () => {
@@ -33,6 +34,6 @@ export function installViewerControls({view,nav,home,saveHash,syncNavButtons,onE
     if (e.key === 'Escape') { onEscape(); return; }
     if (e.target.closest?.('input, select, textarea, button')) return;
     const mode = {'1':'orbit','2':'fly','3':'walk'}[e.key];
-    if (mode && (mode !== 'walk' || canWalk)) { nav.setMode(mode); syncNavButtons(); }
+    if (mode && (mode !== 'walk' || canWalk)) setMode(mode);
   });
 }

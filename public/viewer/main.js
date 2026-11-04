@@ -1,12 +1,12 @@
 // Campus viewer: loads scene + data, feeds the mesher worker, drives UI, layers, picking and camera.
 import * as THREE from 'three';
-import { installViewerControls } from './controls.js?v=20261104-erebor-expansion-1';
-import { VoxelRenderer } from './renderer.js?v=20261104-erebor-expansion-1';
+import { installViewerControls } from './controls.js?v=20261104-erebor-rooms-1';
+import { VoxelRenderer } from './renderer.js?v=20261104-erebor-rooms-1';
 import { Navigation } from './navigation.js';
 import { buildAtlas } from './atlas.js';
 import { LAYERS, PRESETS, MODES, CAT, categoryModes, categoryColors, statusLabel, statusColor } from './layers.js';
-import { blueprintPreview, installPreviewFallbacks } from '/assets/blueprint-preview.js?v=20261104-erebor-expansion-1';
-import { connectPolling } from '/assets/live-updates.js?v=20261104-erebor-expansion-1';
+import { blueprintPreview, installPreviewFallbacks } from '/assets/blueprint-preview.js?v=20261104-erebor-rooms-1';
+import { connectPolling } from '/assets/live-updates.js?v=20261104-erebor-rooms-1';
 installPreviewFallbacks();
 
 const $ = s => document.querySelector(s);
@@ -105,7 +105,11 @@ async function main() {
   new ResizeObserver(() => view.resize()).observe($('#scene'));
 
   if (scene.planning) {
-    const { startProjectViewer } = await import('./project-viewer.js?v=20261104-erebor-expansion-1');
+    if (scene.planning.id === 'erebor' && params.has('room')) {
+      const { startArchitectureViewer } = await import('./architecture-viewer.js?v=20261104-erebor-rooms-1');
+      return startArchitectureViewer({view,nav,scene,hash,api,loading,toast,room:params.get('room')});
+    }
+    const { startProjectViewer } = await import('./project-viewer.js?v=20261104-erebor-rooms-1');
     return startProjectViewer({view,nav,scene,hash,api,loading,toast});
   }
 

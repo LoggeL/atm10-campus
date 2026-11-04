@@ -1,4 +1,4 @@
-import { esc } from './format.js?v=20261104-erebor-expansion-1';
+import { esc } from './format.js?v=20261104-erebor-rooms-1';
 export const distanceText = value => Number(value).toLocaleString('de-DE', { maximumFractionDigits: Math.abs(value - 256) < 1 ? 3 : 1 });
 
 export function cannonRangeCard(c, canTransfer = false) {
