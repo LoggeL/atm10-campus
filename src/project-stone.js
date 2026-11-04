@@ -25,6 +25,15 @@ export function mountainTop(plan,x,z) {
  const base=62, crown=base+(py-base)*Math.pow(1-r,0.72);
  let top=Math.floor(Math.min(py,crown+34*ridge*Math.sin(Math.PI*r)));
  const [gateX,,gateZ]=plan.worldOrigin;
+ // Relocated coastal forecourt: support the actual symmetric terrace footprint
+ // from the mountain's base up to each walking surface, leaving the air above open.
+ if(f.entranceFill===true){
+  const distance=x-gateX,lateral=gateZ-z,half=distance<36?68:24;
+  if(distance>=0&&distance<108&&lateral>=-half&&lateral<half){
+   const rise=distance<36?0:Math.min(24,1+Math.floor((distance-36)/3));
+   return plan.worldOrigin[1]+rise-1;
+  }
+ }
  // Daylight valley in front of the east-facing gate; all external towns stay out.
  if(x>=gateX && Math.abs(z-gateZ)<220+(x-gateX)*.35){
   if(x<gateX+36&&z>=gateZ-24&&z<gateZ+24)return plan.worldOrigin[1]-1;

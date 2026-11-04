@@ -17,6 +17,9 @@ test('architecture protects machines and inventories, excludes unknown excavatio
   const {bytes,report}=architecturePackage(scene,{id:'E02_001',group:'E02',title:'Tor',tiles:[tile]},dir,{id:'erebor',version:6});assert.ok(report.protectedCells>0);assert.ok(report.unknownCells>0);
   for(const f of report.files){const n=parseStructure(storedZipEntry(bytes,f.fileName));if(f.kind==='build'){assert.equal(n.clear.length,0);assert.ok(!n.placed.some(b=>b.x===4&&b.y===5&&b.z===4));}else{assert.equal(n.placed.length,0);for(let i=0;i<n.clear.length;i+=3){const [x,y,z]=n.clear.slice(i,i+3);assert.ok(x<16&&z<16,'never excavate unknown chunks');assert.ok(!(x<9&&z<9&&y>=1&&y<10),'inventory buffer');assert.ok(!(x===14&&y===5&&z===14),'mod cable');}}}
   assert.deepEqual(readFileSync(join(dir,'region','r.0.0.mca')),before);
+  assert.throws(()=>architecturePackage(scene,{id:'E02_001',group:'E02',title:'Tor',tiles:[tile]},dir,{id:'erebor',version:7,plan:{site:{requireKnownArchitecture:true}}}),/Standort noch nicht vollständig erkundet/);
+  const known={...tile,ops:[{a:[10,10,10],b:[12,12,12],s:1,g:'E02'}]};
+  assert.equal(architecturePackage(scene,{id:'E02_002',group:'E02',title:'Tor',tiles:[known]},dir,{id:'erebor',version:7,plan:{site:{requireKnownArchitecture:true}}}).report.unknownCells,0);
  }finally{rmSync(dir,{recursive:true,force:true});}
 });
 
