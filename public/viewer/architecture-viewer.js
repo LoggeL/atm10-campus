@@ -1,6 +1,6 @@
 import * as THREE from 'three';
-import {installViewerControls} from './controls.js?v=20261104-project-coordinates-1';
-import {connectPolling} from '/assets/live-updates.js?v=20261104-project-coordinates-1';
+import {installViewerControls} from './controls.js?v=20261104-erebor-symmetry-3';
+import {connectPolling} from '/assets/live-updates.js?v=20261104-erebor-symmetry-3';
 
 const $=s=>document.querySelector(s);
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));

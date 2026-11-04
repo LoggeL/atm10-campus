@@ -40,7 +40,7 @@ export function projectScene(project) {
   }));
   const corridors=list(p.interiorExpansion?.routes,500).flatMap((r,n)=>list(r.points,100).slice(1).map((b,i)=>{
     const a=r.points[i],w=Math.floor(r.width/2),lo=[Math.min(a[0],b[0])-w,Math.min(a[1],b[1])-1,Math.min(a[2],b[2])-w],hi=[Math.max(a[0],b[0])+w+1,Math.max(a[1],b[1])+7,Math.max(a[2],b[2])+w+1];
-    return{id:`G${n+1}-${i+1}`,title:`Verbindung ${n+1} · Y${a[1]+p.worldOrigin[1]}`,bounds:transformBox([lo,hi]),floors:[a[1]+p.worldOrigin[1]],color:'#d7b56d',features:['Architektur R2 · tatsächliche Gangführung im Übersichtsmaßstab'],kind:'zone',architectureZone:r.group};
+    return{id:`G${n+1}-${i+1}`,title:`Verbindung ${n+1} · Y${a[1]+p.worldOrigin[1]}`,bounds:transformBox([lo,hi]),floors:[a[1]+p.worldOrigin[1]],color:'#d7b56d',features:[`Architektur R${p.symmetry?.revision||2} · tatsächliche Gangführung im Übersichtsmaßstab`],kind:'zone',architectureZone:r.group};
   }));
   const cannons = placed ? list(p.cannonLayout?.stations, 100).filter(c => point(c.position)).map(c => ({
     id: text(c.id), title: text(c.id), position: c.position, setup: text(c.setup), assigned: c.assigned,

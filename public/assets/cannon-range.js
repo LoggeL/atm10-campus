@@ -1,4 +1,4 @@
-import { esc } from './format.js?v=20261104-project-coordinates-1';
+import { esc } from './format.js?v=20261104-erebor-symmetry-3';
 export const distanceText = value => Number(value).toLocaleString('de-DE', { maximumFractionDigits: Math.abs(value - 256) < 1 ? 3 : 1 });
 
 export function cannonRangeCard(c, canTransfer = false) {

@@ -1,9 +1,10 @@
 // Integer expansion of the interior; the entrance and exterior remain anchored.
+import {balanceRooms,centeredStarts} from './erebor-symmetry.js';
 export const INTERIOR_IDS=new Set(['E05','E06','E07','E08','E09','E10','E11','E12','E13','E14','E15','E16','E17','E18','E19','E21A','E21B','S1','S2','S3','S4']);
 export const expandPoint=([x,y,z])=>[Math.round(x*1.5),y,z<-24?-24+Math.round((z+24)*1.5):z];
 export function expandedPlan(original){
  const p=structuredClone(original);if(p.interiorExpansion)throw Error('Innenausbau bereits erweitert');
- const sourceZones=p.zones.filter(z=>INTERIOR_IDS.has(z.id));
+ const sourceZones=structuredClone(p.zones.filter(z=>INTERIOR_IDS.has(z.id)));
  p.interiorExpansion={revision:2,scale:[1.5,1,1.5],sourceZones,sourceVersion:6,description:'Innenräume 50 % breiter und tiefer; zwei Ringgänge auf Y88/Y112 und neun neue Hallen. Tor und Außenanlagen unverändert.'};
  for(const z of p.zones)if(INTERIOR_IDS.has(z.id)){z.bounds=z.bounds.map(expandPoint);delete z.worldFootprint;delete z.worldBounds;z.features=[`R2: Innenraumraster in Breite und Tiefe 1,5-fach erweitert; Höhen beibehalten.`,...(z.features||[]).filter(t=>!/[XYZ]|\d/.test(t))];}
  const sideTitles=[['Archiv der Sippen','Bibliothek und Runenkunde'],['Gildenhalle der Handwerker','Markt und Versammlung'],['Wachhalle der Tiefen','Forschung und Kartensaal']];
@@ -20,12 +21,22 @@ export function expandedPlan(original){
  return p;
 }
 
+// R2 persisted references to the already scaled zone objects. Restore the source
+// raster only when *all* source bounds match their expanded counterparts.
+export function interiorBasis(plan){
+ const source=plan.interiorExpansion.sourceZones;
+ const repeated=source.every(s=>JSON.stringify(s.bounds)===JSON.stringify(plan.zones.find(z=>z.id===s.id)?.bounds));
+ const inverse=([x,y,z])=>[Math.round(x/1.5),y,z<-24?-24+Math.round((z+24)/1.5):z];
+ return {...plan,zones:source.map(s=>({...structuredClone(s),bounds:repeated?s.bounds.map(inverse):structuredClone(s.bounds)}))};
+}
+
 export function appendExpandedOps(target,source){
  const remap=source.palette.map(s=>s.name==='minecraft:air'?0:target.state(s));
  for(const o of source.ops)target.ops.push({...o,a:expandPoint(o.a),b:expandPoint(o.b),s:remap[o.s]});
 }
 export function appendExpandedInterior(target,source){
  appendExpandedOps(target,source);
+ target.stairChecks.push(...source.stairChecks.map(c=>({...c,a:expandPoint(c.a),b:expandPoint(c.b),s:target.state(source.palette[c.s])})));
  target.rooms.push(...source.rooms.map(r=>({...r,bounds:r.bounds.map(expandPoint)})));
  target.routes.push(...source.routes.map(r=>({...r,points:r.points.map(expandPoint),width:Math.round(r.width*1.5),sourceRoute:r,expanded:true})));
  target.features.push(...source.features,'Innenbereiche 50 % breiter und tiefer; Höhen und Osttor unverändert');
@@ -37,9 +48,16 @@ export function addExpansion(d,p,M){
   const {x,X,z,Z}=d.shell(zone,{columns:false});
   for(const xx of [x+36,X-36])for(const zz of [z+48,Z-48])d.pillar(xx,zz,0,41,6,zone.style==='royal');
   d.gallery(x+4,z+4,X-4,Z-4,24,32);
-  for(let i=0;i<4;i++){const xx=x+8+i*Math.floor((X-x-16)/4);d.room(xx,24,z+7,20,20,16,{royal:zone.style==='royal',kind:zone.id==='E36'?'home':'library'});}
+  const step=Math.floor((X-x-36)/3/2)*2;
+  for(const xx of centeredStarts(x+8,X-8,20,step))d.room(xx,24,z+8,20,20,16,{royal:zone.style==='royal',kind:zone.id==='E36'?'home':'library'});
   d.floor(x+6,Z-40,x+16,Z-24,24);d.stairs(x+8,0,Z-8,6,24);
-  if(Number(zone.id.slice(1))<=35){const sx=x<0?-480:480,ex=x<0?X-8:x+8,cz=z+76;for(const y of [0,24])d.path([[sx,y,cz],[ex,y,cz]],12);}
+ }
+ // Pair both stair flights, galleries and subsidiary rooms before the deliberate
+ // single-sided entrances to the ring are cut.
+ balanceRooms(d,p.zones.filter(z=>/^E3[0-8]$/.test(z.id)));
+ for(const zone of p.zones.filter(z=>/^E3[0-8]$/.test(z.id))){
+  const [[x,,z],[X,,Z]]=zone.bounds;d.group=zone.id;
+  if(Number(zone.id.slice(1))<=35){const sx=x<0?-480:480,ex=x<0?X-8:x+8,cz=(z+Z)/2;for(const y of [0,24])d.path([[sx,y,cz],[ex,y,cz]],12);}
   else {const cx=Math.floor((x+X)/2);for(const y of [0,24])d.path([[cx,y,-1200],[cx,y,Z-8]],12);}
  }
  d.group='E39';
