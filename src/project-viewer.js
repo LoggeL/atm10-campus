@@ -67,9 +67,15 @@ export function projectScene(project) {
     }
     mountain = { step, bounds: p.mountainFill.bounds, columns };
   }
-  const boxes = [...zones, ...cannons, ...protectedAreas].map(o => o.bounds);
+  const boxes = [...zones, ...cannons].map(o => o.bounds);
   if (box(p.envelope?.bounds)) boxes.push(transformBox(p.envelope.bounds));
   if (mountain) boxes.push(mountain.bounds);
+  // Protections at the abandoned site remain enforced, but must not zoom the
+  // relocated project overview out across thousands of unrelated world blocks.
+  if(boxes.length){
+    const lo=[0,1,2].map(i=>Math.min(...boxes.map(b=>b[0][i]))),hi=[0,1,2].map(i=>Math.max(...boxes.map(b=>b[1][i])));
+    for(const a of protectedAreas)if([0,2].every(i=>a.bounds[0][i]<hi[i]+512&&a.bounds[1][i]>lo[i]-512))boxes.push(a.bounds);
+  }
   if (!boxes.length) throw new HttpError(422, 'Dieses Projekt enthält noch keine räumliche Planung.');
   const bounds = [0, 1].map(side => [0, 1, 2].map(axis => side ? Math.max(...boxes.map(b => b[side][axis])) : Math.min(...boxes.map(b => b[side][axis]))));
   return {

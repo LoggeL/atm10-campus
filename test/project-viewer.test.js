@@ -30,6 +30,13 @@ test('planning coordinates transform at all four rotations, local plans stay loc
   assert.throws(()=>projectScene({plan:{...plan,zones:[]}}),/keine räumliche Planung/);
 });
 
+test('distant old-site protection remains selectable without shrinking the new site overview',()=>{
+ const p=structuredClone(plan);p.worldOrigin=[400,88,-10000];p.site.protectedAreas=[{id:'city1',bounds:[[-2032,-64,208],[-1504,320,912]],reason:'preserve'}];
+ const scene=projectScene({id:'erebor',version:11,plan:p});
+ assert.equal(scene.protectedAreas.length,1);
+ assert.ok(scene.bounds[1][2]<-9000);
+});
+
 test('mountain scene stays bounded and excludes protected columns',()=>{
   const p={...plan,mountainFill:{algorithm:'erebor-massif-v1',bounds:[[-1200,-40,200],[-900,313,700]],peak:[-1100,312,450],roofReserves:[],protectedBoxes:[{bounds:[[-1120,-64,400],[-1080,320,480]]}]}};
   const scene=projectScene({id:'erebor',version:6,plan:p});
