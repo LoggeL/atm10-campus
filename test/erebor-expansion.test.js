@@ -25,7 +25,9 @@ test('new corridors and inherited routes remain walkable after all intersections
 test('nine new halls have usable entrances, stair flights and upper-room doors',()=>{
  for(const zone of plan.zones.filter(z=>/^E3[0-8]$/.test(z.id))){const [[x,,z],[X,,Z]]=zone.bounds;
   for(let i=0;i<24;i++){assert.match(at(x+10,i,Z-9-i),/stairs$/);for(let h=1;h<=3;h++)assert.equal(at(x+10,i+h,Z-9-i),'minecraft:air',zone.id+' stair');}
-  for(let i=0;i<4;i++){const xx=x+8+i*Math.floor((X-x-16)/4)+10;walk(xx,24,z+26,zone.id+' room door');walk(xx,24,z+28,zone.id+' gallery');}
+  const offsets=X-x===128?[19,49,79,109]:X-x===160?[20,60,100,140]:[19,81,143,205];
+  for(const offset of offsets){const xx=x+offset;walk(xx,24,z+27,zone.id+' room door');walk(xx,24,z+29,zone.id+' gallery');}
+  for(let i=0;i<24;i++){assert.match(at(X-11,i,Z-9-i),/stairs$/);for(let h=1;h<=3;h++)assert.equal(at(X-11,i+h,Z-9-i),'minecraft:air',zone.id+' paired stair');}
  }
 });
 test('the expanded envelopes stay within the existing mountain silhouette',()=>{
