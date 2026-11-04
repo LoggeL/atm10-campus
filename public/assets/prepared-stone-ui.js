@@ -1,4 +1,4 @@
-import {esc,fmt} from './format.js?v=20261104-erebor-thumbnails-1';
+import {esc,fmt} from './format.js?v=20261104-project-coordinates-1';
 
 export async function showPreparedStone(project,api){
  const target=document.querySelector('#stonePrepared');if(!target)return;
