@@ -1,5 +1,5 @@
-import { esc } from './format.js?v=20261104-erebor-rooms-1';
-import { buildBlocker, buildFailure, choiceKey, pickerChoices, renderPickerHeading, renderPickerList, renderPickerMeta } from './cannon-picker.js?v=20261104-erebor-rooms-1';
+import { esc } from './format.js?v=20261104-erebor-rooms-3';
+import { buildBlocker, buildFailure, choiceKey, pickerChoices, renderPickerHeading, renderPickerList, renderPickerMeta } from './cannon-picker.js?v=20261104-erebor-rooms-3';
 
 const FRAME = `<div class="picker-panel">
   <header class="picker-head"><div><p class="eyebrow" data-picker-cannon></p><h2 id="pickerTitle" data-picker-title></h2></div><button class="text-button" type="button" data-picker-close>Schließen</button></header>

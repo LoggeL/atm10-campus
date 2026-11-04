@@ -1,6 +1,6 @@
 import * as THREE from 'three';
-import {installViewerControls} from './controls.js?v=20261104-erebor-rooms-1';
-import {connectPolling} from '/assets/live-updates.js?v=20261104-erebor-rooms-1';
+import {installViewerControls} from './controls.js?v=20261104-erebor-rooms-3';
+import {connectPolling} from '/assets/live-updates.js?v=20261104-erebor-rooms-3';
 
 const $=s=>document.querySelector(s);
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -75,8 +75,10 @@ export async function startArchitectureViewer({view,nav,scene,hash,api,loading,t
       if(/light|glowstone|lantern/.test(name)){mat.emissive.set('#d6ad61');mat.emissiveIntensity=.7;}
       const mesh=new THREE.Mesh(geo,mat);mesh.userData.block=name;mesh.castShadow=true;mesh.receiveShadow=true;g.add(mesh);
       try {let texture=await new THREE.TextureLoader().loadAsync('/assets/erebor-palette/'+name.replace(':','__')+'.png');
-        // Animated/connected texture sheets use one square tile, not a stretched strip.
-        const img=texture.image;if(img.width!==img.height){const canvas=document.createElement('canvas'),n=Math.min(img.width,img.height);canvas.width=canvas.height=n;canvas.getContext('2d').drawImage(img,0,0,n,n,0,0,n,n);texture.dispose();texture=new THREE.CanvasTexture(canvas);}
+        // Rechiseled sheets have five tiles across; its Create add-on uses eight.
+        // Show the complete single-block tile; do not stretch the entire CTM atlas.
+        const img=texture.image,columns=name.startsWith('rechiseledcreate:')?8:5,n=name.endsWith('_connecting')&&img.width%columns===0?img.width/columns:Math.min(img.width,img.height);
+        if(img.width!==n||img.height!==n){const canvas=document.createElement('canvas');canvas.width=canvas.height=n;canvas.getContext('2d').drawImage(img,0,0,n,n,0,0,n,n);texture.dispose();texture=new THREE.CanvasTexture(canvas);}
         texture.colorSpace=THREE.SRGBColorSpace;texture.magFilter=THREE.NearestFilter;texture.minFilter=THREE.NearestMipmapLinearFilter;texture.wrapS=texture.wrapT=THREE.RepeatWrapping;mat.map=texture;mat.color.set('#ffffff');mat.needsUpdate=true;
       }catch{/* readable material color if an exact texture is unavailable */}
     }));return g;

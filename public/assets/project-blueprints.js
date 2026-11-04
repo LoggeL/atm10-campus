@@ -1,5 +1,5 @@
-import {esc,fmt} from './format.js?v=20261104-erebor-rooms-1';
-import {coordinateFields,placementCard,coordinateListText} from './placement.js?v=20261104-erebor-rooms-1';
+import {esc,fmt} from './format.js?v=20261104-erebor-rooms-3';
+import {coordinateFields,placementCard,coordinateListText} from './placement.js?v=20261104-erebor-rooms-3';
 
 export function preparedBlueprints(project,packages){
  return packages.flatMap(p=>p.files.map((f,i)=>({...f,id:f.fileName.replace(/\.nbt$/i,''),project:project.id,version:p.version,part:p.part,order:i,savedAt:p.savedAt,sourceRegions:p.sourceRegions,name:`Erebor · ${p.cannon} · Paket ${String(p.part).padStart(2,'0')} · ${f.tile}`,download:`/api/projects/${encodeURIComponent(project.id)}/stone/prepared/${encodeURIComponent(p.cannon)}/${p.part}/${encodeURIComponent(f.tile)}.nbt?version=${p.version}`,packageDownload:`/api/projects/${encodeURIComponent(project.id)}/stone/prepared/${encodeURIComponent(p.cannon)}/${p.part}.zip?version=${p.version}`})));

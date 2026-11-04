@@ -21,17 +21,18 @@ export function navigationCells(data, size, origin, palette, floors) {
   for(let i=0;i<data.length;i++)if(data[i]>0&&blocks[data[i]])bits[i>>3]|=1<<(i&7);
   const solid=(x,y,z)=>x>=0&&y>=0&&z>=0&&x<size[0]&&y<size[1]&&z<size[2]&&!!(bits[index(x,y,z)>>3]&(1<<(index(x,y,z)&7)));
   const spawns=[];
+  const alongX=size[0]>=size[2],aimX=alongX?size[0]-10:size[0]/2,aimZ=alongX?size[2]/2:size[2]-10;
   for(const floor of floors){
     const y=floor-origin[1];if(y<1||y+2>=size[1])continue;
     let best=null,score=Infinity;
     for(let z=2;z<size[2]-2;z++)for(let x=2;x<size[0]-2;x++){
-      const d=Math.abs(x-(size[0]-10))+Math.abs(z-size[2]/2);
+      const d=Math.abs(x-aimX)+Math.abs(z-aimZ);
       if(d>=score)continue;
       let free=true;
       for(let dz=-1;dz<=1&&free;dz++)for(let dx=-1;dx<=1;dx++)if(!solid(x+dx,y-1,z+dz)||solid(x+dx,y,z+dz)||solid(x+dx,y+1,z+dz)){free=false;break;}
       if(free){score=d;best=[origin[0]+x+.5,floor+1.62,origin[2]+z+.5];}
     }
-    if(best)spawns.push({floor,position:best,target:[best[0]-30,best[1]+2,best[2]]});
+    if(best)spawns.push({floor,position:best,target:[best[0]-(alongX?30:0),best[1]+2,best[2]-(alongX?0:30)]});
   }
   return {lo:origin,size,bits:bits.toString('base64'),spawns,closedBounds:true};
 }
