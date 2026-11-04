@@ -123,6 +123,13 @@ function outside(d,p){
  for(const x of [-882,-798])d.house(x,ey,770,28,28,{wood:true,kind:'warehouse'});
  for(const x of [-660,-606]){for(let k=0;k<24;k++)d.box(x,ey-2-Math.floor(k/4),824+k,x+18,ey-1-Math.floor(k/4),825+k,M.log);d.box(x+20,ey,832,x+23,ey+26,835,M.log);d.box(x,ey+24,832,x+23,ey+27,835,M.log);d.box(x+2,ey+6,833,x+3,ey+24,834,'minecraft:chain');}d.features.push('Esgaroth: 84 Pfahlhäuser, Meisterhaus, Glockenturm, Markt, zwei Lagerhäuser und Werft');
  d.group='E26';d.path([[-702,-20,184],[-702,-20,240],[-702,-14,264],[-702,-14,288],[-702,-20,312],[-702,-20,350]],12,{roof:false,wood:true});for(let z=184;z<344;z+=12)for(const x of [-710,-695])d.box(x,-46,z,x+2,-20,z+2,M.log);d.room(-714,-20,328,24,16,22,{wood:true,kind:'gate'});d.door(-702,-20,336,12,10,'z',20);
+ if(p.site?.esgarothShoreAccess){
+  const [wx,wy,wz]=p.site.esgarothShoreAccess,[ox,oy,oz]=p.worldOrigin,x=oz-wz,end=wx-ox;
+  if(Number.isSafeInteger(x)&&x>=-882&&x<-534&&Number.isSafeInteger(end)&&end>=824&&end<=920&&Number.isSafeInteger(wy)){
+   d.path([[x,-20,810],[x,wy-oy,end]],8,{roof:false,wood:true});
+   for(let z=810;z<end;z+=8)for(const a of [x-5,x+4])d.box(a,-46,z,a+1,-20,z+1,M.log);
+  }
+ }
  d.group='E28';d.path([[-232,32,482],[-280,16,482],[-314,0,420],[-360,-16,260],[-480,-20,184],[-702,-20,184]],12,{roof:false});for(let i=0;i<6;i++){const x=-320-i*32,z=332+(i%2)*84,y=-16;d.box(x,y-4,z,x+26,y,z+54,'minecraft:dirt');d.box(x,y-1,z,x+26,y,z+54,'minecraft:farmland');for(let a=x+2;a<x+24;a+=4)for(let b=z+2;b<z+52;b+=2)d.p(a,y,b,{name:'minecraft:wheat',props:{age:'7'}});d.house(x,y,z+60,20,22,{wood:true,kind:'farm'});}d.house(-328,-16,452,30,36,{wood:true,kind:'mill'});
  d.group='E27';d.path([[64,0,16],[140,24,16],[200,56,48],[260,72,120],[288,88,192]],6,{roof:false});for(const [x,z,y]of [[200,48,56],[260,120,72],[288,192,88]]){d.box(x-20,-12,z-20,x+20,y,z+20,M.stone);d.floor(x-20,z-20,x+20,z+20,y);d.room(x-12,y,z-12,24,24,14,{kind:'watch'});d.p(x,y+14,z,'minecraft:campfire');}
 }
@@ -131,7 +138,7 @@ function landscape(d){
  // The river is an explicit lined channel, not its enormous rectangular reservation.
  d.group='E23';const route=[[16,-8,0],[0,-8,140],[-214,-18,184],[-384,-25,314],[-534,-25,464]];for(let k=1;k<route.length;k++){const a=route[k-1],b=route[k],n=Math.max(Math.abs(b[0]-a[0]),Math.abs(b[2]-a[2]));for(let i=0;i<=n;i++){const t=i/n,x=Math.round(a[0]+(b[0]-a[0])*t),z=Math.round(a[2]+(b[2]-a[2])*t),y=Math.round(a[1]+(b[1]-a[1])*t);d.box(x-9,y-7,z-9,x+9,y-4,z+9,'minecraft:stone');d.clear(x-7,y-4,z-7,x+7,y+3,z+7);d.box(x-9,y-4,z-9,x-7,y+1,z+9,M.pillar);d.box(x+7,y-4,z-9,x+9,y+1,z+9,M.pillar);}}
  d.group='E24';// Irregular ellipse, defined shoreline at Y63, 8–20 blocks deep. No water placed.
- for(let z=84;z<1104;z+=4)for(let x=-1154;x<-334;x+=4){const dx=(x+744)/410,dz=(z-594)/510,r=Math.hypot(dx,dz),angle=Math.atan2(dz,dx),edge=1+.035*Math.sin(angle*5)+.025*Math.sin(angle*9);if(r>edge)continue;const depth=8+Math.floor(12*Math.max(0,1-r/edge)),y=-25-depth;d.box(x,y-2,z,x+4,y,z+4,r>edge-.08?'minecraft:gravel':'minecraft:stone');d.clear(x,y,z,x+4,-25,z+4);if(r>edge-.03){d.box(x,-26,z,x+4,-24,z+4,'minecraft:gravel');if((x+z)%20===0)d.box(x,-24,z,x+1,-21,z+1,'minecraft:sugar_cane');}}
+ for(let z=84;z<1104;z+=4)for(let x=-1154;x<-334;x+=4){if(Number.isSafeInteger(d.plan.site?.lakeEastShoreX)&&d.plan.worldOrigin[0]+z+4>d.plan.site.lakeEastShoreX)continue;const dx=(x+744)/410,dz=(z-594)/510,r=Math.hypot(dx,dz),angle=Math.atan2(dz,dx),edge=1+.035*Math.sin(angle*5)+.025*Math.sin(angle*9);if(r>edge)continue;const depth=8+Math.floor(12*Math.max(0,1-r/edge)),y=-25-depth;d.box(x,y-2,z,x+4,y,z+4,r>edge-.08?'minecraft:gravel':'minecraft:stone');d.clear(x,y,z,x+4,-25,z+4);if(r>edge-.03){d.box(x,-26,z,x+4,-24,z+4,'minecraft:gravel');if((x+z)%20===0)d.box(x,-24,z,x+1,-21,z+1,'minecraft:sugar_cane');}}
 }
 
 function interior(d,p){grandHalls(d,p);residential(d,p);balanceRooms(d,p.zones);mines(d,p);stairsAndLinks(d,p);for(const r of [...d.routes]){d.group=r.group;d.path(r.points,r.width,{roof:r.roof,wood:r.wood,light:false,finalOnly:true});}kernels(d,p);}

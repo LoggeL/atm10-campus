@@ -1,4 +1,4 @@
-import { esc } from './format.js?v=20261104-erebor-symmetry-3';
+import { esc } from './format.js?v=20261104-erebor-relocation-1';
 
 // Always use the origin of the version being displayed, including pinned cannon jobs.
 export function placementValues(bp) {

@@ -1,4 +1,4 @@
-import { loadBlockPreview } from '/viewer/block-preview.js?v=20261104-erebor-symmetry-3';
+import { loadBlockPreview } from '/viewer/block-preview.js?v=20261104-erebor-relocation-1';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 

@@ -42,3 +42,16 @@ test('architecture listing retains exact anchors and separates excavation from b
  const items=architectureBlueprints({id:'erebor'},[{id:'E02_001',group:'E02',title:'Großes Tor',version:6,revision:1,files:[f],sourceRegions:[]}]);
  assert.deepEqual(items[0].origin,f.origin);assert.equal(filterPreparedBlueprints(items,'Tor','architecture:E02').length,1);assert.match(items[0].download,/architecture\/E02_001\/EREBOR_.*\.nbt\?version=6&revision=1$/);
 });
+
+test('Esgaroth reaches the requested east-bank access while lake excavation preserves that shore',()=>{
+ const p=structuredClone(plan),before=p.worldOrigin;p.worldOrigin=[384,88,-9977];
+ p.site.esgarothShoreAccess=[1212,75,-9263];p.site.lakeEastShoreX=1212;
+ const terrace=p.zones.find(z=>z.id==='E03');terrace.worldFootprint=terrace.worldFootprint.map(([x,z])=>[x+p.worldOrigin[0]-before[0],z+p.worldOrigin[2]-before[2]]);
+ const s=compileErebor(p),shore=p.site.esgarothShoreAccess;
+ assert.ok(s.design.ops.filter(o=>o.g==='E24').every(o=>o.b[2]+p.worldOrigin[0]<=1212));
+ for(let x=1208;x<=1212;x++){
+  assert.ok(readDesignBlock(s,x,shore[1]-1,shore[2])?.name.includes('spruce'));
+  assert.equal(readDesignBlock(s,x,shore[1],shore[2])?.name,'minecraft:air');
+  assert.equal(readDesignBlock(s,x,shore[1]+1,shore[2])?.name,'minecraft:air');
+ }
+});
