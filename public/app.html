@@ -1,6 +1,6 @@
 <!doctype html>
 <html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>ATM10 Campus</title><link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><rect x='2' y='2' width='12' height='12' rx='3' fill='%2373d8e5'/></svg>"><link rel="stylesheet" href="/assets/app.css?v=20261104-erebor-relocation-1"><link rel="stylesheet" href="/assets/blueprint-preview.css?v=20261104-erebor-relocation-1"></head>
+<title>ATM10 Campus</title><link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><rect x='2' y='2' width='12' height='12' rx='3' fill='%2373d8e5'/></svg>"><link rel="stylesheet" href="/assets/app.css?v=20261105-cannon-coordinates-1"><link rel="stylesheet" href="/assets/blueprint-preview.css?v=20261105-cannon-coordinates-1"></head>
 <body>
 <a class="skip-link" href="#main">Zum Inhalt</a>
 <header class="top">
@@ -60,6 +60,8 @@
 
   <section data-pane="cannons" class="hide">
     <div class="page-heading"><h1>Kanonen</h1></div>
+    <nav class="cannon-subnav" aria-label="Kanonenbereiche"><a href="#cannons" aria-current="page">Steuerung</a><a href="#cannon-coordinates">Aufstellkoordinaten</a></nav>
+    <p class="intro">Wo müssen die Kanonen stehen? Unter <a href="#cannon-coordinates">Aufstellkoordinaten</a> findest du die geplanten Plätze für dein Bauprojekt.</p>
     <p class="intro" id="meLine">ME-Bestand wird geladen …</p>
       <details id="ccSetup"><summary>Kanone verbinden</summary>
         <ol class="steps">
@@ -72,6 +74,12 @@
       </details>
     <div id="cannonList"></div>
     <p class="footnote">Admins starten oder setzen Kanonen hier fort. Stoppen und Zurücksetzen erfolgt im Spiel. Der Baustand stammt aus dem zuletzt gespeicherten Weltstand.</p>
+  </section>
+
+  <section data-pane="cannon-coordinates" class="hide">
+    <div class="page-heading"><h1>Kanonen · Aufstellkoordinaten</h1></div>
+    <nav class="cannon-subnav" aria-label="Kanonenbereiche"><a href="#cannons">Steuerung</a><a href="#cannon-coordinates" aria-current="page">Aufstellkoordinaten</a></nav>
+    <div id="cannonSites"><p>Aufstellkoordinaten werden geladen …</p></div>
   </section>
 
   <section data-pane="agent" class="hide">
@@ -113,5 +121,5 @@
 <dialog class="form-dialog" id="editDialog" aria-labelledby="editTitle"></dialog>
 <dialog class="picker-dialog" id="cannonPickerDialog" aria-labelledby="pickerTitle"></dialog>
 <input type="file" id="hiddenFile" accept=".nbt" class="hide">
-<script type="module" src="/assets/app.js?v=20261104-erebor-relocation-1&amp;revision=erebor-architecture-1"></script>
+<script type="module" src="/assets/app.js?v=20261105-cannon-coordinates-1&amp;revision=erebor-architecture-1"></script>
 </body></html>

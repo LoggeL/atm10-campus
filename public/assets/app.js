@@ -1,11 +1,12 @@
-import { createProjectBlueprints } from './project-blueprints.js?v=20261104-erebor-relocation-1&revision=erebor-architecture-1';
-import { esc, fmt } from './format.js?v=20261104-erebor-relocation-1';
-import { updateCannonPicker } from './cannon-picker.js?v=20261104-erebor-relocation-1';
-import { createCannonPickerDialog } from './cannon-picker-dialog.js?v=20261104-erebor-relocation-1';
-import { renderCannon, cannonSettingsPayload, cannonStartState, updateCannonLive } from './cannon-ui.js?v=20261104-erebor-relocation-1';
-import { coordinateFields, placementCard, placementValues, coordinateListText } from './placement.js?v=20261104-erebor-relocation-1';
-import { blueprintPreview, installPreviewFallbacks } from './blueprint-preview.js?v=20261104-erebor-relocation-1';
-import { connectPolling, createRefreshQueue } from './live-updates.js?v=20261104-erebor-relocation-1';
+import { createProjectBlueprints } from './project-blueprints.js?v=20261105-cannon-coordinates-1&revision=erebor-architecture-1';
+import { createCannonSites } from './cannon-sites.js?v=20261105-cannon-coordinates-1';
+import { esc, fmt } from './format.js?v=20261105-cannon-coordinates-1';
+import { updateCannonPicker } from './cannon-picker.js?v=20261105-cannon-coordinates-1';
+import { createCannonPickerDialog } from './cannon-picker-dialog.js?v=20261105-cannon-coordinates-1';
+import { renderCannon, cannonSettingsPayload, cannonStartState, updateCannonLive } from './cannon-ui.js?v=20261105-cannon-coordinates-1';
+import { coordinateFields, placementCard, placementValues, coordinateListText } from './placement.js?v=20261105-cannon-coordinates-1';
+import { blueprintPreview, installPreviewFallbacks } from './blueprint-preview.js?v=20261105-cannon-coordinates-1';
+import { connectPolling, createRefreshQueue } from './live-updates.js?v=20261105-cannon-coordinates-1';
 installPreviewFallbacks();
 const $ = id => document.getElementById(id);
 const when = t => t ? new Date(t).toLocaleString('de-DE', { dateStyle: 'short', timeStyle: 'short' }) : '–';
@@ -41,6 +42,7 @@ let me = null, status = null, activeTab = 'overview', polling = null;
 
 let blueprintProject=new URL(location.href).searchParams.get('project')==='erebor'?'erebor':'campus';
 const ereborBlueprints=createProjectBlueprints({api,isSelected:()=>blueprintProject==='erebor',closeDrawer});
+const cannonSites=createCannonSites({api,element:$('cannonSites'),getProject:()=>blueprintProject,isActive:()=>activeTab==='cannon-coordinates',notify:toast});
 function configureBlueprintProject(){document.getElementById('ereborMode')?.classList.toggle('hide',blueprintProject!=='erebor');
   const erebor=blueprintProject==='erebor';
   $('blueprintProject').value=blueprintProject;
@@ -53,7 +55,9 @@ $('blueprintProject').addEventListener('change',guard(async()=>{
   blueprintProject=$('blueprintProject').value==='erebor'?'erebor':'campus';
   const url=new URL(location.href);url.searchParams.set('project',blueprintProject);history.replaceState(null,'',url);
   closeDrawer();configureBlueprintProject();$('bpRows').innerHTML='<tr><td colspan="5">Baupläne werden geladen …</td></tr>';
-  await loadStatus();
+  if(activeTab==='cannon-coordinates')await cannonSites.load();
+  else if(activeTab==='cannons')await loadCannons();
+  else await loadStatus();
 }));
 $('stonePacket').addEventListener('change',()=>ereborBlueprints.rows());
 configureBlueprintProject();
@@ -66,9 +70,9 @@ document.querySelectorAll('nav.tabs [data-tab]').forEach(b => b.addEventListener
 function showTab(tab) {
   if (tab === 'admin' && me?.user?.role !== 'admin') tab = 'overview';
   activeTab = tab;
-  $('blueprintProjectBar').classList.toggle('hide',!['overview','coordinates'].includes(tab));
+  $('blueprintProjectBar').classList.toggle('hide',!['overview','coordinates','cannons','cannon-coordinates'].includes(tab));
   document.querySelectorAll('nav.tabs [data-tab]').forEach(b => {
-    if (b.dataset.tab === tab) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current');
+    if (b.dataset.tab === (tab==='cannon-coordinates'?'cannons':tab)) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current');
   });
   document.querySelectorAll('[data-pane]').forEach(p => p.classList.toggle('hide', p.dataset.pane !== tab));
   const extra = {agent:'Agent-Zugang', activity:'Aktivität', admin:'Verwaltung'};
@@ -645,7 +649,7 @@ async function refreshVisible() {
   if(document.hidden||!me||$('editDialog').open)return false;
   if(['overview','coordinates'].includes(activeTab)&&($('drawer').open||document.activeElement?.closest('#bpRows,#coordinateRows')))return false;
   if(['snapshots','admin'].includes(activeTab)&&document.activeElement?.closest(`[data-pane="${activeTab}"] input,[data-pane="${activeTab}"] select`))return false;
-  const loader={overview:loadStatus,coordinates:loadStatus,snapshots:loadSnapshots,cannons:loadCannons,agent:loadTokens,activity:loadActivity,admin:loadAdmin}[activeTab];
+  const loader={overview:loadStatus,coordinates:loadStatus,snapshots:loadSnapshots,cannons:loadCannons,'cannon-coordinates':()=>cannonSites.load(),agent:loadTokens,activity:loadActivity,admin:loadAdmin}[activeTab];
   return loader?loader():false;
 }
 function renderPollingState({phase,remainingSeconds,progress,lastUpdatedAt,error}) {
@@ -670,7 +674,7 @@ $('logout').onclick = guard(async () => { await api('/api/auth/logout', { method
 function routeFromHash() {
   const tab = location.hash.slice(1), bpLink = /^bp=(.+)$/.exec(tab);
   closeDrawer();
-  showTab(['overview', 'coordinates', 'snapshots', 'cannons', 'agent', 'activity', 'admin'].includes(tab) ? tab : 'overview');
+  showTab(['overview', 'coordinates', 'snapshots', 'cannons', 'cannon-coordinates', 'agent', 'activity', 'admin'].includes(tab) ? tab : 'overview');
   if (bpLink) openBlueprint(decodeURIComponent(bpLink[1]));
 }
 window.addEventListener('hashchange', () => { if (me) routeFromHash(); });
