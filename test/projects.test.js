@@ -6,6 +6,32 @@ import { join } from 'node:path';
 import { buildServer } from '../src/server.js';
 import { structureNbt } from './helpers.js';
 
+test('cannon checkmarks are shared, versioned independently and tied to the actual planned location', async () => {
+  const temp = mkdtempSync(join(tmpdir(), 'campus-cannon-checks-'));
+  const app = await buildServer({dataDir:temp,worldSources:{},snapshotIntervalMin:0,publicUrl:'http://test',bootstrapInvite:'checks-bootstrap',cookieSecure:false});
+  try {
+    const login = await app.inject({method:'POST',url:'/api/auth/register',payload:{code:'checks-bootstrap',username:'planner',password:'project-test-password'}});
+    const headers = {cookie:'campus_session='+login.cookies.find(c=>c.name==='campus_session').value,'x-campus-csrf':'1'};
+    const request = (method,url,payload) => app.inject({method,url,payload,headers});
+    const project = '/api/projects/erebor', list = project+'/cannon-sites/status', site = project+'/cannon-sites/K01/status';
+    const plan = {title:'Erebor',summary:'',status:'planning',worldOrigin:null,cannonLayout:{stations:[{id:'K01',position:[1,2,3]}]}};
+    assert.equal((await request('PUT',project,{baseVersion:0,plan})).statusCode,200);
+    const placed = {projectVersion:1,baseVersion:0,placed:true,ready:false};
+    assert.equal((await request('PUT',site,{...placed,dryRun:true})).statusCode,200);
+    assert.equal((await request('GET',list)).json().sites.K01.placed,false);
+    assert.equal((await request('PUT',site,placed)).statusCode,200);
+    assert.equal((await request('PUT',site,{...placed,ready:true})).statusCode,409);
+    assert.equal((await request('PUT',site,{...placed,baseVersion:1,placed:false,ready:true})).statusCode,400);
+    assert.equal((await request('PUT',site,{...placed,baseVersion:1,ready:true})).statusCode,200);
+    assert.deepEqual((await request('GET',list)).json().sites.K01,{version:2,placed:true,ready:true});
+    assert.equal((await request('GET',project)).json().version,1);
+    plan.cannonLayout.stations[0].position[1]++;
+    assert.equal((await request('PUT',project,{baseVersion:1,plan})).statusCode,200);
+    assert.deepEqual((await request('GET',list)).json().sites.K01,{version:0,placed:false,ready:false});
+    assert.equal((await request('PUT',site,placed)).statusCode,409);
+  } finally { await app.close();app.campus.db.close();rmSync(temp,{recursive:true,force:true}); }
+});
+
 test('draft projects are authenticated, versioned and isolated from world blueprints', async () => {
   const temp=mkdtempSync(join(tmpdir(),'campus-projects-'));
   const app=await buildServer({dataDir:temp,worldSources:{},snapshotIntervalMin:0,maxUploadBytes:1024*1024,publicUrl:'http://test',bootstrapInvite:'project-test-bootstrap',cookieSecure:false});
