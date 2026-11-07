@@ -8,6 +8,46 @@ export function registerProjectRoutes(app, campus) {
   const db = campus.db;
   const decode = r => ({ id: r.id, version: r.current_version, createdAt: r.created_at, updatedAt: r.updated_at, plan: JSON.parse(r.plan_json) });
   const get = id => db.prepare('SELECT * FROM build_projects WHERE id = ?').get(id);
+  function siteLayout(id) {
+    const project = get(id);
+    if (!project) throw new HttpError(404, 'Bauprojekt nicht gefunden.');
+    const stations = JSON.parse(project.plan_json).cannonLayout?.stations || [];
+    return {version: project.current_version, stations};
+  }
+  const siteProgress = db.prepare('SELECT revision AS version, placed, ready FROM cannon_site_progress WHERE project_id=? AND site_id=? AND x=? AND y=? AND z=?');
+  function progressOf(id, site) {
+    const row = siteProgress.get(id, site.id, ...site.position);
+    return {version: row?.version ?? 0, placed: !!row?.placed, ready: !!row?.ready};
+  }
+  app.get('/api/projects/:id/cannon-sites/status', async (req, reply) => {
+    requireActor(req, 'read');
+    const {version, stations} = siteLayout(req.params.id);
+    reply.header('Cache-Control', 'private, no-store');
+    return {projectVersion: version, sites: Object.fromEntries(stations.map(s => [s.id, progressOf(req.params.id, s)]))};
+  });
+  app.put('/api/projects/:id/cannon-sites/:site/status', async req => {
+    const actor = requireActor(req, 'write'), {id, site: siteId} = req.params, b = req.body;
+    if (!b || !Number.isSafeInteger(b.projectVersion) || !Number.isSafeInteger(b.baseVersion) ||
+        b.baseVersion < 0 || typeof b.placed !== 'boolean' || typeof b.ready !== 'boolean' ||
+        (b.ready && !b.placed) || (b.dryRun !== undefined && typeof b.dryRun !== 'boolean'))
+      throw new HttpError(400, 'Projektversion, Statusversion und gültige Häkchen erforderlich. Betriebsbereit setzt Aufgestellt voraus.');
+    return tx(db, () => {
+      const {version, stations} = siteLayout(id);
+      if (version !== b.projectVersion) throw new HttpError(409, 'Der Standortplan wurde geändert. Bitte neu laden.');
+      const site = stations.find(s => s.id === siteId);
+      if (!site) throw new HttpError(404, 'Kanonenplatz nicht gefunden.');
+      const current = progressOf(id, site);
+      if (current.version !== b.baseVersion) throw new HttpError(409, 'Der Status wurde inzwischen geändert. Bitte neu laden.');
+      if (current.placed === b.placed && current.ready === b.ready) return current;
+      const next = {version: current.version + 1, placed: b.placed, ready: b.ready};
+      if (b.dryRun) return next;
+      db.prepare(`INSERT INTO cannon_site_progress(project_id,site_id,x,y,z,revision,placed,ready) VALUES(?,?,?,?,?,?,?,?)
+        ON CONFLICT(project_id,site_id,x,y,z) DO UPDATE SET revision=excluded.revision, placed=excluded.placed, ready=excluded.ready`)
+        .run(id, siteId, ...site.position, next.version, Number(next.placed), Number(next.ready));
+      logActivity(db, actor, 'cannon.site.status', id + '/' + siteId, next);
+      return next;
+    });
+  });
   app.get('/api/projects', async req => {
     requireActor(req, 'read');
     return db.prepare('SELECT * FROM build_projects ORDER BY updated_at DESC, id').all().map(r => {

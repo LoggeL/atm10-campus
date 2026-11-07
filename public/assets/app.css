@@ -81,6 +81,9 @@ main>section{min-width:0}
 .cannon-site-start strong{font-size:20px;font-variant-numeric:tabular-nums}
 .cannon-site-start p{margin:4px 0}
 .cannon-site-table{margin-top:18px}
+.cannon-checks{display:grid;gap:.35rem}
+.cannon-checks label{display:flex;align-items:center;gap:.4rem;white-space:nowrap}
+.cannon-checks input{width:1rem;height:1rem;margin:0}
 .cannon-site-highlight{background:var(--cyan-soft)}
 
 /* ---------- menus ---------- */

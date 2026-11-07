@@ -80,6 +80,15 @@ CREATE TABLE IF NOT EXISTS project_stone_packages (
   user_id INTEGER REFERENCES users(id),
   PRIMARY KEY (project_id, version, cannon, part)
 );
+CREATE TABLE IF NOT EXISTS cannon_site_progress (
+  project_id TEXT NOT NULL REFERENCES build_projects(id),
+  site_id TEXT NOT NULL,
+  x INTEGER NOT NULL, y INTEGER NOT NULL, z INTEGER NOT NULL,
+  revision INTEGER NOT NULL,
+  placed INTEGER NOT NULL CHECK (placed IN (0,1)),
+  ready INTEGER NOT NULL CHECK (ready IN (0,1) AND ready <= placed),
+  PRIMARY KEY (project_id, site_id, x, y, z)
+);
 CREATE TABLE IF NOT EXISTS blueprint_versions (
   id INTEGER PRIMARY KEY,
   blueprint_id TEXT NOT NULL REFERENCES blueprints(id),
