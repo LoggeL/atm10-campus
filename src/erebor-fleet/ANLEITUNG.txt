@@ -1,0 +1,64 @@
+Erebor · Campus-Versorger für K01 bis K37
+
+Für Logge auf dem Linux-Host des Minecraft-Docker-Containers mit Python 3.9+
+und Docker-Zugriff. Der Minecraft-Server läuft während der Installation.
+Der Installer verwendet den vorhandenen Befehl rcon-cli im Minecraft-Container
+und dessen auf dem Host eingehängtes Weltverzeichnis. Er liest den Weltnamen
+aus /data/server.properties. Den Campus-Container dafür bitte nicht auswählen.
+
+1. Das ZIP auf dem Minecraft-Host in ein eigenes Verzeichnis entpacken.
+   Mit "docker ps" den Namen des Minecraft-Containers nachsehen.
+2. Vorschau (ersetze MINECRAFT durch den tatsächlichen Containernamen):
+
+   python3 install.py --container MINECRAFT
+
+   Sie zeigt die Computerpositionen und die verfügbaren IDs. Ungeladene
+   Plätze werden bei der Installation vorübergehend geladen und geprüft.
+3. Im Campus unter Konto/Agent-Zugang einen Token mit Berechtigung
+   "Station" verwenden. Im entpackten Verzeichnis einmal ausführen:
+
+   python3 install.py --container MINECRAFT --apply
+
+   Token bei der verdeckten Eingabe einfügen. Die 37 Computer erhalten
+   die Namen erebor-K01 bis erebor-K37. Frisch platzierte Computer werden
+   gemeinsam eingeschaltet, damit CC:Tweaked selbst die IDs vergibt.
+   Jeder geprüfte Computer wird zum Einrichten kurz angehalten und danach
+   gestartet. Die Minecraft-Serverinstanz läuft dabei weiter.
+
+Der Linux-Benutzer braucht Schreibzugriff auf die CC-Computerdateien.
+Als root übernimmt der Installer die Datei-Eigentümer der Computer. Andernfalls
+als Benutzer des Minecraft-Prozesses mit Docker-Zugriff ausführen.
+Für unbeaufsichtigte Eingabe ist CAMPUS_STATION_TOKEN möglich.
+Im Paket befindet sich kein Token. Auf den eingerichteten CC-Computern steht
+er in der lokalen Datei .campus-station-token und ist dort für Programme lesbar.
+
+Der Installer sichert ersetzte Dateien unter computercraft/erebor-backup-… in
+der Welt und gibt den Pfad aus. Vorhandene .settings bleiben erhalten. Eigene
+startup.lua oder Programme im Verzeichnis startup/ werden angezeigt. Nur wenn
+die betroffenen Computer künftig den Feeder als Hauptprogramm ausführen sollen,
+--replace-startup ergänzen. Ein Startprogramm ohne Erweiterung namens startup
+hat Vorrang und erfordert eine manuelle Abstimmung.
+
+Bei einer Unterbrechung oder einer inzwischen versetzten Station die angezeigte
+Ursache prüfen und erneut ausführen. Bereits identische Dateien werden erkannt.
+Für eine Rücknahme den betroffenen CC-Computer anhalten, aus seinem Backup
+die Originaldateien zurückkopieren und neu angelegte Dateien campus.lua,
+.campus-station-token und startup.lua entfernen, sofern es für sie kein Original
+gab. Die Unterordner der Sicherung nennen Station und Computer-ID.
+
+Am Ende werden neue Stationsmeldungen samt passender Computer-ID und gemeldete
+Fehler ausgegeben. Exitcode 2 bedeutet, dass Rückmeldungen fehlen oder ein
+Computer einen Fehler meldet. Unter https://campus.logge.top/app?project=erebor#cannons
+lassen sich die Meldungen nachlesen. Die temporären Chunk-Tickets der
+Installation werden zurückgegeben. Für Dauerbetrieb müssen die Stationen und
+ihre Netzwerkverbindungen im Spiel geladen bleiben.
+
+Wireless Connector im Spiel
+
+Am Kanonenplatz ist die Reihenfolge Kanone – Kiste – Computer – ME Bridge –
+ME-Kabel – Wireless Connector. Mit dem ME Wireless Setup Kit den gewünschten
+Hub rechtsklicken und dann den Wireless Connector der Station rechtsklicken.
+Jede Funkverbindung einzeln koppeln. Die regionalen Hubs mit ihrem jeweiligen
+Zentralhub koppeln. Für K01 z. B. Zentralhub A → A-Nordost → Connector K01.
+Die genaue Zuordnung inklusive Blockkoordinaten steht in Funkverbindungen.csv.
+Die Frequenzen werden im Spiel über das Setup Kit gesetzt.

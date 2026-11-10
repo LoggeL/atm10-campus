@@ -1,5 +1,5 @@
 import { createProjectBlueprints } from './project-blueprints.js?v=20261105-cannon-coordinates-1&revision=erebor-architecture-1';
-import { createCannonSites } from './cannon-sites.js?v=20261107-site-status';
+import { createCannonSites } from './cannon-sites.js?v=20261110-fleet';
 import { esc, fmt } from './format.js?v=20261105-cannon-coordinates-1';
 import { updateCannonPicker } from './cannon-picker.js?v=20261105-cannon-coordinates-1';
 import { createCannonPickerDialog } from './cannon-picker-dialog.js?v=20261105-cannon-coordinates-1';
