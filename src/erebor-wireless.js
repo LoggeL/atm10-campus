@@ -25,14 +25,17 @@ export function readEndpoints(world, layout) {
           if(!chunks.has(key))chunks.set(key,region?.chunk(cx,cz,{preserveLongs:true}));
           const chunk=chunks.get(key);
           if(!chunk?.sections || !['full','minecraft:full'].includes(chunk.Status))continue;
-          const entity=(chunk.block_entities||[]).find(b=>b.x===x && b.y===y && b.z===z && b.id===block);
+          const candidates=(chunk.block_entities||[]).filter(b=>b.x===x && b.z===z && b.id===block && (b.y===y || (block.endsWith('_hub') && Math.abs(b.y-y)<=2)));
+          const exact=candidates.find(b=>b.y===y);
+          if(!exact && candidates.length>1)continue;
+          const entity=exact||candidates[0];
           let ports=[];
           if(entity) {
             const values=block.endsWith('_hub') && !Object.hasOwn(entity,'freq') ?
               Array.from({length:8},(_,i)=>entity['freq'+i]) : [entity.freq];
             ports=values.flatMap((v,i)=>typeof v==='bigint' && v!==0n ? [{port:i+1,frequency:v}] : []);
           }
-          changes.push([id,{present:!!entity,ports}]);
+          changes.push([id,{present:!!entity,position:entity?[x,entity.y,z]:null,ports}]);
         }
         if(before!==regionMtime(world,rx,rz))continue;
         for(const [id,data] of changes)endpoints.set(id,data);
@@ -61,7 +64,7 @@ export function wirelessReport(layout,endpoints) {
   return {
     surveyedAt:new Date().toISOString(),
     hubs:Object.fromEntries(Object.keys(layout.hubs).map(id=>{
-      const end=endpoints.get(id);return [id,{present:end?.present??null,ports:end?.ports.map(p=>({
+      const end=endpoints.get(id);return [id,{present:end?.present??null,position:end?.position??null,ports:end?.ports.map(p=>({
         port:p.port,peers:uses.get(p.frequency).filter(s=>s.id!==id).map(s=>s.id)
       }))??[]}];
     })),
