@@ -20,7 +20,7 @@ export class Region {
     return existsSync(p) ? new Region(readFileSync(p)) : null;
   }
   // cx, cz are chunk coordinates local to the region (0..31). Returns the chunk root compound or null.
-  chunk(cx, cz) {
+  chunk(cx, cz, nbtOptions) {
     const buf = this.buf;
     if (buf.length < 8192) return null;
     const idx = 4 * ((cx & 31) + (cz & 31) * 32);
@@ -38,7 +38,7 @@ export class Region {
     else if (type === 2) raw = inflateSync(payload);
     else if (type === 3) raw = payload;
     else throw new Error(`Chunk ${cx},${cz}: Kompression ${type} wird nicht unterstützt.`);
-    return parseNBT(raw).value;
+    return parseNBT(raw, nbtOptions).value;
   }
 }
 

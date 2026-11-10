@@ -1,0 +1,1371 @@
+{
+  "project": "erebor",
+  "version": 12,
+  "capturedAt": "2026-11-10T21:46:51.677Z",
+  "hubs": {
+    "A0": [
+      -366,
+      315,
+      -10002
+    ],
+    "A1": [
+      -850,
+      316,
+      -10500
+    ],
+    "A2": [
+      150,
+      316,
+      -10500
+    ],
+    "B0": [
+      -362,
+      315,
+      -10002
+    ],
+    "B1": [
+      -850,
+      316,
+      -9500
+    ],
+    "B2": [
+      150,
+      316,
+      -9500
+    ]
+  },
+  "sites": [
+    {
+      "site": "K01",
+      "planned": [
+        -252,
+        32,
+        -11010
+      ],
+      "cannon": [
+        -252,
+        32,
+        -11010
+      ],
+      "chest": [
+        -252,
+        32,
+        -11011
+      ],
+      "inventoryBlock": "minecraft:chest",
+      "computer": [
+        -252,
+        32,
+        -11012
+      ],
+      "computerBlock": "computercraft:computer_advanced",
+      "bridge": [
+        -252,
+        32,
+        -11013
+      ],
+      "connector": [
+        -253,
+        32,
+        -11014
+      ],
+      "hub": "A2"
+    },
+    {
+      "site": "K02",
+      "planned": [
+        -668,
+        48,
+        -10850
+      ],
+      "cannon": [
+        -668,
+        47,
+        -10850
+      ],
+      "chest": [
+        -668,
+        47,
+        -10851
+      ],
+      "inventoryBlock": "minecraft:chest",
+      "computer": [
+        -668,
+        47,
+        -10852
+      ],
+      "computerBlock": "computercraft:computer_advanced",
+      "bridge": [
+        -668,
+        47,
+        -10853
+      ],
+      "connector": [
+        -670,
+        47,
+        -10853
+      ],
+      "hub": "A1"
+    },
+    {
+      "site": "K03",
+      "planned": [
+        -540,
+        64,
+        -10754
+      ],
+      "cannon": [
+        -540,
+        63,
+        -10754
+      ],
+      "chest": [
+        -539,
+        63,
+        -10754
+      ],
+      "inventoryBlock": "minecraft:chest",
+      "computer": [
+        -538,
+        63,
+        -10754
+      ],
+      "computerBlock": "computercraft:computer_advanced",
+      "bridge": [
+        -537,
+        63,
+        -10754
+      ],
+      "connector": [
+        -535,
+        63,
+        -10754
+      ],
+      "hub": "A1"
+    },
+    {
+      "site": "K04",
+      "planned": [
+        4,
+        80,
+        -10818
+      ],
+      "cannon": [
+        4,
+        80,
+        -10818
+      ],
+      "chest": [
+        4,
+        80,
+        -10819
+      ],
+      "inventoryBlock": "minecraft:chest",
+      "computer": [
+        4,
+        80,
+        -10820
+      ],
+      "computerBlock": "computercraft:computer_advanced",
+      "bridge": [
+        4,
+        80,
+        -10821
+      ],
+      "connector": [
+        4,
+        80,
+        -10823
+      ],
+      "hub": "A2"
+    },
+    {
+      "site": "K05",
+      "planned": [
+        -1244,
+        64,
+        -10626
+      ],
+      "cannon": [
+        -1244,
+        63,
+        -10626
+      ],
+      "chest": [
+        -1244,
+        63,
+        -10627
+      ],
+      "inventoryBlock": "minecraft:chest",
+      "computer": [
+        -1244,
+        63,
+        -10628
+      ],
+      "computerBlock": "computercraft:computer_advanced",
+      "bridge": [
+        -1244,
+        63,
+        -10629
+      ],
+      "connector": [
+        -1245,
+        63,
+        -10630
+      ],
+      "hub": "A1"
+    },
+    {
+      "site": "K06",
+      "planned": [
+        -860,
+        64,
+        -10722
+      ],
+      "cannon": [
+        -860,
+        63,
+        -10722
+      ],
+      "chest": [
+        -860,
+        63,
+        -10721
+      ],
+      "inventoryBlock": "minecraft:chest",
+      "computer": [
+        -860,
+        63,
+        -10720
+      ],
+      "computerBlock": "computercraft:computer_advanced",
+      "bridge": [
+        -860,
+        63,
+        -10719
+      ],
+      "connector": [
+        -859,
+        63,
+        -10718
+      ],
+      "hub": "A1"
+    },
+    {
+      "site": "K07",
+      "planned": [
+        -220,
+        96,
+        -10562
+      ],
+      "cannon": [
+        -222,
+        96,
+        -10562
+      ],
+      "chest": [
+        -222,
+        96,
+        -10563
+      ],
+      "inventoryBlock": "minecraft:chest",
+      "computer": [
+        -222,
+        96,
+        -10564
+      ],
+      "computerBlock": "computercraft:computer_advanced",
+      "bridge": [
+        -222,
+        96,
+        -10565
+      ],
+      "connector": [
+        -221,
+        96,
+        -10566
+      ],
+      "hub": "A2"
+    },
+    {
+      "site": "K08",
+      "planned": [
+        292,
+        32,
+        -10594
+      ],
+      "cannon": [
+        293,
+        31,
+        -10594
+      ],
+      "chest": [
+        293,
+        31,
+        -10593
+      ],
+      "inventoryBlock": "minecraft:chest",
+      "computer": [
+        293,
+        31,
+        -10592
+      ],
+      "computerBlock": "computercraft:computer_advanced",
+      "bridge": [
+        293,
+        31,
+        -10591
+      ],
+      "connector": [
+        294,
+        31,
+        -10590
+      ],
+      "hub": "A2"
+    },
+    {
+      "site": "K09",
+      "planned": [
+        -1212,
+        48,
+        -10242
+      ],
+      "cannon": [
+        -1212,
+        48,
+        -10240
+      ],
+      "chest": [
+        -1213,
+        48,
+        -10240
+      ],
+      "inventoryBlock": "minecraft:chest",
+      "computer": [
+        -1214,
+        48,
+        -10240
+      ],
+      "computerBlock": "computercraft:computer_advanced",
+      "bridge": [
+        -1215,
+        48,
+        -10240
+      ],
+      "connector": [
+        -1217,
+        48,
+        -10240
+      ],
+      "hub": "A1"
+    },
+    {
+      "site": "K10",
+      "planned": [
+        -924,
+        80,
+        -10402
+      ],
+      "cannon": [
+        -924,
+        79,
+        -10402
+      ],
+      "chest": [
+        -924,
+        79,
+        -10401
+      ],
+      "inventoryBlock": "minecraft:chest",
+      "computer": [
+        -924,
+        79,
+        -10400
+      ],
+      "computerBlock": "computercraft:computer_advanced",
+      "bridge": [
+        -924,
+        79,
+        -10399
+      ],
+      "connector": [
+        -925,
+        79,
+        -10398
+      ],
+      "hub": "A1"
+    },
+    {
+      "site": "K11",
+      "planned": [
+        -572,
+        96,
+        -10434
+      ],
+      "cannon": [
+        -572,
+        95,
+        -10434
+      ],
+      "chest": [
+        -572,
+        95,
+        -10435
+      ],
+      "inventoryBlock": "minecraft:chest",
+      "computer": [
+        -572,
+        95,
+        -10436
+      ],
+      "computerBlock": "computercraft:computer_advanced",
+      "bridge": [
+        -572,
+        95,
+        -10437
+      ],
+      "connector": [
+        -571,
+        95,
+        -10438
+      ],
+      "hub": "A0"
+    },
+    {
+      "site": "K12",
+      "planned": [
+        -316,
+        112,
+        -10242
+      ],
+      "cannon": [
+        -316,
+        111,
+        -10242
+      ],
+      "chest": [
+        -316,
+        111,
+        -10243
+      ],
+      "inventoryBlock": "minecraft:chest",
+      "computer": [
+        -316,
+        111,
+        -10244
+      ],
+      "computerBlock": "computercraft:computer_advanced",
+      "bridge": [
+        -316,
+        111,
+        -10245
+      ],
+      "connector": [
+        -316,
+        111,
+        -10247
+      ],
+      "hub": "B0"
+    },
+    {
+      "site": "K13",
+      "planned": [
+        -60,
+        80,
+        -10466
+      ],
+      "cannon": [
+        -60,
+        80,
+        -10466
+      ],
+      "chest": [
+        -61,
+        80,
+        -10466
+      ],
+      "inventoryBlock": "minecraft:chest",
+      "computer": [
+        -62,
+        80,
+        -10466
+      ],
+      "computerBlock": "computercraft:computer_advanced",
+      "bridge": [
+        -63,
+        80,
+        -10466
+      ],
+      "connector": [
+        -65,
+        80,
+        -10466
+      ],
+      "hub": "A2"
+    },
+    {
+      "site": "K14",
+      "planned": [
+        356,
+        64,
+        -10338
+      ],
+      "cannon": [
+        356,
+        64,
+        -10338
+      ],
+      "chest": [
+        356,
+        64,
+        -10339
+      ],
+      "inventoryBlock": "minecraft:chest",
+      "computer": [
+        356,
+        64,
+        -10340
+      ],
+      "computerBlock": "computercraft:computer_advanced",
+      "bridge": [
+        356,
+        64,
+        -10341
+      ],
+      "connector": [
+        356,
+        64,
+        -10343
+      ],
+      "hub": "A2"
+    },
+    {
+      "site": "K15",
+      "planned": [
+        -988,
+        80,
+        -10050
+      ],
+      "cannon": [
+        -988,
+        80,
+        -10050
+      ],
+      "chest": [
+        -988,
+        80,
+        -10049
+      ],
+      "inventoryBlock": "minecraft:chest",
+      "computer": [
+        -988,
+        80,
+        -10048
+      ],
+      "computerBlock": "computercraft:computer_advanced",
+      "bridge": [
+        -988,
+        80,
+        -10047
+      ],
+      "connector": [
+        -989,
+        80,
+        -10046
+      ],
+      "hub": "A1"
+    },
+    {
+      "site": "K16",
+      "planned": [
+        -668,
+        112,
+        -10146
+      ],
+      "cannon": [
+        -668,
+        112,
+        -10178
+      ],
+      "chest": [
+        -668,
+        112,
+        -10179
+      ],
+      "inventoryBlock": "minecraft:chest",
+      "computer": [
+        -668,
+        112,
+        -10180
+      ],
+      "computerBlock": "computercraft:computer_advanced",
+      "bridge": [
+        -668,
+        112,
+        -10181
+      ],
+      "connector": [
+        -668,
+        112,
+        -10183
+      ],
+      "hub": "A0"
+    },
+    {
+      "site": "K17",
+      "planned": [
+        -476,
+        128,
+        -10018
+      ],
+      "cannon": [
+        -476,
+        128,
+        -10018
+      ],
+      "chest": [
+        -476,
+        128,
+        -10017
+      ],
+      "inventoryBlock": "minecraft:chest",
+      "computer": [
+        -476,
+        128,
+        -10016
+      ],
+      "computerBlock": "computercraft:computer_advanced",
+      "bridge": [
+        -476,
+        128,
+        -10015
+      ],
+      "connector": [
+        -476,
+        128,
+        -10013
+      ],
+      "hub": "A0"
+    },
+    {
+      "site": "K18",
+      "planned": [
+        4,
+        80,
+        -10178
+      ],
+      "cannon": [
+        4,
+        80,
+        -10178
+      ],
+      "chest": [
+        4,
+        80,
+        -10177
+      ],
+      "inventoryBlock": "minecraft:chest",
+      "computer": [
+        4,
+        80,
+        -10176
+      ],
+      "computerBlock": "computercraft:computer_advanced",
+      "bridge": [
+        4,
+        80,
+        -10175
+      ],
+      "connector": [
+        4,
+        80,
+        -10173
+      ],
+      "hub": "B0"
+    },
+    {
+      "site": "K19",
+      "planned": [
+        196,
+        96,
+        -10018
+      ],
+      "cannon": [
+        196,
+        96,
+        -10018
+      ],
+      "chest": [
+        197,
+        96,
+        -10018
+      ],
+      "inventoryBlock": "minecraft:chest",
+      "computer": [
+        198,
+        96,
+        -10018
+      ],
+      "computerBlock": "computercraft:computer_advanced",
+      "bridge": [
+        199,
+        96,
+        -10018
+      ],
+      "connector": [
+        201,
+        96,
+        -10018
+      ],
+      "hub": "B0"
+    },
+    {
+      "site": "K20",
+      "planned": [
+        -1212,
+        96,
+        -9954
+      ],
+      "cannon": [
+        -1212,
+        96,
+        -9954
+      ],
+      "chest": [
+        -1213,
+        96,
+        -9954
+      ],
+      "inventoryBlock": "minecraft:chest",
+      "computer": [
+        -1214,
+        96,
+        -9954
+      ],
+      "computerBlock": "computercraft:computer_advanced",
+      "bridge": [
+        -1215,
+        96,
+        -9954
+      ],
+      "connector": [
+        -1216,
+        96,
+        -9955
+      ],
+      "hub": "B1"
+    },
+    {
+      "site": "K21",
+      "planned": [
+        -1180,
+        64,
+        -9730
+      ],
+      "cannon": [
+        -1180,
+        64,
+        -9730
+      ],
+      "chest": [
+        -1180,
+        64,
+        -9731
+      ],
+      "inventoryBlock": "minecraft:chest",
+      "computer": [
+        -1180,
+        64,
+        -9732
+      ],
+      "computerBlock": "computercraft:computer_advanced",
+      "bridge": [
+        -1180,
+        64,
+        -9733
+      ],
+      "connector": [
+        -1180,
+        64,
+        -9735
+      ],
+      "hub": "B1"
+    },
+    {
+      "site": "K22",
+      "planned": [
+        -732,
+        96,
+        -9858
+      ],
+      "cannon": [
+        -732,
+        96,
+        -9858
+      ],
+      "chest": [
+        -732,
+        96,
+        -9857
+      ],
+      "inventoryBlock": "minecraft:chest",
+      "computer": [
+        -732,
+        96,
+        -9856
+      ],
+      "computerBlock": "computercraft:computer_advanced",
+      "bridge": [
+        -732,
+        96,
+        -9855
+      ],
+      "connector": [
+        -732,
+        96,
+        -9853
+      ],
+      "hub": "A0"
+    },
+    {
+      "site": "K23",
+      "planned": [
+        -380,
+        112,
+        -9794
+      ],
+      "cannon": [
+        -380,
+        112,
+        -9794
+      ],
+      "chest": [
+        -379,
+        112,
+        -9794
+      ],
+      "inventoryBlock": "minecraft:chest",
+      "computer": [
+        -378,
+        112,
+        -9794
+      ],
+      "computerBlock": "computercraft:computer_advanced",
+      "bridge": [
+        -377,
+        112,
+        -9794
+      ],
+      "connector": [
+        -375,
+        112,
+        -9794
+      ],
+      "hub": "A0"
+    },
+    {
+      "site": "K24",
+      "planned": [
+        -156,
+        112,
+        -9954
+      ],
+      "cannon": [
+        -157,
+        112,
+        -9954
+      ],
+      "chest": [
+        -158,
+        112,
+        -9954
+      ],
+      "inventoryBlock": "minecraft:chest",
+      "computer": [
+        -159,
+        112,
+        -9954
+      ],
+      "computerBlock": "computercraft:computer_advanced",
+      "bridge": [
+        -160,
+        112,
+        -9954
+      ],
+      "connector": [
+        -162,
+        112,
+        -9954
+      ],
+      "hub": "B0"
+    },
+    {
+      "site": "K25",
+      "planned": [
+        36,
+        144,
+        -9762
+      ],
+      "cannon": [
+        36,
+        144,
+        -9762
+      ],
+      "chest": [
+        36,
+        144,
+        -9761
+      ],
+      "inventoryBlock": "minecraft:chest",
+      "computer": [
+        36,
+        144,
+        -9760
+      ],
+      "computerBlock": "computercraft:computer_advanced",
+      "bridge": [
+        36,
+        144,
+        -9759
+      ],
+      "connector": [
+        36,
+        144,
+        -9757
+      ],
+      "hub": "B2"
+    },
+    {
+      "site": "K26",
+      "planned": [
+        420,
+        48,
+        -9730
+      ],
+      "cannon": [
+        420,
+        48,
+        -9730
+      ],
+      "chest": [
+        420,
+        48,
+        -9729
+      ],
+      "inventoryBlock": "minecraft:chest",
+      "computer": [
+        420,
+        48,
+        -9728
+      ],
+      "computerBlock": "computercraft:computer_advanced",
+      "bridge": [
+        420,
+        48,
+        -9727
+      ],
+      "connector": [
+        420,
+        48,
+        -9724
+      ],
+      "hub": "B2"
+    },
+    {
+      "site": "K27",
+      "planned": [
+        -764,
+        96,
+        -9698
+      ],
+      "cannon": [
+        -764,
+        95,
+        -9698
+      ],
+      "chest": [
+        -763,
+        95,
+        -9698
+      ],
+      "inventoryBlock": "minecraft:chest",
+      "computer": [
+        -762,
+        95,
+        -9698
+      ],
+      "computerBlock": "computercraft:computer_advanced",
+      "bridge": [
+        -761,
+        95,
+        -9698
+      ],
+      "connector": [
+        -759,
+        95,
+        -9698
+      ],
+      "hub": "B1"
+    },
+    {
+      "site": "K28",
+      "planned": [
+        -508,
+        96,
+        -9506
+      ],
+      "cannon": [
+        -508,
+        96,
+        -9506
+      ],
+      "chest": [
+        -507,
+        96,
+        -9506
+      ],
+      "inventoryBlock": "minecraft:chest",
+      "computer": [
+        -506,
+        96,
+        -9506
+      ],
+      "computerBlock": "computercraft:computer_advanced",
+      "bridge": [
+        -505,
+        96,
+        -9506
+      ],
+      "connector": [
+        -503,
+        96,
+        -9506
+      ],
+      "hub": "B1"
+    },
+    {
+      "site": "K29",
+      "planned": [
+        -188,
+        96,
+        -9570
+      ],
+      "cannon": [
+        -188,
+        96,
+        -9570
+      ],
+      "chest": [
+        -188,
+        96,
+        -9569
+      ],
+      "inventoryBlock": "minecraft:chest",
+      "computer": [
+        -188,
+        96,
+        -9568
+      ],
+      "computerBlock": "computercraft:computer_advanced",
+      "bridge": [
+        -188,
+        96,
+        -9567
+      ],
+      "connector": [
+        -188,
+        96,
+        -9565
+      ],
+      "hub": "B2"
+    },
+    {
+      "site": "K30",
+      "planned": [
+        228,
+        64,
+        -9538
+      ],
+      "cannon": [
+        228,
+        64,
+        -9538
+      ],
+      "chest": [
+        227,
+        64,
+        -9538
+      ],
+      "inventoryBlock": "minecraft:chest",
+      "computer": [
+        226,
+        64,
+        -9538
+      ],
+      "computerBlock": "computercraft:computer_advanced",
+      "bridge": [
+        225,
+        64,
+        -9538
+      ],
+      "connector": [
+        223,
+        64,
+        -9538
+      ],
+      "hub": "B2"
+    },
+    {
+      "site": "K31",
+      "planned": [
+        -1116,
+        64,
+        -9442
+      ],
+      "cannon": [
+        -1116,
+        64,
+        -9442
+      ],
+      "chest": [
+        -1117,
+        64,
+        -9442
+      ],
+      "inventoryBlock": "minecraft:chest",
+      "computer": [
+        -1118,
+        64,
+        -9442
+      ],
+      "computerBlock": "computercraft:computer_advanced",
+      "bridge": [
+        -1119,
+        64,
+        -9442
+      ],
+      "connector": [
+        -1121,
+        64,
+        -9442
+      ],
+      "hub": "B1"
+    },
+    {
+      "site": "K32",
+      "planned": [
+        -860,
+        64,
+        -9346
+      ],
+      "cannon": [
+        -860,
+        64,
+        -9346
+      ],
+      "chest": [
+        -859,
+        64,
+        -9346
+      ],
+      "inventoryBlock": "minecraft:chest",
+      "computer": [
+        -858,
+        64,
+        -9346
+      ],
+      "computerBlock": "computercraft:computer_advanced",
+      "bridge": [
+        -857,
+        64,
+        -9346
+      ],
+      "connector": [
+        -855,
+        64,
+        -9346
+      ],
+      "hub": "B1"
+    },
+    {
+      "site": "K33",
+      "planned": [
+        -316,
+        32,
+        -9218
+      ],
+      "cannon": [
+        -316,
+        32,
+        -9218
+      ],
+      "chest": [
+        -316,
+        32,
+        -9219
+      ],
+      "inventoryBlock": "minecraft:chest",
+      "computer": [
+        -316,
+        32,
+        -9220
+      ],
+      "computerBlock": "computercraft:computer_advanced",
+      "bridge": [
+        -316,
+        32,
+        -9221
+      ],
+      "connector": [
+        -316,
+        32,
+        -9223
+      ],
+      "hub": "B2"
+    },
+    {
+      "site": "K34",
+      "planned": [
+        36,
+        64,
+        -9250
+      ],
+      "cannon": [
+        36,
+        64,
+        -9250
+      ],
+      "chest": [
+        36,
+        64,
+        -9251
+      ],
+      "inventoryBlock": "minecraft:chest",
+      "computer": [
+        36,
+        64,
+        -9252
+      ],
+      "computerBlock": "computercraft:computer_advanced",
+      "bridge": [
+        36,
+        64,
+        -9253
+      ],
+      "connector": [
+        36,
+        64,
+        -9255
+      ],
+      "hub": "B2"
+    },
+    {
+      "site": "K35",
+      "planned": [
+        324,
+        144,
+        -9314
+      ],
+      "cannon": [
+        324,
+        144,
+        -9314
+      ],
+      "chest": [
+        324,
+        144,
+        -9313
+      ],
+      "inventoryBlock": "minecraft:chest",
+      "computer": [
+        324,
+        144,
+        -9312
+      ],
+      "computerBlock": "computercraft:computer_advanced",
+      "bridge": [
+        324,
+        144,
+        -9311
+      ],
+      "connector": [
+        324,
+        144,
+        -9309
+      ],
+      "hub": "B2"
+    },
+    {
+      "site": "K36",
+      "planned": [
+        -604,
+        48,
+        -9154
+      ],
+      "cannon": [
+        -604,
+        48,
+        -9154
+      ],
+      "chest": [
+        -605,
+        48,
+        -9154
+      ],
+      "inventoryBlock": "minecraft:chest",
+      "computer": [
+        -606,
+        48,
+        -9154
+      ],
+      "computerBlock": "computercraft:computer_advanced",
+      "bridge": [
+        -607,
+        48,
+        -9154
+      ],
+      "connector": [
+        -609,
+        48,
+        -9154
+      ],
+      "hub": "B1"
+    },
+    {
+      "site": "K37",
+      "planned": [
+        490,
+        -32,
+        -10040
+      ],
+      "cannon": [
+        490,
+        -32,
+        -10040
+      ],
+      "chest": [
+        489,
+        -32,
+        -10040
+      ],
+      "inventoryBlock": "minecraft:chest",
+      "computer": [
+        488,
+        -32,
+        -10040
+      ],
+      "computerBlock": "computercraft:computer_advanced",
+      "bridge": [
+        487,
+        -32,
+        -10040
+      ],
+      "connector": [
+        485,
+        -32,
+        -10040
+      ],
+      "hub": "A2"
+    }
+  ]
+}

@@ -10,7 +10,7 @@ export class LongArray {
   get length() { return this.words.length / 2; }
 }
 
-export function parseNBT(input) {
+export function parseNBT(input, { preserveLongs = false } = {}) {
   const buf = Buffer.isBuffer(input) ? input : Buffer.from(input.buffer, input.byteOffset, input.byteLength);
   let p = 0;
   const need = n => { if (n < 0 || p + n > buf.length) throw new Error('NBT ist unvollständig oder beschädigt.'); };
@@ -28,7 +28,7 @@ export function parseNBT(input) {
       case 1: return i8();
       case 2: return i16();
       case 3: return i32();
-      case 4: { need(8); const v = buf.readBigInt64BE(p); p += 8; return Number(v); }
+      case 4: { need(8); const v = buf.readBigInt64BE(p); p += 8; return preserveLongs ? v : Number(v); }
       case 5: { need(4); const v = buf.readFloatBE(p); p += 4; return v; }
       case 6: { need(8); const v = buf.readDoubleBE(p); p += 8; return v; }
       case 7: { const n = len(); need(n); const v = new Int8Array(buf.buffer.slice(buf.byteOffset + p, buf.byteOffset + p + n)); p += n; return v; }
