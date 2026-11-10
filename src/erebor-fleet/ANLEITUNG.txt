@@ -62,3 +62,9 @@ Jede Funkverbindung einzeln koppeln. Die regionalen Hubs mit ihrem jeweiligen
 Zentralhub koppeln. Für K01 z. B. Zentralhub A → A-Nordost → Connector K01.
 Die genaue Zuordnung inklusive Blockkoordinaten steht in Funkverbindungen.csv.
 Die Frequenzen werden im Spiel über das Setup Kit gesetzt.
+
+Bei „The wireless hub has no available port“ mit leeren Portlisten beide
+Hub-Chunks während des gesamten Koppelns aktiv halten. Beim Koppeln zu zweit
+kann ein Spieler am ersten Hub stehen bleiben. Das Setup Kit lässt sich
+mit Shift + Rechtsklick in die Luft zurücksetzen. Zentralhub A steht bei
+X -366 / Y 316 / Z -10002, A-Nordwest bei X -850 / Y 316 / Z -10500.

@@ -15,7 +15,7 @@ function linkPage(report) {
     const head=report.hubs[id];
     const pending=links.filter(l=>l.state!=='paired').map(l=>name(l)+' ('+({absent:'Block fehlt',unknown:'unbekannt',ambiguous:'mehrdeutig',unpaired:'offen'}[l.state])+')');
     const ports=head.ports.map(p=>p.port+' → '+(p.peers.map(label).join(', ')||'unbekanntes Ziel')).join('<br>');
-    return '<tr><th scope="row">'+label(id)+'</th><td>'+pos.join(' / ')+'</td><td>'+links.map(name).join(', ')+'</td><td>'+
+    return '<tr><th scope="row">'+label(id)+'</th><td>'+(head.position||pos).join(' / ')+'</td><td>'+links.map(name).join(', ')+'</td><td>'+
       (head.present===null?'Unbekannt':head.present?'Belegt: '+head.ports.length+'/8<br>'+ports:'Hub fehlt')+'</td><td>'+(pending.join(', ')||'Alle gekoppelt')+'</td></tr>';
   }).join('');
   return '<!doctype html><html lang="de"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Erebor · Funkverbindungen</title><link rel="stylesheet" href="/assets/app.css"><main>'+
