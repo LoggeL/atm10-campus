@@ -25,7 +25,7 @@ def context(job):
     position(job['origin'])
     if math.dist(settings['position'], job['origin']) >= 256:
         raise ValueError('Schematic anchor outside cannon range')
-    if settings['replaceMode'] not in (0, 1, 2):
+    if settings['replaceMode'] not in (0, 1, 2) and not (settings['replaceMode'] == 3 and job.get('verified_explicit_air')):
         raise ValueError('Unsafe replacement mode for a sparse rest plan')
     return f'execute in {settings["dimension"]}', pos
 
@@ -98,6 +98,8 @@ def prepare_update(block, job):
     if len(by_slot) != len(items) or any(n not in range(5) for n in by_slot):
         raise ValueError('Unexpected cannon slots')
     existing = by_slot.get(0)
+    if existing and job.get('empty_input_only'):
+        raise Waiting('Eingang bereits belegt.')
     if existing and not (existing.get('id') == 'create:schematic' and existing.get('components', {}).get('create:schematic_owner') == job['owner'] and re.fullmatch(r'campus_[0-9a-f-]{36}\.nbt', existing.get('components', {}).get('create:schematic_file', ''))):
         raise Waiting('Das manuell eingesetzte Schematic zuerst aus dem Kanonen-Eingang nehmen.')
     new_items = [i for i in items if int(i['Slot']) != 0]
@@ -153,7 +155,7 @@ def staging_commands(block, job, payload):
     return commands
 
 
-def prepare_schematic(bridge, binding, desired, encoded, cannon_options, size):
+def prepare_schematic(bridge, binding, desired, encoded, cannon_options, size, *, erebor_kind=None):
     import base64
     import secrets
     fields = {'file', 'sha256', 'owner', 'anchor', 'rotation', 'mirror', 'blueprint', 'version'}
@@ -167,13 +169,12 @@ def prepare_schematic(bridge, binding, desired, encoded, cannon_options, size):
         raise ValueError('Ungültige Bauplanrevision.')
     if not isinstance(size, list) or len(size) != 3 or not all(type(n) is int and 0 < n <= 8192 for n in size):
         raise ValueError('Ungültige Schematic-Größe.')
-    if not isinstance(cannon_options, dict) or set(cannon_options) != {'replace_mode', 'skip_missing', 'replace_block_entities'} or type(cannon_options['replace_mode']) is not int or cannon_options['replace_mode'] not in (0, 1, 2) or any(type(cannon_options[k]) is not bool for k in ('skip_missing', 'replace_block_entities')):
+    if not isinstance(cannon_options, dict) or set(cannon_options) != {'replace_mode', 'skip_missing', 'replace_block_entities'} or type(cannon_options['replace_mode']) is not int or cannon_options['replace_mode'] not in ((3,) if erebor_kind == 'clear' else (0, 1, 2)) or any(type(cannon_options[k]) is not bool for k in ('skip_missing', 'replace_block_entities')):
         raise ValueError('Ungültige Kanonen-Einstellungen.')
     job = {'fileName': desired['file'], 'origin': desired['anchor'], 'size': size, 'owner': desired['owner'],
            'settings': {'position': [binding[k] for k in ('x', 'y', 'z')], 'dimension': binding['dimension'],
                         'replaceMode': cannon_options['replace_mode'], 'skipMissing': cannon_options['skip_missing'],
                         'protectBlockEntities': not cannon_options['replace_block_entities']}}
-    context(job)
     if not -64 <= job['origin'][1] <= 319:
         raise ValueError('Anker außerhalb der Bauhöhe.')
     if not isinstance(encoded, str) or len(encoded) > 23*1024*1024:
@@ -181,6 +182,14 @@ def prepare_schematic(bridge, binding, desired, encoded, cannon_options, size):
     data = base64.b64decode(encoded, validate=True)
     if len(data) > 16*1024*1024 or not data.startswith(b'\x1f\x8b') or hashlib.sha256(data).hexdigest() != desired['sha256']:
         raise ValueError('Schematic-Hash oder Dateiformat stimmt nicht.')
+
+    if erebor_kind:
+        job['empty_input_only'] = True
+        if erebor_kind == 'clear':
+            from campus_erebor import validate_clear
+            validate_clear(data, size)
+            job['verified_explicit_air'] = True
+    context(job)
 
     def read():
         from campus_probe import block_payload

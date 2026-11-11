@@ -59,3 +59,9 @@ Status inspection can read a bounded set of relevant fields when the full native
 ## Correlated RCON observations
 
 Minecraft can mix console-source output between concurrent RCON clients. A bare `Test passed` cannot identify its originating discovery request. Each physical proof therefore reads a fresh random, nonexistent command-storage ID and requires its exact empty-storage reply. This writes no storage or world data. Mixed, missing or stale replies retry once with another ID, then fail closed. Full block inspection, bounded field probes and preparation readback also require the expected block-coordinate prefix. An old transient error no longer hides a subsequent complete alignment proof.
+
+## Erebor fleet
+
+In the Erebor blueprint overview, **Pläne einlegen** enables the versioned queue for the surveyed K01 through K37 stations. **Nachlegen pausieren** suspends replenishment. Players start each loaded plan in Create. The three phases are mountain fill, excavation, then architecture. Mountain tiles use current saved terrain. The architecture list is frozen from published packages when the fleet finishes the fill phase. Only the 37 surveyed stations participate. A different layout/version pauses operation.
+
+Install `controller/campus_erebor.py` beside the bridge modules, copy `src/erebor-fleet/stations.json` there as `erebor-stations.json`, and restart the existing controller service. The signed Erebor routes accept site IDs from that survey. The separate Erebor owner only fills empty inputs. Explicit air mode also requires the complete coordinate-by-coordinate air/structure-void format. Each pending payload, cursor and active job is stored in Campus SQLite. A missing or removed schematic, changed settings, or a finish without a recent matching observation holds the station for inspection.

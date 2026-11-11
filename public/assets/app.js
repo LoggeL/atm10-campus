@@ -1,5 +1,6 @@
-import { createProjectBlueprints } from './project-blueprints.js?v=20261105-cannon-coordinates-1&revision=erebor-architecture-1';
-import { createCannonSites } from './cannon-sites.js?v=20261110-fleet';
+import {setupEreborQueue} from './erebor-queue.js?v=20261105-cannon-coordinates-1&revision=planfolge-1';
+import { createProjectBlueprints } from './project-blueprints.js?v=20261105-cannon-coordinates-1&revision=planfolge-1';
+import { createCannonSites } from './cannon-sites.js?v=20261105-cannon-coordinates-1&fleet=20261110';
 import { esc, fmt } from './format.js?v=20261105-cannon-coordinates-1';
 import { updateCannonPicker } from './cannon-picker.js?v=20261105-cannon-coordinates-1';
 import { createCannonPickerDialog } from './cannon-picker-dialog.js?v=20261105-cannon-coordinates-1';
@@ -41,7 +42,8 @@ const guard = fn => async (...a) => { try { await fn(...a); } catch (e) { toast(
 let me = null, status = null, activeTab = 'overview', polling = null;
 
 let blueprintProject=new URL(location.href).searchParams.get('project')==='erebor'?'erebor':'campus';
-const ereborBlueprints=createProjectBlueprints({api,isSelected:()=>blueprintProject==='erebor',closeDrawer});
+const ereborQueue=setupEreborQueue({api,admin:()=>me?.user?.role==='admin',active:()=>blueprintProject==='erebor'&&activeTab==='overview',notify:toast});
+const ereborBlueprints=createProjectBlueprints({api,isSelected:()=>blueprintProject==='erebor',closeDrawer,loadedStatus:f=>ereborQueue.loadedStatus(f)});
 const cannonSites=createCannonSites({api,element:$('cannonSites'),getProject:()=>blueprintProject,isActive:()=>activeTab==='cannon-coordinates',notify:toast});
 function configureBlueprintProject(){document.getElementById('ereborMode')?.classList.toggle('hide',blueprintProject!=='erebor');
   const erebor=blueprintProject==='erebor';
@@ -49,7 +51,7 @@ function configureBlueprintProject(){document.getElementById('ereborMode')?.clas
   $('blueprintProjectLink').href='/projects?id='+blueprintProject;
   $('viewerLink').href=erebor?'/viewer?project=erebor':'/viewer';
   for(const id of ['filter','blueprintDownloads','overlapPanel','newBp'])$(id).classList.toggle('hide',erebor);
-  for(const id of ['stonePacket','stoneBlueprintCount'])$(id).classList.toggle('hide',!erebor);
+  for(const id of ['stonePacket','stoneBlueprintCount','ereborQueue'])$(id).classList.toggle('hide',!erebor);
 }
 $('blueprintProject').addEventListener('change',guard(async()=>{
   blueprintProject=$('blueprintProject').value==='erebor'?'erebor':'campus';
@@ -88,7 +90,7 @@ document.addEventListener('keydown', e => { if (e.key === 'Escape') document.que
 
 // ---------- overview ----------
 async function loadStatus() {
-  if(blueprintProject==='erebor')return ereborBlueprints.load();
+  if(blueprintProject==='erebor'){void ereborQueue.refresh();return ereborBlueprints.load();}
   const next=await api('/api/status');if(blueprintProject!=='campus')return;status=next;
   const live = status.live, t = status.edition.totals;
   $('liveLine').innerHTML = live

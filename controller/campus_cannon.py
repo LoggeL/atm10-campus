@@ -159,6 +159,9 @@ class CannonBridge:
 
     def handle(self, action, obj):
         with self.lock:
+            if action in ('erebor-inspect', 'erebor-prepare'):
+                from campus_erebor import handle
+                return handle(self, action, obj)
             expected = {'probe':{'binding'}, 'bind':{'station','binding','nonce'}, 'discover':{'station','candidate'}, 'inspect':{'station'}, 'apply':{'station','desired'}, 'prepare':{'station','desired','nbtBase64','options','size'}, 'start':{'station','desired','options'}}
             if action not in expected or not isinstance(obj, dict) or set(obj) != expected[action]:
                 raise ValueError('Ungültiger Bridge-Auftrag.')
@@ -263,11 +266,11 @@ class RequestAuth:
 
 def serve_campus(handler, controller, bridge, auth):
     """Only POSTs here; original controller bearer grants no Campus authority."""
-    if handler.path not in ('/campus/probe','/campus/bind','/campus/discover','/campus/inspect','/campus/apply','/campus/prepare','/campus/start'):
+    if handler.path not in ('/campus/probe','/campus/bind','/campus/discover','/campus/inspect','/campus/apply','/campus/prepare','/campus/start','/campus/erebor-inspect','/campus/erebor-prepare'):
         return handler.reply(404, {'error':'Unbekannter Endpunkt.'})
     try:
         length = int(handler.headers.get('Content-Length','0'))
-        limit = 24*1024*1024 if handler.path == '/campus/prepare' else 4096
+        limit = 24*1024*1024 if handler.path in ('/campus/prepare', '/campus/erebor-prepare') else 4096
         if not 0 < length <= limit or handler.headers.get('Transfer-Encoding'): raise ValueError('Ungültige Länge.')
         handler.connection.settimeout(5)
         raw = handler.rfile.read(length)

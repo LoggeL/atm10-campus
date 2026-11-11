@@ -2,11 +2,13 @@ import { requireActor, HttpError } from './auth.js';
 import { now, tx, logActivity } from './db.js';
 import { validPlacement } from './project-placement.js';
 import { validateMountain } from './project-stone.js';
+import { registerEreborQueue } from './erebor-queue.js';
 import { registerEreborFleet } from './api-erebor-fleet.js';
 
 // Projects describe plans or link existing blueprints; saving has no world side effects.
 export function registerProjectRoutes(app, campus) {
   registerEreborFleet(app,campus);
+  registerEreborQueue(app,campus);
   const db = campus.db;
   const decode = r => ({ id: r.id, version: r.current_version, createdAt: r.created_at, updatedAt: r.updated_at, plan: JSON.parse(r.plan_json) });
   const get = id => db.prepare('SELECT * FROM build_projects WHERE id = ?').get(id);
