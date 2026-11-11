@@ -147,7 +147,7 @@ export function registerEreborQueue(app,campus){
  function status(){
   const c=cfg(),v=project()?.current_version;
   return {enabled:!!c?.enabled,version:c?.version??v,stale:!!c&&c.version!==v,phase:c?(stages[c.phase]||'Fertig'):'Steinfüllung',stations:db.prepare('SELECT site,state FROM erebor_queue_sites ORDER BY site').all().map(r=>{
-   const s=JSON.parse(r.state),j=s.job;return {site:r.site,status:s.status,inserted:!!s.inserted,file:j?.desired.blueprint||null,anchor:j?.desired.anchor||null,blocks:j?.blocks??null,completed:s.completed,checked:s.checked||null};
+   const s=JSON.parse(r.state),j=s.job;return {site:r.site,status:s.status,inserted:!!s.inserted,sha256:j?.desired.sha256||null,file:j?.desired.blueprint||null,anchor:j?.desired.anchor||null,blocks:j?.blocks??null,completed:s.completed,checked:s.checked||null};
   })};
  }
  app.get(base,async(req,reply)=>{requireActor(req,'read');return reply.header('Cache-Control','private, no-store').send(status());});

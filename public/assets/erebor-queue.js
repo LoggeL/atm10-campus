@@ -10,7 +10,7 @@ export function setupEreborQueue({api,admin,active,notify}){
   label.textContent=q.stale?'Projektversion geändert. Zuordnung prüfen.':q.enabled?
    q.phase+' · '+ready+' von '+q.stations.length+' eingelegt · Automatisches Nachlegen aktiv':
    q.stations.length?'Automatisches Nachlegen pausiert':'Planfolge noch nicht aktiviert.';
-  prepare.hidden=!admin();pause.hidden=!admin()||!q.enabled;prepare.disabled=pause.disabled=busy||q.stale;
+  prepare.classList.toggle('hide',!admin());pause.classList.toggle('hide',!admin()||!q.enabled);prepare.disabled=pause.disabled=busy||q.stale;
   body.innerHTML=q.stations.map(r=>'<tr><td>'+esc(r.site)+'</td><td>'+esc(r.status)+'</td><td class="mono">'+esc(r.file||'')+'</td><td>'+ (r.blocks==null?'':fmt(r.blocks))+'</td><td>'+fmt(r.completed)+'</td><td>'+ (r.checked?esc(new Date(r.checked).toLocaleTimeString('de-DE')):'')+'</td></tr>').join('');
  }
  async function refresh(){
@@ -26,8 +26,9 @@ export function setupEreborQueue({api,admin,active,notify}){
  }
  prepare.onclick=()=>act('prepare');pause.onclick=()=>act('pause');
  setInterval(refresh,10000);
- return {refresh,loadedStatus(file){
+ return {refresh,loadedStatus(file,hash){
   const station=last?.stations.find(r=>r.file+'.nbt'===file);
-  return station?.inserted&&Date.now()-Date.parse(station.checked)<90000?station.status:null;
+  if(!station?.inserted||Date.now()-Date.parse(station.checked)>=90000)return null;
+  return station.sha256===hash?station.status:'Aktueller Restplan eingelegt';
  }};
 }

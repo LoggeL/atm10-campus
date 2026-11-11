@@ -43,7 +43,7 @@ let me = null, status = null, activeTab = 'overview', polling = null;
 
 let blueprintProject=new URL(location.href).searchParams.get('project')==='erebor'?'erebor':'campus';
 const ereborQueue=setupEreborQueue({api,admin:()=>me?.user?.role==='admin',active:()=>blueprintProject==='erebor'&&activeTab==='overview',notify:toast});
-const ereborBlueprints=createProjectBlueprints({api,isSelected:()=>blueprintProject==='erebor',closeDrawer,loadedStatus:f=>ereborQueue.loadedStatus(f)});
+const ereborBlueprints=createProjectBlueprints({api,isSelected:()=>blueprintProject==='erebor',closeDrawer,loadedStatus:(f,h)=>ereborQueue.loadedStatus(f,h)});
 const cannonSites=createCannonSites({api,element:$('cannonSites'),getProject:()=>blueprintProject,isActive:()=>activeTab==='cannon-coordinates',notify:toast});
 function configureBlueprintProject(){document.getElementById('ereborMode')?.classList.toggle('hide',blueprintProject!=='erebor');
   const erebor=blueprintProject==='erebor';
