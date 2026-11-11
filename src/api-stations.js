@@ -8,6 +8,7 @@ import { now, logActivity, tx } from './db.js';
 import { normalizeStockItems, saveStock, latestStock } from './me-stock.js';
 import { cannonRange, cannonTarget, reachableCannons } from './cannon-range.js';
 import { createCannonBlueprints } from './cannon-blueprints.js';
+import { isEreborStation } from './erebor-feeder.js';
 import { cannonReset, foreignInput } from './alignment.js';
 
 const ccDir = join(dirname(fileURLToPath(import.meta.url)), '..', 'public', 'cc');
@@ -135,6 +136,15 @@ export function registerStationRoutes(app, campus, mat, alignment, schematics) {
   };
 
   const cannonView = async (row, snap) => {
+    if(isEreborStation(row.name)){
+      const live=campus.ereborFeeder.view(row.name),status=JSON.parse(row.status_json||'null'),online=!!row.last_seen_at&&Date.now()-Date.parse(row.last_seen_at)<ONLINE_MS;
+      const message=live?.message||(live?null:'Wartet auf die nächste Live-Prüfung der Erebor-Station.');
+      return {name:row.name,assignment:live?.assignment??row.assignment,online,createdAt:row.created_at,updatedAt:row.updated_at,lastSeenAt:row.last_seen_at,
+        options:normalizeOptions(JSON.parse(row.options_json||'{}')),state:online?(live?.state||'alignment'):'offline',message,blueprint:live?.blueprint||null,
+        totals:live?.totals||null,done:false,items:live?.items||[],status:status&&{...status,stale:status.assignment!==live?.assignment},
+        alignment:{...(live?.alignment||{enabled:true,state:'blocked'}),binding:campus.ereborStationBinding(row.name),message},
+        range:null,restNbt:null,schematic:{settings:{enabled:false},job:null},blueprintChoices:{items:[],message:'Den Bauplan im Projekt Erebor auswählen.'}};
+    }
     const planOf = () => { try { return planFor(row, snap); } catch (e) { return { state: 'error', message: e.message }; } };
     let plan = planOf();
     const status = JSON.parse(row.status_json || 'null');
@@ -364,7 +374,7 @@ export function registerStationRoutes(app, campus, mat, alignment, schematics) {
     requireActor(req, 'station');
     const row = ensureRow(req.params.name);
     seen(row.name);
-    if (/^erebor-K(?:0[1-9]|[12][0-9]|3[0-7])$/i.test(row.name)) return campus.ereborFeeder(row,{options:normalizeOptions(JSON.parse(row.options_json || '{}')),script:scriptVersion(),intervals:INTERVALS});
+    if (isEreborStation(row.name)) return campus.ereborFeeder(row,{options:normalizeOptions(JSON.parse(row.options_json || '{}')),script:scriptVersion(),intervals:INTERVALS});
     return alignment.gate(row.name, planFor(row, liveSnap()));
   });
 

@@ -46,6 +46,10 @@ export function registerEreborQueue(app,campus){
  const project=()=>db.prepare("SELECT current_version,plan_json FROM build_projects WHERE id='erebor'").get();
  const read=site=>JSON.parse(db.prepare('SELECT state FROM erebor_queue_sites WHERE site=?').get(site).state);
  const persist=(site,s)=>db.prepare('UPDATE erebor_queue_sites SET state=? WHERE site=?').run(JSON.stringify(s),site);
+ campus.ereborStationBinding=name=>{
+  const [x,y,z]=layout.sites.find(s=>s.site===name.slice(-3).toUpperCase()).cannon;
+  return {x,y,z,dimension:'minecraft:overworld',owner:'Erebor'};
+ };
  campus.ereborFeeder=ereborFeeder(db,request,layout.version);
  const owner=randomUUID();let worker=null,working=null,closed=false,queued=false;
  function stopWorker(){if(worker){void worker.terminate();worker=null;}}
@@ -100,7 +104,7 @@ export function registerEreborQueue(app,campus){
   const choice=choices.next(c.version,site);
   if(!choice&&(s.exhausted||!c.enabled)&&!s.job?.selection)return;
   const data={site,version:c.version};
-  const {observed:o}=await request('erebor-inspect',data);
+  const o=(!choice&&s.job?.loaded&&campus.ereborFeeder.sample(site))||(await request('erebor-inspect',data)).observed;
   if(!current(c.version))return;
   const old=s.job;
   const aligned=old&&!verifyAlignment(old.desired,o,old.desired)&&same(o.components?.['create:schematic_bounds'],old.size);
