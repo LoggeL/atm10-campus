@@ -29,6 +29,6 @@ function next({site,cursor,phase,architecture}) {
  if(!file)return {next:cursor+1,exhausted:false};
  const bytes=storedZipEntry(out.bytes,file.fileName);
  if(!bytes||createHash('sha256').update(bytes).digest('hex')!==file.sha256)throw Error('Architekturdatei unvollständig.');
- return {next:cursor+1,file:file.fileName,size:file.size,origin:file.origin,blocks:file.blocks,bytes};
+ return {next:cursor+1,file:file.fileName,size:file.size,origin:file.origin,blocks:file.blocks,materials:file.materials,bytes};
 }
 parentPort.on('message',req=>{try{parentPort.postMessage({result:next(req)});}catch(e){parentPort.postMessage({error:e.message});}});

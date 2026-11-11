@@ -364,6 +364,7 @@ export function registerStationRoutes(app, campus, mat, alignment, schematics) {
     requireActor(req, 'station');
     const row = ensureRow(req.params.name);
     seen(row.name);
+    if (/^erebor-K(?:0[1-9]|[12][0-9]|3[0-7])$/i.test(row.name)) return campus.ereborFeeder(row,{options:normalizeOptions(JSON.parse(row.options_json || '{}')),script:scriptVersion(),intervals:INTERVALS});
     return alignment.gate(row.name, planFor(row, liveSnap()));
   });
 

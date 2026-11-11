@@ -1,11 +1,11 @@
 import {esc,fmt} from './format.js?v=20261105-cannon-coordinates-1';
 
-export function setupEreborQueue({api,admin,active,notify}){
+export function setupEreborQueue({api,admin,active,notify,onStatus}){
  const root=document.getElementById('ereborQueue'),label=root.querySelector('[data-summary]'),body=root.querySelector('tbody');
  const prepare=root.querySelector('[data-prepare]'),pause=root.querySelector('[data-pause]');
  let version=null,busy=false,loading=null,last=null;
  function render(q){
-  last=q;version=q.version;
+  last=q;version=q.version;onStatus?.();
   const ready=q.stations.filter(r=>r.inserted&&Date.now()-Date.parse(r.checked)<90000).length;
   label.textContent=q.stale?'Projektversion geändert. Zuordnung prüfen.':q.enabled?
    q.phase+' · '+ready+' von '+q.stations.length+' eingelegt · Automatisches Nachlegen aktiv':
@@ -26,7 +26,12 @@ export function setupEreborQueue({api,admin,active,notify}){
  }
  prepare.onclick=()=>act('prepare');pause.onclick=()=>act('pause');
  setInterval(refresh,10000);
- return {refresh,loadedStatus(file,hash){
+ return {refresh,async loadPlan(b,activeVersion){
+  const receipt=await api('/api/projects/erebor/planfolge/laden',{method:'POST',body:{version:activeVersion,sourceVersion:b.version,part:b.part,revision:b.revision,site:b.cannon,file:b.fileName,sha256:b.sha256}});
+  await refresh();return receipt;
+ },loadedStatus(file,hash){
+  const waiting=last?.waiting?.find(r=>r.name+'.nbt'===file&&r.sha===hash);
+  if(waiting)return 'Für '+waiting.site+' vorgemerkt';
   const station=last?.stations.find(r=>r.file+'.nbt'===file);
   if(!station?.inserted||Date.now()-Date.parse(station.checked)>=90000)return null;
   return station.sha256===hash?station.status:'Aktueller Restplan eingelegt';

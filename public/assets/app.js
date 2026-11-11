@@ -1,5 +1,5 @@
-import {setupEreborQueue} from './erebor-queue.js?v=20261105-cannon-coordinates-1&revision=planfolge-2';
-import { createProjectBlueprints } from './project-blueprints.js?v=20261105-cannon-coordinates-1&revision=planfolge-2';
+import {setupEreborQueue} from './erebor-queue.js?v=20261105-cannon-coordinates-1&revision=einzelplan-1';
+import { createProjectBlueprints } from './project-blueprints.js?v=20261105-cannon-coordinates-1&revision=einzelplan-1';
 import { createCannonSites } from './cannon-sites.js?v=20261105-cannon-coordinates-1&fleet=20261110';
 import { esc, fmt } from './format.js?v=20261105-cannon-coordinates-1';
 import { updateCannonPicker } from './cannon-picker.js?v=20261105-cannon-coordinates-1';
@@ -42,8 +42,8 @@ const guard = fn => async (...a) => { try { await fn(...a); } catch (e) { toast(
 let me = null, status = null, activeTab = 'overview', polling = null;
 
 let blueprintProject=new URL(location.href).searchParams.get('project')==='erebor'?'erebor':'campus';
-const ereborQueue=setupEreborQueue({api,admin:()=>me?.user?.role==='admin',active:()=>blueprintProject==='erebor'&&activeTab==='overview',notify:toast});
-const ereborBlueprints=createProjectBlueprints({api,isSelected:()=>blueprintProject==='erebor',closeDrawer,loadedStatus:(f,h)=>ereborQueue.loadedStatus(f,h)});
+const ereborQueue=setupEreborQueue({api,admin:()=>me?.user?.role==='admin',active:()=>blueprintProject==='erebor'&&['overview','coordinates'].includes(activeTab),notify:toast,onStatus:()=>ereborBlueprints.updateLoadStates()});
+const ereborBlueprints=createProjectBlueprints({api,isSelected:()=>blueprintProject==='erebor',closeDrawer,admin:()=>me?.user?.role==='admin',loadPlan:(b,v)=>ereborQueue.loadPlan(b,v),notify:toast,loadedStatus:(f,h)=>ereborQueue.loadedStatus(f,h)});
 const cannonSites=createCannonSites({api,element:$('cannonSites'),getProject:()=>blueprintProject,isActive:()=>activeTab==='cannon-coordinates',notify:toast});
 function configureBlueprintProject(){document.getElementById('ereborMode')?.classList.toggle('hide',blueprintProject!=='erebor');
   const erebor=blueprintProject==='erebor';

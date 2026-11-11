@@ -155,7 +155,7 @@ def staging_commands(block, job, payload):
     return commands
 
 
-def prepare_schematic(bridge, binding, desired, encoded, cannon_options, size, *, erebor_kind=None):
+def prepare_schematic(bridge, binding, desired, encoded, cannon_options, size, *, erebor_kind=None, previous=None):
     import base64
     import secrets
     fields = {'file', 'sha256', 'owner', 'anchor', 'rotation', 'mirror', 'blueprint', 'version'}
@@ -205,23 +205,31 @@ def prepare_schematic(bridge, binding, desired, encoded, cannon_options, size, *
         raise ValueError('Unsichere Schematic-Datei.')
     if installed(block, job) and bridge.file_hash(binding['owner'], desired['file']) == desired['sha256']:
         return {'binding': binding, 'observed': bridge.inspect(binding), 'applied': True}
-    command, payload = prepare_update(block, job)
-    stages = staging_commands(block, job, payload)
+    replacing = previous is not None and erebor_kind and any(int(i['Slot'])==0 for i in block['Inventory']['Items'])
+    if not replacing:
+        command, payload = prepare_update(block, job)
     directory.mkdir(parents=True, exist_ok=True)
-    if target.exists() and hashlib.sha256(target.read_bytes()).hexdigest() != desired['sha256']:
-        raise ValueError('Unveränderliche Schematic-Datei hat einen anderen Hash.')
-    temp = directory / ('.campus-' + secrets.token_hex(16) + '.tmp')
-    try:
-        with temp.open('xb') as f:
-            f.write(data); f.flush(); os.fsync(f.fileno())
-        temp.replace(target)
-    finally:
-        temp.unlink(missing_ok=True)
+    if target.exists():
+        if hashlib.sha256(target.read_bytes()).hexdigest() != desired['sha256']:
+            raise ValueError('Unveränderliche Schematic-Datei hat einen anderen Hash.')
+    else:
+        temp = directory / ('.campus-' + secrets.token_hex(16) + '.tmp')
+        try:
+            with temp.open('xb') as f:
+                f.write(data); f.flush(); os.fsync(f.fileno())
+            os.link(temp,target)
+        finally:
+            temp.unlink(missing_ok=True)
     backups = bridge.base / 'discord/campus-schematic-backups'
     backups.mkdir(parents=True, exist_ok=True)
     backup = backups / (desired['file'] + '.snbt')
     if not backup.exists():
         backup.write_text(dumps(block))
+    if replacing:
+        from campus_erebor import release_unstarted
+        block = release_unstarted(bridge,binding,previous,block,read)
+        command, payload = prepare_update(block, job)
+    stages = staging_commands(block, job, payload)
     try:
         for stage in stages:
             bridge.run(stage)
