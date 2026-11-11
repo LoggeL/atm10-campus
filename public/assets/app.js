@@ -1,5 +1,5 @@
-import {setupEreborQueue} from './erebor-queue.js?v=20261105-cannon-coordinates-1&revision=planfolge-1';
-import { createProjectBlueprints } from './project-blueprints.js?v=20261105-cannon-coordinates-1&revision=planfolge-1';
+import {setupEreborQueue} from './erebor-queue.js?v=20261105-cannon-coordinates-1&revision=planfolge-2';
+import { createProjectBlueprints } from './project-blueprints.js?v=20261105-cannon-coordinates-1&revision=planfolge-2';
 import { createCannonSites } from './cannon-sites.js?v=20261105-cannon-coordinates-1&fleet=20261110';
 import { esc, fmt } from './format.js?v=20261105-cannon-coordinates-1';
 import { updateCannonPicker } from './cannon-picker.js?v=20261105-cannon-coordinates-1';
