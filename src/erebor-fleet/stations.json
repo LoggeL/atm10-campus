@@ -914,24 +914,24 @@
       "chest": [
         36,
         144,
-        -9761
+        -9763
       ],
       "inventoryBlock": "minecraft:chest",
       "computer": [
         36,
         144,
-        -9760
+        -9764
       ],
       "computerBlock": "computercraft:computer_advanced",
       "bridge": [
         36,
         144,
-        -9759
+        -9765
       ],
       "connector": [
         36,
         144,
-        -9757
+        -9767
       ],
       "hub": "B2"
     },
@@ -950,24 +950,24 @@
       "chest": [
         420,
         48,
-        -9729
+        -9731
       ],
       "inventoryBlock": "minecraft:chest",
       "computer": [
         420,
         48,
-        -9728
+        -9732
       ],
       "computerBlock": "computercraft:computer_advanced",
       "bridge": [
         420,
         48,
-        -9727
+        -9733
       ],
       "connector": [
         420,
         48,
-        -9724
+        -9735
       ],
       "hub": "B2"
     },
@@ -1056,26 +1056,26 @@
         -9570
       ],
       "chest": [
-        -188,
+        -189,
         96,
-        -9569
+        -9570
       ],
       "inventoryBlock": "minecraft:chest",
       "computer": [
-        -188,
+        -190,
         96,
-        -9568
+        -9570
       ],
       "computerBlock": "computercraft:computer_advanced",
       "bridge": [
-        -188,
+        -191,
         96,
-        -9567
+        -9570
       ],
       "connector": [
-        -188,
+        -192,
         96,
-        -9565
+        -9571
       ],
       "hub": "B2"
     },
@@ -1344,26 +1344,26 @@
         -10040
       ],
       "chest": [
-        489,
+        491,
         -32,
         -10040
       ],
       "inventoryBlock": "minecraft:chest",
       "computer": [
-        488,
+        492,
         -32,
         -10040
       ],
       "computerBlock": "computercraft:computer_advanced",
       "bridge": [
-        487,
+        493,
         -32,
         -10040
       ],
       "connector": [
-        485,
+        493,
         -32,
-        -10040
+        -10038
       ],
       "hub": "A2"
     }
