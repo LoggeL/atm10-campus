@@ -6,7 +6,7 @@ export function setupEreborQueue({api,admin,active,notify}){
  let version=null,busy=false,loading=null,last=null;
  function render(q){
   last=q;version=q.version;
-  const ready=q.stations.filter(r=>r.status==='Eingelegt').length;
+  const ready=q.stations.filter(r=>r.inserted&&Date.now()-Date.parse(r.checked)<90000).length;
   label.textContent=q.stale?'Projektversion geändert. Zuordnung prüfen.':q.enabled?
    q.phase+' · '+ready+' von '+q.stations.length+' eingelegt · Automatisches Nachlegen aktiv':
    q.stations.length?'Automatisches Nachlegen pausiert':'Planfolge noch nicht aktiviert.';
@@ -28,6 +28,6 @@ export function setupEreborQueue({api,admin,active,notify}){
  setInterval(refresh,10000);
  return {refresh,loadedStatus(file){
   const station=last?.stations.find(r=>r.file+'.nbt'===file);
-  return station&&['Eingelegt','Baut'].includes(station.status)&&Date.now()-Date.parse(station.checked)<90000?station.status:null;
+  return station?.inserted&&Date.now()-Date.parse(station.checked)<90000?station.status:null;
  }};
 }

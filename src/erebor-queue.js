@@ -69,12 +69,17 @@ export function registerEreborQueue(app,campus){
  const current=v=>!closed&&db.prepare('SELECT 1 FROM erebor_queue_config q JOIN build_projects p ON p.id=\'erebor\' WHERE q.id=1 AND q.enabled=1 AND q.version=p.current_version AND q.version=? AND q.lease=? AND q.expires>?').get(v,owner,Date.now());
  function observe(site,s,o){
   const j=s.job;
+  s.inserted=false;
   if(!verifyAlignment(j.desired,o,j.desired)&&same(o.components['create:schematic_bounds'],j.size)){
    if(o.status==='skipping'||o.amountPlaced<(j.placed||0))j.tainted=true;
-   j.placed=o.amountPlaced;j.seen=o.at;j.loaded=true;
+   j.placed=o.amountPlaced;j.seen=o.at;j.loaded=true;s.inserted=true;
    j.baseline=o.outputItem==='create:empty_schematic'||o.outputCount===0?o.outputCount:null;
    db.prepare('UPDATE erebor_queue_sites SET payload=NULL WHERE site=? AND payload IS NOT NULL').run(site);
-   s.status=o.state==='RUNNING'?'Baut':o.state==='PAUSED'&&o.status!=='ready'?'Pausiert: '+o.status:'Eingelegt';return true;
+   s.status='Eingelegt';
+   if(o.state==='RUNNING')s.status='Baut';
+   else if(o.status==='noGunpowder')s.status='Eingelegt · Schießpulver fehlt';
+   else if(o.state==='PAUSED'&&o.status!=='ready')s.status='Pausiert: '+o.status;
+   return true;
   }
   if(confirmedFinish(o,j)){
    s.cursor=j.next;s.completed++;s.job=null;s.status='Fertig, nächster Plan folgt';return true;
@@ -119,7 +124,7 @@ export function registerEreborQueue(app,campus){
     if(!current(c.version))return;
     db.prepare('UPDATE erebor_queue_config SET expires=? WHERE id=1 AND lease=?').run(Date.now()+120000,owner);
     const s=read(site);if(s.exhausted)continue;
-    try{await station(site,s,c,p,archive);}catch(e){s.status=e.message;}
+    try{await station(site,s,c,p,archive);}catch(e){s.status=e.message;s.inserted=false;}
     if(current(c.version)){s.checked=new Date().toISOString();persist(site,s);}
    }
    if(current(c.version)&&sites.every(site=>read(site).exhausted)){
@@ -142,7 +147,7 @@ export function registerEreborQueue(app,campus){
  function status(){
   const c=cfg(),v=project()?.current_version;
   return {enabled:!!c?.enabled,version:c?.version??v,stale:!!c&&c.version!==v,phase:c?(stages[c.phase]||'Fertig'):'Steinfüllung',stations:db.prepare('SELECT site,state FROM erebor_queue_sites ORDER BY site').all().map(r=>{
-   const s=JSON.parse(r.state),j=s.job;return {site:r.site,status:s.status,file:j?.desired.blueprint||null,anchor:j?.desired.anchor||null,blocks:j?.blocks??null,completed:s.completed,checked:s.checked||null};
+   const s=JSON.parse(r.state),j=s.job;return {site:r.site,status:s.status,inserted:!!s.inserted,file:j?.desired.blueprint||null,anchor:j?.desired.anchor||null,blocks:j?.blocks??null,completed:s.completed,checked:s.checked||null};
   })};
  }
  app.get(base,async(req,reply)=>{requireActor(req,'read');return reply.header('Cache-Control','private, no-store').send(status());});

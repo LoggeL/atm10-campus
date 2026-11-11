@@ -66,7 +66,7 @@ def installed(block, job):
                for i in block.get('Inventory', {}).get('Items', [])) and same(block.get('Options'), options(job))
 
 
-def freshly_prepared(state, status, placed, remaining, flying, printer, origin):
+def freshly_prepared(state, status, placed, remaining, flying, printer, origin, *, allow_unfuelled=False):
     """Accept Create's automatic checklist initialization, never printing progress."""
     def number(value):
         return value.value if isinstance(value, Number) else value
@@ -79,7 +79,7 @@ def freshly_prepared(state, status, placed, remaining, flying, printer, origin):
         return False
     if state == 'STOPPED':
         return remaining == 0 and 'Anchor' not in printer and 'CurrentPos' not in printer
-    return (state == 'PAUSED' and status == 'ready'
+    return (state == 'PAUSED' and (status == 'ready' or (allow_unfuelled and status == 'noGunpowder'))
             and coordinates(printer.get('Anchor'), origin) and coordinates(printer.get('CurrentPos'), [-1, 0, 0]))
 
 
@@ -230,14 +230,14 @@ def prepare_schematic(bridge, binding, desired, encoded, cannon_options, size, *
         bridge.run('data remove storage campus:schematic_transfer ' + storage_key(job))
     result = read()
     if not installed(result, job) or not freshly_prepared(result.get('State'), result.get('Status'), result.get('AmountPlaced'), result.get('AmountToPlace'),
-            len(result['FlyingBlocks']) if isinstance(result.get('FlyingBlocks'), list) else None, result.get('Printer'), job['origin']):
+            len(result['FlyingBlocks']) if isinstance(result.get('FlyingBlocks'), list) else None, result.get('Printer'), job['origin'], allow_unfuelled=bool(erebor_kind)):
         raise ValueError('Kanone während Vorbereitung geändert. Keine Freigabe; bewusst stoppen und erneut versuchen.')
     observed = bridge.inspect(binding)
     if observed['fileHash'] != desired['sha256']:
         raise ValueError('Schematic-Dateihash nach Vorbereitung abweichend.')
     if (observed.get('item') != 'create:schematic' or not same(observed.get('components'), components(job)) or not same(observed.get('options'), options(job))
             or not freshly_prepared(observed.get('state'), observed.get('status'), observed.get('amountPlaced'), observed.get('amountToPlace'),
-                                    observed.get('flyingBlocks'), observed.get('printer'), job['origin'])):
+                                    observed.get('flyingBlocks'), observed.get('printer'), job['origin'], allow_unfuelled=bool(erebor_kind))):
         raise ValueError('Kanone während Readback geändert. Keine Freigabe; nativen Zustand prüfen.')
     return {'binding': binding, 'observed': observed, 'applied': True}
 
