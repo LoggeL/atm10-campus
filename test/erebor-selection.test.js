@@ -16,7 +16,13 @@ const empty=()=>({inputEmpty:true,state:'STOPPED',status:'idle',amountPlaced:0,a
 test('manual plan button changes an unstarted job and queues behind a running job with auto refill paused',async()=>{
  const dir=mkdtempSync(join(tmpdir(),'erebor-pick-')),commands=[];
  let native=empty();
+ let starts=0;
  const bridge=async(action,args)=>{
+  if(action==='erebor-live')return {at:Date.now(),version:12,stations:{K01:{upload:native.components?.['create:schematic_file'],state:native.state,status:native.status,placed:native.amountPlaced,total:native.amountToPlace,fuel:400,chunks:[],target:null}}};
+  if(action==='erebor-start'){
+   assert.equal(args.desired.file,native.components['create:schematic_file']);assert.equal(args.size.length,3);starts++;
+   native={...native,state:'RUNNING',status:'placing'};return {started:true,observed:{...native,at:Date.now()/1000}};
+  }
   assert.equal(args.site,'K01');if(action==='erebor-prepare'){
    const d=args.desired;
    if(!native.inputEmpty){assert.ok(unstarted({desired:{anchor:native.printer.Anchor}},native));assert.equal(args.previous.file,native.components['create:schematic_file']);}
@@ -53,8 +59,16 @@ test('manual plan button changes an unstarted job and queues behind a running jo
   assert.equal(rejected.options.gunpowder,0);assert.equal(rejected.options.paused,true);native.fileHash=currentHash;
   assert.equal((await pick(0)).json().status,'loaded');assert.equal(commands.length,1);
   assert.equal((await pick(1)).statusCode,202);await wait(()=>commands.length===2);assert.equal(commands[1].previous.file,commands[0].desired.file);
-  native={...native,state:'RUNNING',status:'placing',amountPlaced:1,amountToPlace:2};
-  const a=await pick(2),b=await pick(2);assert.equal(a.json().id,b.json().id);assert.equal(commands.length,2);
+  const current=(await app.inject({url:base,headers})).json().stations.find(x=>x.site==='K01');
+  assert.equal(current.live.state,'PAUSED');
+  const start=(body,h=headers)=>app.inject({url:base+'/start',method:'POST',headers:h,payload:body});
+  const identity={version:12,site:'K01',upload:current.upload,file:current.file,sha256:current.sha256};
+  assert.equal((await start(identity,{})).statusCode,401);
+  assert.equal((await start(identity,{...headers,origin:'https://other.invalid'})).statusCode,403);
+  assert.equal((await start({...identity,upload:commands[0].desired.file})).statusCode,409);assert.equal(starts,0);
+  native.status='ready';assert.equal((await start(identity)).json().started,true);assert.equal(starts,1);
+  native={...native,amountPlaced:1,amountToPlace:2};
+  const a=await pick(2),b=await pick(2);assert.equal(a.json().id,b.json().id);assert.equal(commands.length,2);assert.equal((await start(identity)).statusCode,409);
   native={...empty(),status:'finished',outputItem:'create:empty_schematic',outputCount:1};
   await pick(2);await wait(()=>commands.length===3);assert.equal(commands[2].previous,undefined);assert.equal(commands[2].desired.blueprint,files[2].fileName.slice(0,-4));
   assert.equal((await app.inject({url:base,headers})).json().enabled,false);

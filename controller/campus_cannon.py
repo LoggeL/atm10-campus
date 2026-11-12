@@ -159,7 +159,7 @@ class CannonBridge:
 
     def handle(self, action, obj):
         with self.lock:
-            if action in ('erebor-inspect', 'erebor-prepare', 'erebor-supply'):
+            if action in ('erebor-inspect', 'erebor-prepare', 'erebor-supply', 'erebor-start', 'erebor-live'):
                 from campus_erebor import handle
                 return handle(self, action, obj)
             expected = {'probe':{'binding'}, 'bind':{'station','binding','nonce'}, 'discover':{'station','candidate'}, 'inspect':{'station'}, 'apply':{'station','desired'}, 'prepare':{'station','desired','nbtBase64','options','size'}, 'start':{'station','desired','options'}}
@@ -266,7 +266,7 @@ class RequestAuth:
 
 def serve_campus(handler, controller, bridge, auth):
     """Only POSTs here; original controller bearer grants no Campus authority."""
-    if handler.path not in ('/campus/probe','/campus/bind','/campus/discover','/campus/inspect','/campus/apply','/campus/prepare','/campus/start','/campus/erebor-inspect','/campus/erebor-prepare','/campus/erebor-supply'):
+    if handler.path not in ('/campus/probe','/campus/bind','/campus/discover','/campus/inspect','/campus/apply','/campus/prepare','/campus/start','/campus/erebor-inspect','/campus/erebor-prepare','/campus/erebor-supply','/campus/erebor-start','/campus/erebor-live'):
         return handler.reply(404, {'error':'Unbekannter Endpunkt.'})
     try:
         length = int(handler.headers.get('Content-Length','0'))

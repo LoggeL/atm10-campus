@@ -5,7 +5,7 @@ import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {writeWorld} from './helpers.js';
 import {buildServer} from '../src/server.js';
-import {confirmedFinish} from '../src/erebor-queue.js';
+import {confirmedFinish,recordedFinish} from '../src/erebor-queue.js';
 
 const layout=JSON.parse(readFileSync(new URL('../src/erebor-fleet/stations.json',import.meta.url)));
 const options={replace_mode:0,skip_missing:false,replace_block_entities:false};
@@ -17,6 +17,14 @@ test('a removed plan, missed observation, foreign output or flights do not advan
  for(const change of [{status:'idle'},{inputEmpty:false},{outputCount:2},{flyingBlocks:1},{options:{...options,skip_missing:true}}])assert.equal(confirmedFinish({...stopped,...change},job,1001),false);
  assert.equal(confirmedFinish(stopped,job,2000),false);
  assert.equal(confirmedFinish(stopped,{...job,tainted:true},1001),false);
+});
+test('a delayed poll accepts only the witnessed finish of the very same input and output increment',()=>{
+ const job={desired:{file:'exact',options},loaded:true,seen:1000,baseline:0};
+ const r={file:'exact',before:1010000,at:1010500,oldCount:0,newCount:1};
+ assert.equal(confirmedFinish(stopped,job,1200),false);
+ assert.equal(recordedFinish(stopped,job,r,1200000),true);
+ for(const wrong of [{file:'other'},{oldCount:1},{newCount:2},{before:900000}])assert.equal(recordedFinish(stopped,job,{...r,...wrong},1200000),false);
+ assert.equal(recordedFinish(stopped,{...job,tainted:true},r,1200000),false);
 });
 test('the Campus action arms the persisted fleet and advances an observed finish exactly once',async()=>{
  const dir=mkdtempSync(join(tmpdir(),'erebor-queue-')),calls=[];
@@ -39,7 +47,7 @@ test('the Campus action arms the persisted fleet and advances an observed finish
   for(let i=0;i<50&&calls.length<37;i++)await new Promise(r=>setTimeout(r,10));
   const status=(await app.inject({url,headers})).json();assert.equal(status.enabled,true);assert.equal(status.stations.length,37);
   assert.equal(status.stations[0].completed,1);assert.equal(status.stations[0].file,null);assert.equal(status.stations[1].status,'Kanone belegt');
-  assert.equal((await post('pause')).json().enabled,false);assert.ok(calls.every(a=>a==='erebor-inspect'));
+  assert.equal((await post('pause')).json().enabled,false);assert.ok(calls.every(a=>['erebor-inspect','erebor-live'].includes(a)));
  }finally{await app.close();db.close();rmSync(dir,{recursive:true,force:true});}
 });
 test('two real exported layers enter an empty slot in order; manual removal holds the second plan',async()=>{

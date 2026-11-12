@@ -139,3 +139,9 @@ R3 repairs the serialized R2 expansion source (source zones previously aliased t
 The symmetry regression compares every architectural voxel pair (including air and stair orientation); separate final-scene tests check every hall stair tread and three blocks of standing headroom after all routes. Immutable R3 packages are prepared through the API with dryRun/baseVersion and checked against the saved world. R2 downloads stay immutable; R3 publication does not place or demolish blocks in Minecraft.
 
 R4 also rounds expanded stair-core coordinates around each shaft centre, so counter-running flights have equal widths and mirrored tread depths instead of the 5/4-block rounding mismatch. Full final-scene clearance is tested on every core tread after routing. Immutable R3 files remain historical downloads; the current list selects R4.
+
+### Erebor in Campus bedienen
+
+Unter `/app?project=erebor` zuerst den Kanonenplatz, dann den Abschnitt auswählen. **Bauplan laden** wechselt einen noch nicht gestarteten Plan oder merkt einen Abschnitt vor. **Kanone starten** startet ausschließlich den bestätigten eingelegten Plan dieser Station. Aktive Stationen zeigen Baufortschritt, Treibstoff und den Zielchunk. Das Nachlegen startet den nächsten Bau nicht.
+
+Auf der Homebox gehört `controller/kubejs/erebor-target-chunks.js` nach `data/kubejs/server_scripts/campus/`, die zur Bridge passende `src/erebor-fleet/stations.json` nach `data/kubejs/config/erebor-stations.json`. Mit `kubejs reload server-scripts` über die Minecraft-Konsole übernehmen. Das Skript lädt die Ziele laufender bzw. auf einen Zielchunk wartender Create-Kanonen sowie noch fliegender Blöcke. Die eigenen Minecraft-Tickets laufen ohne Erneuerung nach 200 Spielticks aus. Die Bridge liest den lokalen Livebericht; zum Start prüft sie den eingelegten Plan erneut direkt am Block.

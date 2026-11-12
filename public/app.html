@@ -1,6 +1,6 @@
 <!doctype html>
 <html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>ATM10 Campus</title><link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><rect x='2' y='2' width='12' height='12' rx='3' fill='%2373d8e5'/></svg>"><link rel="stylesheet" href="/assets/app.css?v=20261105-cannon-coordinates-1&amp;revision=site-status"><link rel="stylesheet" href="/assets/blueprint-preview.css?v=20261105-cannon-coordinates-1"></head>
+<title>ATM10 Campus</title><link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><rect x='2' y='2' width='12' height='12' rx='3' fill='%2373d8e5'/></svg>"><link rel="stylesheet" href="/assets/app.css?v=20261105-cannon-coordinates-1&amp;revision=site-status"><link rel="stylesheet" href="/assets/blueprint-preview.css?v=20261105-cannon-coordinates-1"><link rel="stylesheet" href="/assets/erebor-console.css?v=20261105-cannon-coordinates-1&amp;revision=kanonenpult-1"></head>
 <body>
 <a class="skip-link" href="#main">Zum Inhalt</a>
 <header class="top">
@@ -25,23 +25,29 @@
     <span class="refresh-last" id="refreshLast" role="status">Noch nicht aktualisiert</span>
     <button class="small" id="refreshNow">Jetzt aktualisieren</button>
   </div>
-  <div class="toolbar" id="blueprintProjectBar"><label class="row">Bauprojekt <select id="blueprintProject" aria-label="Bauprojekt wählen"><option value="campus">Campus</option><option value="erebor">Erebor</option></select></label><a id="blueprintProjectLink" href="/projects?id=campus">Projekt öffnen</a></div>
+  <div class="toolbar" id="blueprintProjectBar"><label class="row">Bauprojekt <select id="blueprintProject" aria-label="Bauprojekt wählen"><option value="erebor">Erebor</option><option value="campus">Campus (Archiv)</option></select></label><a id="blueprintProjectLink" href="/projects?id=erebor">Projekt öffnen</a> <a href="/projects#archiv">Projektarchiv</a></div>
   <section data-pane="overview">
     <div class="page-heading"><h1>Baupläne</h1><button class="primary" id="newBp">Neuer Bauplan</button></div>
     <div class="summary-line" id="cards" aria-label="Campus-Status"></div>
+    <section id="ereborQueue" class="hide" aria-labelledby="ereborQueueTitle">
+      <div class="fleet-headed"><div><p class="eyebrow">EREBOR · BAULEITUNG</p><h2 id="ereborQueueTitle">Kanonen</h2></div><details class="fleet-settings"><summary>Automatisches Nachlegen</summary><p data-summary role="status">Planfolge wird geladen …</p><div class="row"><button type="button" class="hide" data-prepare>Nachlegen aktivieren</button><button type="button" class="hide" data-pause>Nachlegen pausieren</button></div></details></div>
+      <div class="fleet-layout"><nav class="fleet-nav" aria-label="Kanone auswählen"><div class="fleet-grid" data-sites></div><p class="fleet-legend"><i></i> Baut <i></i> Bereit <i></i> Wartet</p></nav>
+      <section class="fleet-station" aria-label="Ausgewählte Kanone">
+        <div class="fleet-station-heading"><div><p class="eyebrow">AUSGEWÄHLTE KANONE</p><h3 data-station-name>K01</h3></div><span class="fleet-pill" data-native>Wird geladen</span></div>
+        <div class="fleet-job"><span class="eyebrow">EINGELEGT</span><strong data-job>Wird geprüft …</strong></div>
+        <div class="fleet-metrics"><div><span>Gesetzte Blöcke</span><b data-placed>·</b></div><div><span>Treibstoff</span><b data-fuel>·</b></div><div><span>Zielchunk</span><b data-target>·</b></div></div>
+        <p class="fleet-waiting" data-waiting hidden></p>
+        <label class="fleet-label" for="ereborPick">Bauplan für diese Kanone</label><select id="ereborPick"><option value="">Pläne werden geladen …</option></select>
+        <div class="fleet-actions"><button type="button" data-load-picked disabled>Bauplan laden</button><button type="button" class="primary" data-start disabled>Kanone starten</button></div>
+        <p class="muted fleet-hint" data-hint role="status"></p>
+      </section></div><div class="fleet-catalog-title"><h3 data-catalog-heading>Baupläne für K01</h3><span class="muted">Vorschau und Downloads</span></div>
+    </section>
     <div class="toolbar">
       <input class="search" id="search" type="search" placeholder="Bauplan suchen …" aria-label="Bauplan suchen">
       <select id="filter" aria-label="Status filtern"><option value="">Alle Status</option><option value="conflict">Konflikt</option><option value="warning">Geändert seit Planung</option><option value="ok">Offen</option><option value="built">Gebaut</option></select>
       <select id="stonePacket" class="hide" aria-label="Erebor-Paket filtern"><option value="">Alle Pakete</option></select>
       <details class="menu toolbar-end" id="blueprintDownloads"><summary>Downloads</summary><div class="menu-content"><a href="/api/remaining.zip" download>Rest-Baupläne (.zip)</a><a href="/api/blueprints.zip" download>Alle Baupläne (.zip)</a></div></details>
     </div>
-    <section id="ereborQueue" class="hide content-section" aria-labelledby="ereborQueueTitle">
-      <h2 id="ereborQueueTitle">Kanonen bestücken</h2>
-      <p data-summary role="status">Planfolge wird geladen …</p>
-      <div class="row"><button type="button" class="primary hide" data-prepare>Pläne einlegen</button><button type="button" class="hide" data-pause>Nachlegen pausieren</button></div>
-      <p class="muted">Jede freie Kanone bekommt ihren nächsten Abschnitt. Nach Abschluss legt die Homebox nach. Den Bau startest du in Minecraft.</p>
-      <details><summary>Pläne je Kanone</summary><div class="table-wrap"><table><thead><tr><th>Kanone</th><th>Zustand</th><th>Bauplan</th><th>Blöcke im Plan</th><th>Abgeschlossen</th><th>Zuletzt geprüft</th></tr></thead><tbody></tbody></table></div></details>
-    </section>
     <p id="stoneBlueprintCount" class="muted hide"></p>
     <div class="table-wrap" role="region" aria-label="Baupläne" tabindex="0"><table class="blueprint-table stack-table">
       <thead><tr><th>Bauplan</th><th>Status</th><th>Version</th><th>Fortschritt</th><th>Aktion</th></tr></thead><tbody id="bpRows"></tbody>
@@ -128,5 +134,5 @@
 <dialog class="form-dialog" id="editDialog" aria-labelledby="editTitle"></dialog>
 <dialog class="picker-dialog" id="cannonPickerDialog" aria-labelledby="pickerTitle"></dialog>
 <input type="file" id="hiddenFile" accept=".nbt" class="hide">
-<script type="module" src="/assets/app.js?v=20261105-cannon-coordinates-1&amp;revision=einzelplan-1"></script>
+<script type="module" src="/assets/app.js?v=20261105-cannon-coordinates-1&amp;revision=kanonenpult-1"></script>
 </body></html>

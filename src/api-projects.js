@@ -1,3 +1,4 @@
+import {setProjectArchive} from './project-archive.js';
 import { requireActor, HttpError } from './auth.js';
 import { now, tx, logActivity } from './db.js';
 import { validPlacement } from './project-placement.js';
@@ -10,7 +11,9 @@ export function registerProjectRoutes(app, campus) {
   registerEreborFleet(app,campus);
   registerEreborQueue(app,campus);
   const db = campus.db;
-  const decode = r => ({ id: r.id, version: r.current_version, createdAt: r.created_at, updatedAt: r.updated_at, plan: JSON.parse(r.plan_json) });
+  db.exec('CREATE TABLE IF NOT EXISTS project_archive(project_id TEXT PRIMARY KEY REFERENCES build_projects(id),archived_at TEXT NOT NULL)');
+  const archivedAt=id=>db.prepare('SELECT archived_at FROM project_archive WHERE project_id=?').get(id)?.archived_at??null;
+  const decode = r => ({ archivedAt:archivedAt(r.id), id: r.id, version: r.current_version, createdAt: r.created_at, updatedAt: r.updated_at, plan: JSON.parse(r.plan_json) });
   const get = id => db.prepare('SELECT * FROM build_projects WHERE id = ?').get(id);
   function siteLayout(id) {
     const project = get(id);
@@ -54,9 +57,9 @@ export function registerProjectRoutes(app, campus) {
   });
   app.get('/api/projects', async req => {
     requireActor(req, 'read');
-    return db.prepare('SELECT * FROM build_projects ORDER BY updated_at DESC, id').all().map(r => {
+    return db.prepare('SELECT p.* FROM build_projects p LEFT JOIN project_archive a ON a.project_id=p.id WHERE (?=1 OR a.project_id IS NULL) ORDER BY p.updated_at DESC,p.id').all(req.query.includeArchived==='1'?1:0).map(r => {
       const p = decode(r);
-      return { id: p.id, version: p.version, title: p.plan.title, summary: p.plan.summary, updatedAt: p.updatedAt, status: p.plan.status, blueprintCount: p.plan.blueprintIds?.length };
+      return { archivedAt:p.archivedAt,id: p.id, version: p.version, title: p.plan.title, summary: p.plan.summary, updatedAt: p.updatedAt, status: p.plan.status, blueprintCount: p.plan.blueprintIds?.length };
     });
   });
   app.get('/api/projects/:id', async (req, reply) => {
@@ -66,8 +69,14 @@ export function registerProjectRoutes(app, campus) {
     reply.header('Cache-Control', 'private, no-store');
     return decode(r);
   });
+  app.post('/api/projects/:id/archive',async req=>{
+    const actor=requireActor(req,'admin');
+    if(req.headers.origin&&req.headers.origin!==campus.config.publicUrl)throw new HttpError(403,'Fremder Origin.');
+    return setProjectArchive(db,req.params.id,req.body?.baseVersion,req.body?.archived,actor);
+  });
   app.put('/api/projects/:id', { bodyLimit: 512 * 1024 }, async req => {
     const actor = requireActor(req, 'write'), id = req.params.id, body = req.body;
+    if(archivedAt(id))throw new HttpError(409,'Dieses Bauprojekt ist archiviert.');
     if (!/^[a-z0-9][a-z0-9_-]{0,79}$/.test(id)) throw new HttpError(400, 'Projekt-ID: 1–80 Kleinbuchstaben, Ziffern, _ oder -.');
     if (!body || !Number.isSafeInteger(body.baseVersion) || body.baseVersion < 0) throw new HttpError(400, 'baseVersion ist erforderlich (0 bei einem neuen Projekt).');
     if (body.dryRun !== undefined && typeof body.dryRun !== 'boolean') throw new HttpError(400, 'dryRun muss boolean sein.');

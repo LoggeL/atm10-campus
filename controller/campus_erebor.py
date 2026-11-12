@@ -47,7 +47,20 @@ def validate_clear(data, size):
 def handle(bridge, action, obj):
     from campus_schematic import prepare_schematic
     layout = json.loads(Path(__file__).with_name('erebor-stations.json').read_text())
+    if action == 'erebor-live':
+        import time
+        if not isinstance(obj,dict) or set(obj)!={'version'} or obj['version']!=layout['version']:
+            raise ValueError('Unbekannte Erebor-Version.')
+        path=bridge.base/'data/kubejs/config/erebor-target-live.json'
+        if path.stat().st_size>100000:
+            raise ValueError('Ungültiger Erebor-Livebericht.')
+        data=json.loads(path.read_text())
+        if data.get('version')!=obj['version'] or not 0<=time.time()*1000-data.get('at',0)<45000:
+            raise ValueError('Kein aktueller Erebor-Livebericht.')
+        return data
     required = {'site', 'version'}
+    if action == 'erebor-start':
+        required.update(('desired','kind','size'))
     if action == 'erebor-supply':
         required.update(('computerId','chestSide'))
     if action == 'erebor-prepare':
@@ -92,6 +105,20 @@ def handle(bridge, action, obj):
     if site['site'] not in desired['blueprint'].split('_'):
         raise ValueError('Der Bauplan gehört zu einer anderen Kanone.')
     opts = {'replace_mode':mode,'skip_missing':False,'replace_block_entities':False}
+    if action == 'erebor-start':
+        from campus_start import start, validate_target
+        clear=kind=='clear'
+        validate_target(b,desired,opts,erebor_clear=clear)
+        observed=bridge.inspect(b)
+        if observed.get('components',{}).get('create:schematic_bounds')!=obj['size']:
+            raise ValueError('Abmessungen des eingelegten Plans haben sich geändert.')
+        if observed.get('state')=='PAUSED' and observed.get('status') in ('noGunpowder','targetNotLoaded','missingBlock','missingItem'):
+            raise ValueError('Die Kanone wartet noch auf Treibstoff, Material oder den Zielchunk.')
+        if clear:
+            if not desired['blueprint'].startswith('EREBOR_') or '_AUSHUB_' not in desired['blueprint'] or bridge.file_hash(b['owner'],desired['file'])!=desired['sha256']:
+                raise ValueError('Aushubdatei nicht bestätigt.')
+            validate_clear((bridge.base/'data/schematics/uploaded'/b['owner']/desired['file']).read_bytes(),obj['size'])
+        return start(bridge,b,desired,opts,observed,erebor_clear=clear,bounds=obj['size'])
     return prepare_schematic(bridge,b,desired,obj['nbtBase64'],opts,obj['size'],erebor_kind=kind,previous=obj.get('previous'))
 
 

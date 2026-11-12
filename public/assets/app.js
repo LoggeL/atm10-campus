@@ -1,5 +1,5 @@
-import {setupEreborQueue} from './erebor-queue.js?v=20261105-cannon-coordinates-1&revision=einzelplan-1';
-import { createProjectBlueprints } from './project-blueprints.js?v=20261105-cannon-coordinates-1&revision=einzelplan-1';
+import {setupEreborQueue} from './erebor-queue.js?v=20261105-cannon-coordinates-1&revision=kanonenpult-1';
+import { createProjectBlueprints } from './project-blueprints.js?v=20261105-cannon-coordinates-1&revision=kanonenpult-1';
 import { createCannonSites } from './cannon-sites.js?v=20261105-cannon-coordinates-1&fleet=20261110';
 import { esc, fmt } from './format.js?v=20261105-cannon-coordinates-1';
 import { updateCannonPicker } from './cannon-picker.js?v=20261105-cannon-coordinates-1';
@@ -41,9 +41,10 @@ const guard = fn => async (...a) => { try { await fn(...a); } catch (e) { toast(
 
 let me = null, status = null, activeTab = 'overview', polling = null;
 
-let blueprintProject=new URL(location.href).searchParams.get('project')==='erebor'?'erebor':'campus';
-const ereborQueue=setupEreborQueue({api,admin:()=>me?.user?.role==='admin',active:()=>blueprintProject==='erebor'&&['overview','coordinates'].includes(activeTab),notify:toast,onStatus:()=>ereborBlueprints.updateLoadStates()});
-const ereborBlueprints=createProjectBlueprints({api,isSelected:()=>blueprintProject==='erebor',closeDrawer,admin:()=>me?.user?.role==='admin',loadPlan:(b,v)=>ereborQueue.loadPlan(b,v),notify:toast,loadedStatus:(f,h)=>ereborQueue.loadedStatus(f,h)});
+let campusArchived=false;
+let blueprintProject=new URL(location.href).searchParams.get('project')==='campus'?'campus':'erebor';
+const ereborQueue=setupEreborQueue({api,admin:()=>me?.user?.role==='admin',active:()=>blueprintProject==='erebor'&&['overview','coordinates'].includes(activeTab),notify:toast,onStatus:()=>ereborBlueprints.updateLoadStates(),onSite:()=>ereborBlueprints.changeSite()});
+const ereborBlueprints=createProjectBlueprints({api,isSelected:()=>blueprintProject==='erebor',closeDrawer,getSite:()=>ereborQueue.site(),setPlans:(items,v)=>ereborQueue.setPlans(items,v),admin:()=>me?.user?.role==='admin',loadPlan:(b,v)=>ereborQueue.loadPlan(b,v),notify:toast,loadedStatus:(f,h)=>ereborQueue.loadedStatus(f,h)});
 const cannonSites=createCannonSites({api,element:$('cannonSites'),getProject:()=>blueprintProject,isActive:()=>activeTab==='cannon-coordinates',notify:toast});
 function configureBlueprintProject(){document.getElementById('ereborMode')?.classList.toggle('hide',blueprintProject!=='erebor');
   const erebor=blueprintProject==='erebor';
@@ -54,7 +55,8 @@ function configureBlueprintProject(){document.getElementById('ereborMode')?.clas
   for(const id of ['stonePacket','stoneBlueprintCount','ereborQueue'])$(id).classList.toggle('hide',!erebor);
 }
 $('blueprintProject').addEventListener('change',guard(async()=>{
-  blueprintProject=$('blueprintProject').value==='erebor'?'erebor':'campus';
+  if($('blueprintProject').value==='campus'&&campusArchived){location.assign('/projects?id=campus');return;}
+  blueprintProject=$('blueprintProject').value==='campus'?'campus':'erebor';
   const url=new URL(location.href);url.searchParams.set('project',blueprintProject);history.replaceState(null,'',url);
   closeDrawer();configureBlueprintProject();$('bpRows').innerHTML='<tr><td colspan="5">Baupläne werden geladen …</td></tr>';
   if(activeTab==='cannon-coordinates')await cannonSites.load();
@@ -684,6 +686,10 @@ window.addEventListener('hashchange', () => { if (me) routeFromHash(); });
 (async () => {
   try {
     me = await api('/api/me');
+    const collections=await api('/api/projects?includeArchived=1');
+    campusArchived=!!collections.find(p=>p.id==='campus')?.archivedAt;
+    $('blueprintProject').querySelector('[value="campus"]').textContent=campusArchived?'Campus (Archiv)':'Campus';
+    if(blueprintProject==='campus'&&campusArchived&&['','#overview'].includes(location.hash)){location.replace('/projects?id=campus');return;}
     $('who').textContent = me.user.username;
     if (me.user.role === 'admin') $('adminTab').classList.remove('hide');
     polling=connectPolling({refresh:refreshVisible,onState:renderPollingState,immediate:false});

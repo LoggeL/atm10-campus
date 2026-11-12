@@ -101,6 +101,14 @@ test('existing projects link active blueprints without copying or modifying them
     assert.deepEqual((await request('GET',path)).json().plan,plan);
     const listed=(await request('GET','/api/projects')).json()[0];
     assert.equal(listed.status,'existing');assert.equal(listed.blueprintCount,1);
+    assert.equal((await request('POST',path+'/archive',{baseVersion:2,archived:true})).statusCode,409);
+    assert.equal((await request('POST',path+'/archive',{baseVersion:1,archived:true})).statusCode,200);
+    assert.deepEqual((await request('GET','/api/projects')).json(),[]);
+    assert.ok((await request('GET','/api/projects?includeArchived=1')).json()[0].archivedAt);
+    assert.deepEqual((await request('GET',path)).json().plan,plan);
+    assert.equal((await request('PUT',path,{baseVersion:1,plan})).statusCode,409);
+    assert.equal((await request('POST',path+'/archive',{baseVersion:1,archived:false})).statusCode,200);
+    assert.equal((await request('GET',path)).json().version,1);
     assert.deepEqual((await request('GET','/api/blueprints')).json(),before);
     assert.equal(app.campus.db.prepare('SELECT COUNT(*) AS n FROM cannons').get().n,0);
   } finally { await app.close();app.campus.db.close();rmSync(temp,{recursive:true,force:true}); }

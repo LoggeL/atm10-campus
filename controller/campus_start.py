@@ -5,7 +5,7 @@ import time
 from campus_snbt import Array, dumps
 
 
-def validate_target(binding, desired, options):
+def validate_target(binding, desired, options, *, erebor_clear=False):
     fields = {'file', 'sha256', 'owner', 'anchor', 'rotation', 'mirror', 'blueprint', 'version'}
     if not isinstance(desired, dict) or set(desired) != fields:
         raise ValueError('Ungültige gewünschte Revision.')
@@ -22,7 +22,7 @@ def validate_target(binding, desired, options):
         raise ValueError('Ungültiger Anker.')
     if binding['dimension'] != 'minecraft:overworld' or math.dist([binding[k] for k in ('x', 'y', 'z')], anchor) >= 256:
         raise ValueError('Bauplan liegt außerhalb der Reichweite.')
-    if not isinstance(options, dict) or set(options) != {'replace_mode', 'skip_missing', 'replace_block_entities'} or type(options['replace_mode']) is not int or options['replace_mode'] not in (0, 1, 2) or any(type(options[k]) is not bool for k in ('skip_missing', 'replace_block_entities')):
+    if not isinstance(options, dict) or set(options) != {'replace_mode', 'skip_missing', 'replace_block_entities'} or type(options['replace_mode']) is not int or options['replace_mode'] not in ((3,) if erebor_clear else (0, 1, 2)) or any(type(options[k]) is not bool for k in ('skip_missing', 'replace_block_entities')):
         raise ValueError('Ungültige Kanonen-Einstellungen.')
 
 
@@ -48,7 +48,7 @@ def verify(bridge, binding, desired, options, observed):
         raise ValueError('Unbekannte Kanonen-Zähler.')
 
 
-def start_command(binding, desired, options, observed):
+def start_command(binding, desired, options, observed, bounds=None):
     # Loading updated block NBT makes Create append serialized flights to its
     # existing flight list. A state write must therefore wait until all land.
     if observed['flyingBlocks'] != 0:
@@ -57,6 +57,8 @@ def start_command(binding, desired, options, observed):
     components = expected_components(desired)
     components['create:schematic_anchor'] = Array('I', desired['anchor'])
     components['create:schematic_deployed'] = True
+    if bounds is not None:
+        components['create:schematic_bounds'] = Array('I', bounds)
     guard = {'State': observed['state'], 'AmountPlaced': observed['amountPlaced'], 'AmountToPlace': observed['amountToPlace'], 'FlyingBlocks': [],
              'Options': options, 'Inventory': {'Items': [{'Slot': 0, 'id': 'create:schematic', 'components': components}]}}
     printer = observed['printer']
@@ -85,15 +87,15 @@ def start_command(binding, desired, options, observed):
     return command
 
 
-def start(bridge, binding, desired, options, observed):
-    validate_target(binding, desired, options)
+def start(bridge, binding, desired, options, observed, *, erebor_clear=False, bounds=None):
+    validate_target(binding, desired, options, erebor_clear=erebor_clear)
     verify(bridge, binding, desired, options, observed)
     if observed['state'] == 'RUNNING':
         if observed['printer'].get('Anchor') != desired['anchor']:
             raise ValueError('Kanone initialisiert noch. Bitte kurz warten.')
         return {'binding': binding, 'observed': observed, 'started': True, 'alreadyRunning': True}
     initial = observed['state'] == 'STOPPED'
-    reply = bridge.run(start_command(binding, desired, options, observed))
+    reply = bridge.run(start_command(binding, desired, options, observed, bounds))
     if 'Modified block data' not in reply:
         raise ValueError('Kanone während der Startprüfung geändert. Start wurde nicht ausgeführt.')
     deadline = time.monotonic() + 3
@@ -106,7 +108,7 @@ def start(bridge, binding, desired, options, observed):
             if initial and current['state'] == 'PAUSED' and current.get('status') == 'ready':
                 # Create initializes the printer into PAUSED/ready. The same click may
                 # continue only this freshly verified plan, with a second atomic guard.
-                reply = bridge.run(start_command(binding, desired, options, current))
+                reply = bridge.run(start_command(binding, desired, options, current, bounds))
                 if 'Modified block data' not in reply:
                     raise ValueError('Kanone nach Initialisierung geändert. Kein weiterer Start.')
                 initial = False
