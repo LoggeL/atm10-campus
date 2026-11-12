@@ -1,6 +1,6 @@
 <!doctype html>
 <html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>ATM10 Campus</title><link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><rect x='2' y='2' width='12' height='12' rx='3' fill='%2373d8e5'/></svg>"><link rel="stylesheet" href="/assets/app.css?v=20261105-cannon-coordinates-1&amp;revision=site-status"><link rel="stylesheet" href="/assets/blueprint-preview.css?v=20261105-cannon-coordinates-1"><link rel="stylesheet" href="/assets/erebor-console.css?v=20261105-cannon-coordinates-1&amp;revision=kanonenpult-1"></head>
+<title>ATM10 Campus</title><link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><rect x='2' y='2' width='12' height='12' rx='3' fill='%2373d8e5'/></svg>"><link rel="stylesheet" href="/assets/app.css?v=20261105-cannon-coordinates-1&amp;revision=site-status"><link rel="stylesheet" href="/assets/blueprint-preview.css?v=20261105-cannon-coordinates-1"><link rel="stylesheet" href="/assets/erebor-console.css?v=20261105-cannon-coordinates-1&amp;revision=baufolge-2"></head>
 <body>
 <a class="skip-link" href="#main">Zum Inhalt</a>
 <header class="top">
@@ -30,17 +30,18 @@
     <div class="page-heading"><h1>Baupläne</h1><button class="primary" id="newBp">Neuer Bauplan</button></div>
     <div class="summary-line" id="cards" aria-label="Campus-Status"></div>
     <section id="ereborQueue" class="hide" aria-labelledby="ereborQueueTitle">
-      <div class="fleet-headed"><div><p class="eyebrow">EREBOR · BAULEITUNG</p><h2 id="ereborQueueTitle">Kanonen</h2></div><details class="fleet-settings"><summary>Automatisches Nachlegen</summary><p data-summary role="status">Planfolge wird geladen …</p><div class="row"><button type="button" class="hide" data-prepare>Nachlegen aktivieren</button><button type="button" class="hide" data-pause>Nachlegen pausieren</button></div></details></div>
+      <div class="fleet-headed"><div><p class="eyebrow">EREBOR · BAULEITUNG</p><h2 id="ereborQueueTitle">Kanonen</h2></div><details class="fleet-settings"><summary>Nachlegen für alle Kanonen</summary><p data-summary role="status">Planfolge wird geladen …</p><div class="row"><button type="button" class="hide" data-prepare>Nachlegen aktivieren</button><button type="button" class="hide" data-pause>Nachlegen pausieren</button></div></details></div>
       <div class="fleet-layout"><nav class="fleet-nav" aria-label="Kanone auswählen"><div class="fleet-grid" data-sites></div><p class="fleet-legend"><i></i> Baut <i></i> Bereit <i></i> Wartet</p></nav>
       <section class="fleet-station" aria-label="Ausgewählte Kanone">
         <div class="fleet-station-heading"><div><p class="eyebrow">AUSGEWÄHLTE KANONE</p><h3 data-station-name>K01</h3></div><span class="fleet-pill" data-native>Wird geladen</span></div>
         <div class="fleet-job"><span class="eyebrow">EINGELEGT</span><strong data-job>Wird geprüft …</strong></div>
         <div class="fleet-metrics"><div><span>Gesetzte Blöcke</span><b data-placed>·</b></div><div><span>Treibstoff</span><b data-fuel>·</b></div><div><span>Zielchunk</span><b data-target>·</b></div></div>
         <p class="fleet-waiting" data-waiting hidden></p>
-        <label class="fleet-label" for="ereborPick">Bauplan für diese Kanone</label><select id="ereborPick"><option value="">Pläne werden geladen …</option></select>
-        <div class="fleet-actions"><button type="button" data-load-picked disabled>Bauplan laden</button><button type="button" class="primary" data-start disabled>Kanone starten</button></div>
+        <div class="fleet-actions"><button type="button" class="primary" data-auto aria-pressed="false" disabled>Automatik starten</button><button type="button" data-start disabled>Einmal starten</button></div>
         <p class="muted fleet-hint" data-hint role="status"></p>
-      </section></div><div class="fleet-catalog-title"><h3 data-catalog-heading>Baupläne für K01</h3><span class="muted">Vorschau und Downloads</span></div>
+      </section></div><div class="fleet-catalog-title"><h3 data-catalog-heading>Baupläne für K01</h3></div><div class="fleet-lists" aria-label="Abschnitte anzeigen">
+      <button type="button" data-list="open" aria-pressed="true">Baufolge <span data-open-count></span></button>
+      <button type="button" data-list="done" aria-pressed="false">Erledigt <span data-done-count></span></button></div>
     </section>
     <div class="toolbar">
       <input class="search" id="search" type="search" placeholder="Bauplan suchen …" aria-label="Bauplan suchen">
@@ -134,5 +135,5 @@
 <dialog class="form-dialog" id="editDialog" aria-labelledby="editTitle"></dialog>
 <dialog class="picker-dialog" id="cannonPickerDialog" aria-labelledby="pickerTitle"></dialog>
 <input type="file" id="hiddenFile" accept=".nbt" class="hide">
-<script type="module" src="/assets/app.js?v=20261105-cannon-coordinates-1&amp;revision=kanonenpult-1"></script>
+<script type="module" src="/assets/app.js?v=20261105-cannon-coordinates-1&amp;revision=baufolge-2"></script>
 </body></html>

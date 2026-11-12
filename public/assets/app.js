@@ -1,5 +1,5 @@
-import {setupEreborQueue} from './erebor-queue.js?v=20261105-cannon-coordinates-1&revision=kanonenpult-1';
-import { createProjectBlueprints } from './project-blueprints.js?v=20261105-cannon-coordinates-1&revision=kanonenpult-1';
+import {setupEreborQueue} from './erebor-queue.js?v=20261105-cannon-coordinates-1&revision=baufolge-2';
+import { createProjectBlueprints } from './project-blueprints.js?v=20261105-cannon-coordinates-1&revision=baufolge-2';
 import { createCannonSites } from './cannon-sites.js?v=20261105-cannon-coordinates-1&fleet=20261110';
 import { esc, fmt } from './format.js?v=20261105-cannon-coordinates-1';
 import { updateCannonPicker } from './cannon-picker.js?v=20261105-cannon-coordinates-1';
@@ -43,8 +43,8 @@ let me = null, status = null, activeTab = 'overview', polling = null;
 
 let campusArchived=false;
 let blueprintProject=new URL(location.href).searchParams.get('project')==='campus'?'campus':'erebor';
-const ereborQueue=setupEreborQueue({api,admin:()=>me?.user?.role==='admin',active:()=>blueprintProject==='erebor'&&['overview','coordinates'].includes(activeTab),notify:toast,onStatus:()=>ereborBlueprints.updateLoadStates(),onSite:()=>ereborBlueprints.changeSite()});
-const ereborBlueprints=createProjectBlueprints({api,isSelected:()=>blueprintProject==='erebor',closeDrawer,getSite:()=>ereborQueue.site(),setPlans:(items,v)=>ereborQueue.setPlans(items,v),admin:()=>me?.user?.role==='admin',loadPlan:(b,v)=>ereborQueue.loadPlan(b,v),notify:toast,loadedStatus:(f,h)=>ereborQueue.loadedStatus(f,h)});
+const ereborQueue=setupEreborQueue({api,admin:()=>me?.user?.role==='admin',active:()=>blueprintProject==='erebor'&&['overview','coordinates'].includes(activeTab),notify:toast,onStatus:()=>ereborBlueprints.refreshQueue(),onSite:()=>ereborBlueprints.changeSite()});
+const ereborBlueprints=createProjectBlueprints({api,isSelected:()=>blueprintProject==='erebor',closeDrawer,getSite:()=>ereborQueue.site(),getQueue:ereborQueue.queue,getView:ereborQueue.view,getStation:ereborQueue.station,promote:ereborQueue.promote,admin:()=>me?.user?.role==='admin',loadPlan:(b,v)=>ereborQueue.loadPlan(b,v),notify:toast,loadedStatus:(f,h)=>ereborQueue.loadedStatus(f,h)});
 const cannonSites=createCannonSites({api,element:$('cannonSites'),getProject:()=>blueprintProject,isActive:()=>activeTab==='cannon-coordinates',notify:toast});
 function configureBlueprintProject(){document.getElementById('ereborMode')?.classList.toggle('hide',blueprintProject!=='erebor');
   const erebor=blueprintProject==='erebor';
@@ -52,7 +52,7 @@ function configureBlueprintProject(){document.getElementById('ereborMode')?.clas
   $('blueprintProjectLink').href='/projects?id='+blueprintProject;
   $('viewerLink').href=erebor?'/viewer?project=erebor':'/viewer';
   for(const id of ['filter','blueprintDownloads','overlapPanel','newBp'])$(id).classList.toggle('hide',erebor);
-  for(const id of ['stonePacket','stoneBlueprintCount','ereborQueue'])$(id).classList.toggle('hide',!erebor);
+  for(const id of ['stoneBlueprintCount','ereborQueue'])$(id).classList.toggle('hide',!erebor);
 }
 $('blueprintProject').addEventListener('change',guard(async()=>{
   if($('blueprintProject').value==='campus'&&campusArchived){location.assign('/projects?id=campus');return;}

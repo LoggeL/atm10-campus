@@ -1,4 +1,5 @@
 import {publishedPlan,selectionStore,unstarted} from './erebor-selection.js';
+import {productionStore} from './erebor-production.js';
 import {ereborFeeder} from './erebor-feeder.js';
 import {Worker} from 'node:worker_threads';
 import {createHash,randomUUID} from 'node:crypto';
@@ -48,6 +49,7 @@ export function registerEreborQueue(app,campus){
  db.exec(`CREATE TABLE IF NOT EXISTS erebor_queue_config(id INTEGER PRIMARY KEY CHECK(id=1),version INTEGER NOT NULL,enabled INTEGER NOT NULL,phase TEXT NOT NULL,archive TEXT,lease TEXT,expires INTEGER);
  CREATE TABLE IF NOT EXISTS erebor_queue_sites(site TEXT PRIMARY KEY,state TEXT NOT NULL,payload BLOB);`);
  const choices=selectionStore(db);
+ const production=productionStore(db);
  const cfg=()=>db.prepare('SELECT * FROM erebor_queue_config WHERE id=1').get();
  const project=()=>db.prepare("SELECT current_version,plan_json FROM build_projects WHERE id='erebor'").get();
  const read=site=>JSON.parse(db.prepare('SELECT state FROM erebor_queue_sites WHERE site=?').get(site).state);
@@ -98,7 +100,10 @@ export function registerEreborQueue(app,campus){
   }
   if(confirmedFinish(o,j)||recordedFinish(o,j,finish)){
    s.cursor=j.next;s.completed++;s.job=null;s.status='Fertig, nächster Plan folgt';
-   tx(db,()=>{choices.mark(j.selection,'finished');persist(site,s);});return true;
+   tx(db,()=>{
+    production.finish(j.desired.version??cfg().version,site,j.desired.blueprint,new Date().toISOString());
+    choices.mark(j.selection,'finished');persist(site,s);
+   });return true;
   }
   if(j.loaded){
    if(o.item||o.state!=='STOPPED'||o.status!=='finished')j.tainted=true;
@@ -106,11 +111,37 @@ export function registerEreborQueue(app,campus){
   }
   return false;
  }
+ async function startJob(site,version,job){
+  const {options,...desired}=job.desired;
+  const result=await request('erebor-start',{site,version,desired,kind:job.phase,size:job.size});
+  if(!result.started||verifyAlignment(job.desired,result.observed,job.desired)||!same(result.observed?.components?.['create:schematic_bounds'],job.size))
+   throw new HttpError(409,'Der Start wurde nicht bestätigt. Kanonenstatus prüfen.');
+  return result;
+ }
+ function published(project,site,entry){
+  return publishedPlan(db,project,{...entry,version:project.current_version,site,file:entry.name+'.nbt'});
+ }
+ async function startAutomatic(site,s,version,observed){
+  const mode=production.mode(version,site),job=s.job;
+  if(!mode.enabled||!job||job.tainted)return;
+  if(observed.state==='RUNNING'){
+   if(mode.started_upload!==job.desired.file)production.started(version,site,job.desired.file);
+   return;
+  }
+  if(mode.started_upload===job.desired.file||observed.flyingBlocks!==0||
+     !['STOPPED','PAUSED'].includes(observed.state)||['noGunpowder','targetNotLoaded','missingBlock','missingItem'].includes(observed.status))return;
+  const result=await startJob(site,version,job);
+  production.started(version,site,job.desired.file);
+  job.started=true;observe(site,s,result.observed);
+  logActivity(db,null,'erebor.automatic.start',site,{version,file:job.desired.blueprint});
+ }
  async function station(site,s,c,p,archive){
-  const choice=choices.next(c.version,site);
-  if(!choice&&(s.exhausted||!c.enabled)&&!s.job?.selection)return;
+  let choice=choices.next(c.version,site);
+  const automatic=()=>!!production.mode(c.version,site).enabled;
+  if(!automatic()&&!choice&&(s.exhausted||!c.enabled)&&!s.job?.loaded&&!s.job?.selection)return;
   const data={site,version:c.version};
-  const o=(!choice&&s.job?.loaded&&campus.ereborFeeder.sample(site))||(await request('erebor-inspect',data)).observed;
+  const sample=!choice&&s.job?.loaded?campus.ereborFeeder.sample(site):null;
+  const o=sample&&sample.at>=s.job.seen?sample:(await request('erebor-inspect',data)).observed;
   if(!current(c.version))return;
   const old=s.job;
   const aligned=old&&!verifyAlignment(old.desired,o,old.desired)&&same(o.components?.['create:schematic_bounds'],old.size);
@@ -119,11 +150,33 @@ export function registerEreborQueue(app,campus){
    if(!current(c.version))return;
    observe(site,s,o,finish);
   }
+  if(automatic()&&old&&s.job&&aligned){
+   const completed=production.done(c.version,site,old.desired.blueprint);
+   if(!completed || !unstarted(old,o)){
+    if(!completed)await startAutomatic(site,s,c.version,o);
+    return;
+   }
+   if(!choice){
+    const next=production.ordered(p,site).open[0];
+    if(!next){s.status='Baufolge erledigt';return;}
+    const {job,bytes}=published(p,site,next);
+    choices.add(c.version,site,job,bytes,old.desired.file);
+    choice=choices.next(c.version,site);
+   }
+  }
+  if(automatic()&&s.job?.loaded&&!aligned)return;
+  const priority=production.priority(c.version,site);
+  if(priority&&choice&&!s.job&&o.inputEmpty&&JSON.parse(choice.job).desired.blueprint!==priority)choice=null;
   if(choice){
+   if(automatic()&&production.done(c.version,site,JSON.parse(choice.job).desired.blueprint)){
+    choices.mark(choice.id,'redundant');return;
+   }
    const selected=JSON.parse(choice.job),oldFile=old?.desired.file;
    const matches=!verifyAlignment(selected.desired,o,selected.desired)&&same(o.components?.['create:schematic_bounds'],selected.size);
    const empty=o.inputEmpty===true&&cannonReset(o);
-   const replace=aligned&&(choice.previous===oldFile||(!choice.previous&&!old.selection))&&unstarted(old,o);
+   const previousMatches=choice.previous===oldFile||(!choice.previous&&!old?.selection);
+   const alreadyFinished=automatic()&&old&&production.done(c.version,site,old.desired.blueprint);
+   const replace=aligned&&(previousMatches||alreadyFinished)&&unstarted(old,o);
    if(!matches&&!empty&&!replace)return;
    // The durable selection survives a response lost after Minecraft committed the item.
    const {options,...desired}=selected.desired;
@@ -141,32 +194,43 @@ export function registerEreborQueue(app,campus){
    tx(db,()=>{
     choices.mark(displaced?.selection,'replaced');choices.mark(choice.id,'loaded');
     observe(site,s,observed);persist(site,s);
-   });return;
+   });
+   await startAutomatic(site,s,c.version,observed);return;
   }
-  if(old&&(!s.job||s.job.loaded))return;
-  if(!cfg().enabled||s.exhausted||c.phase==='finished')return;
+  if(old&&(s.job?.loaded||(!s.job&&!automatic())))return;
+  if(!automatic()&&(!cfg().enabled||s.exhausted||c.phase==='finished'))return;
   if(o.inputEmpty!==true||!cannonReset(o)){s.status='Kanone belegt';return;}
+  if(!s.job&&(automatic()||production.priority(c.version,site))){
+   const next=production.ordered(p,site).open[0];
+   if(!next){s.status='Baufolge erledigt';s.exhausted=true;return;}
+   const {job,bytes}=published(p,site,next);
+   s.job={...job,next:s.cursor};
+   db.prepare('UPDATE erebor_queue_sites SET state=?,payload=? WHERE site=?').run(JSON.stringify(s),bytes,site);
+  }
   if(!s.job){
    const selected=await generate(p,{site,phase:c.phase,cursor:s.cursor,architecture:archive?.[c.phase]?.[site]?.[s.cursor]});
-   if(!current(c.version)||choices.next(c.version,site))return;
+   if(!current(c.version)||automatic()||production.priority(c.version,site)||choices.next(c.version,site))return;
    if(!selected.file){s.cursor=selected.next;s.exhausted=!!selected.exhausted;s.status=s.exhausted?'Phase erledigt':'Nächster Abschnitt wird geprüft';return;}
-   if(choices.completed(c.version,site,selected.file.slice(0,-4))){s.cursor=selected.next;s.status='Gewählter Abschnitt bereits abgeschlossen';return;}
+   if(production.done(c.version,site,selected.file.slice(0,-4))||choices.completed(c.version,site,selected.file.slice(0,-4))){s.cursor=selected.next;s.status='Gewählter Abschnitt bereits abgeschlossen';return;}
    const bytes=Buffer.from(selected.bytes),file='campus_'+randomUUID()+'.nbt';
    const desired={file,sha256:createHash('sha256').update(bytes).digest('hex'),blueprint:selected.file.slice(0,-4),owner:'Erebor',anchor:selected.origin,version:c.version,rotation:'none',mirror:'none',options:{replace_mode:modes[c.phase],skip_missing:false,replace_block_entities:false}};
    s.job={desired,size:selected.size,blocks:selected.blocks,materials:selected.materials,next:selected.next,phase:c.phase,loaded:false,seen:0};
    db.prepare('UPDATE erebor_queue_sites SET state=?,payload=? WHERE site=?').run(JSON.stringify(s),bytes,site);
   }
-  if(!current(c.version)||!cfg().enabled)return;
+  if(!current(c.version)||(!automatic()&&!cfg().enabled))return;
   const j=s.job,{options,...desired}=j.desired;
   const bytes=db.prepare('SELECT payload FROM erebor_queue_sites WHERE site=?').get(site).payload;
   if(!bytes)throw Error('Vorbereitete Datei fehlt.');
   const res=await request('erebor-prepare',{...data,desired,kind:j.phase,size:j.size,nbtBase64:Buffer.from(bytes).toString('base64')});
   if(!res.applied||!observe(site,s,res.observed))throw Error('Einlegen noch nicht bestätigt.');
+  persist(site,s);
+  await startAutomatic(site,s,c.version,res.observed);
  }
  async function tick(){
   const c=cfg(),p=project();
   if(!c||!p||c.version!==p.current_version||closed)return;
-  const active=choices.active(c.version);
+  const tracking=db.prepare("SELECT site FROM erebor_queue_sites WHERE json_extract(state,'$.job.loaded')=1").all().map(r=>r.site);
+  const active=[...production.enabled(c.version),...choices.active(c.version),...tracking];
   if((!c.enabled||c.phase==='finished')&&!active.length)return;
   const acquired=db.prepare('UPDATE erebor_queue_config SET lease=?,expires=? WHERE id=1 AND (lease IS NULL OR expires<? OR lease=?)').run(owner,Date.now()+120000,Date.now(),owner);
   if(!acquired.changes)return;
@@ -203,15 +267,24 @@ export function registerEreborQueue(app,campus){
   if(!liveFetch)liveFetch=request('erebor-live',{version}).then(r=>r.version===version&&Math.abs(Date.now()-r.at)<45000?r:null).catch(()=>null).then(r=>{readAt=Date.now();liveCache=r;return r;}).finally(()=>{liveFetch=null;});
   return liveFetch;
  }
- function status(report=null){
+ function status(report=null,focus=null){
   const c=cfg(),v=project()?.current_version;
-  return {waiting:c?choices.waiting(c.version):[],enabled:!!c?.enabled,version:c?.version??v,stale:!!c&&c.version!==v,phase:c?(stages[c.phase]||'Fertig'):'Steinfüllung',stations:db.prepare('SELECT site,state FROM erebor_queue_sites ORDER BY site').all().map(r=>{
+  let queue=null;
+  if(v&&sites.includes(focus)){
+   const {open,done,preferred}=production.ordered(project(),focus),state=c?read(focus):readyState(),job=state.job;
+   const waiting=choices.waiting(v).filter(r=>r.site===focus&&!done.has(r.name));
+   const nextNames=new Set(waiting.map(r=>r.name));
+   const promoted=[...new Set([...preferred,...nextNames])];
+   const pending=[...new Set([...promoted,...open.map(e=>e.name)])].filter(name=>name!==job?.desired.blueprint);
+   queue={site:focus,pending,preferred:promoted,done:[...done].map(([name,at])=>({name,at}))};
+  }
+  return {queue,waiting:c?choices.waiting(c.version):[],enabled:!!c?.enabled,version:c?.version??v,stale:!!c&&c.version!==v,phase:c?(stages[c.phase]||'Fertig'):'Steinfüllung',stations:db.prepare('SELECT site,state FROM erebor_queue_sites ORDER BY site').all().map(r=>{
    const s=JSON.parse(r.state),j=s.job,signal=report?.stations?.[r.site];
    const live=j?.loaded&&signal?.upload===j.desired.file?{state:signal.state,status:signal.status,placed:signal.placed,total:signal.total,fuel:signal.fuel,target:signal.target,chunks:signal.chunks?.length||0,at:report.at}:null;
-   return {site:r.site,status:s.status,live,upload:j?.desired.file??null,kind:j?.phase??null,inserted:!!s.inserted,sha256:j?.desired.sha256||null,file:j?.desired.blueprint||null,anchor:j?.desired.anchor||null,blocks:j?.blocks??null,completed:s.completed,checked:s.checked||null};
+   return {site:r.site,automatic:!!production.mode(c.version,r.site).enabled,status:s.status,live,upload:j?.desired.file??null,kind:j?.phase??null,inserted:!!s.inserted,sha256:j?.desired.sha256||null,file:j?.desired.blueprint||null,anchor:j?.desired.anchor||null,blocks:j?.blocks??null,completed:s.completed,checked:s.checked||null};
   })};
  }
- app.get(base,async(req,reply)=>{requireActor(req,'read');const report=await liveReport(cfg()?.version);return reply.header('Cache-Control','private, no-store').send(status(report));});
+ app.get(base,async(req,reply)=>{requireActor(req,'read');const report=await liveReport(cfg()?.version);return reply.header('Cache-Control','private, no-store').send(status(report,req.query.site));});
  app.post(base+'/start',async req=>{
   const actor=requireActor(req,'admin'),b=req.body;
   if(req.headers.origin&&req.headers.origin!==config.publicUrl)throw new HttpError(403,'Fremder Origin.');
@@ -219,14 +292,33 @@ export function registerEreborQueue(app,campus){
   const j=read(b.site).job;
   if(!j?.loaded||j.desired.file!==b.upload||j.desired.blueprint!==b.file||j.desired.sha256!==b.sha256)throw new HttpError(409,'Der eingelegte Bauplan hat gewechselt. Bitte neu auswählen.');
   if(choices.next(b.version,b.site))throw new HttpError(409,'Ein anderer Bauplan ist vorgemerkt. Bitte den Wechsel abwarten.');
-  const {options,...desired}=j.desired;
-  const result=await request('erebor-start',{site:b.site,version:b.version,desired,kind:j.phase,size:j.size});
-  if(!result.started||verifyAlignment(j.desired,result.observed,j.desired)||!same(result.observed?.components?.['create:schematic_bounds'],j.size))throw new HttpError(409,'Der Start wurde nicht bestätigt. Kanonenstatus prüfen.');
+  const result=await startJob(b.site,b.version,j);
   const s=read(b.site);if(s.job?.desired.file===b.upload){
    observe(b.site,s,result.observed);s.job.started=true;s.checked=new Date().toISOString();persist(b.site,s);
   }
   logActivity(db,actor,'erebor.plan.start',b.site,{file:b.file,version:b.version,alreadyRunning:!!result.alreadyRunning});
   return {started:true,alreadyRunning:!!result.alreadyRunning,waiting:!!result.waiting,site:b.site};
+ });
+ function productionContext(req){
+  const actor=requireActor(req,'admin'),b=req.body,p=project();
+  if(req.headers.origin&&req.headers.origin!==config.publicUrl)throw new HttpError(403,'Fremder Origin.');
+  if(!p||!sites.includes(b?.site)||b.version!==layout.version||b.version!==p.current_version)throw new HttpError(409,'Kanonenplatz oder Projektversion geändert.');
+  if(!cfg())configureEreborQueue(db,{action:'pause',version:b.version},actor);
+  if(cfg().version!==b.version)throw new HttpError(409,'Veraltete Planfolge.');
+  return {actor,b,p};
+ }
+ app.post(base+'/automatik',async req=>{
+  const {actor,b}=productionContext(req);
+  if(typeof b.enabled!=='boolean')throw new HttpError(400,'Automatikzustand fehlt.');
+  tx(db,()=>{production.switch(b.version,b.site,b.enabled);logActivity(db,actor,'erebor.automatic.mode',b.site,{enabled:b.enabled,version:b.version});});
+  wake();return {site:b.site,enabled:b.enabled};
+ });
+ app.post(base+'/vorziehen',async req=>{
+  const {actor,b,p}=productionContext(req);
+  const entry=production.ordered(p,b.site).open.find(f=>f.name===b.file&&f.sha256===b.sha256);
+  if(!entry||entry.name===read(b.site).job?.desired.blueprint)throw new HttpError(409,'Nur einen offenen Abschnitt dieser Kanone vorziehen.');
+  tx(db,()=>{production.promote(b.version,b.site,entry.name);logActivity(db,actor,'erebor.plan.priority',b.site,{file:entry.name,version:b.version});});
+  wake();return {site:b.site,file:entry.name};
  });
  app.post(base+'/laden',async(req,reply)=>{
   const actor=requireActor(req,'admin'),b=req.body,p=project();

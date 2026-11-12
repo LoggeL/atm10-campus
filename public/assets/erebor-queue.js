@@ -14,61 +14,98 @@ export function fleetState(r){
  return {title:'Unbekannt',tone:'offline'};
 }
 export function setupEreborQueue({api,admin,active,notify,onStatus,onSite}){
- const root=document.getElementById('ereborQueue'),find=s=>root.querySelector(s);
- const label=find('[data-summary]'),grid=find('[data-sites]'),pick=find('#ereborPick'),load=find('[data-load-picked]'),start=find('[data-start]'),prepare=find('[data-prepare]'),pause=find('[data-pause]');
- let last=null,site='K01',loading=null,busy=false,plans=[],group=new Map(),optionsKey='',plansVersion=null;
- const initial=new URL(location.href).searchParams.get('kanone');if(positions.includes(initial))site=initial;
- function current(){return last?.stations.find(r=>r.site===site);}
- function selected(){return group.get(site)?.find(b=>b.id===pick.value);}
- const setText=(sel,t)=>{const el=find(sel);if(el.textContent!==t)el.textContent=t;};
- function rebuild(){
-  const r=current(),items=group.get(site)||[],key=[site,plansVersion,r?.upload,items.length,items[0]?.sha256,items.at(-1)?.sha256].join('|');
-  if(optionsKey===key)return;
-  const was=pick.dataset.site===site?pick.value:null;optionsKey=key;pick.dataset.site=site;
-  pick.replaceChildren();pick.add(new Option(r?.file?'Eingelegt: '+r.file:'Bauplan auswählen',''));
-  for(const b of items)pick.add(new Option((b.kind==='clear'?'Aushub':b.kind==='build'?'Bau':'Cleanstone')+' · '+b.fileName.replace(/\.nbt$/,'')+' · '+fmt(b.blocks)+' Blöcke',b.id));
-  if(was&&items.some(b=>b.id===was))pick.value=was;
- }
- function detail(){
-  const r=current(),n=r?.live,s=fleetState(r),chosen=selected(),matches=!chosen||(chosen.id===r?.file&&chosen.sha256===r?.sha256);
-  const pending=last?.waiting?.filter(w=>w.site===site)||[],actual=!!n&&s.tone!=='offline',editable=admin()&&!last?.stale&&!busy;
-  setText('[data-station-name]',site);setText('[data-catalog-heading]','Baupläne für '+site);setText('[data-native]',s.title);find('[data-native]').className='fleet-pill '+s.tone;
-  setText('[data-job]',r?.file||'Kein Bauplan eingelegt');
-  setText('[data-placed]',actual?fmt(n.placed)+(r.blocks?' / '+fmt(r.blocks):''):'Unbekannt');
-  setText('[data-fuel]',actual?fmt(n.fuel)+' Schüsse':'Unbekannt');
-  setText('[data-target]',actual?(n.target?n.target.join(' / '):n.chunks?'Blöcke im Flug':'Bei Baustart'):'Unbekannt');
-  const wait=find('[data-waiting]');wait.hidden=!pending.length;wait.textContent=pending.length?'Vorgemerkt: '+pending.map(w=>w.name).join(', '):'';
-  load.disabled=!(editable&&chosen&&!matches&&!pending.some(w=>w.name===chosen.id&&w.sha===chosen.sha256));
-  start.disabled=!(editable&&actual&&r?.upload&&matches&&!pending.length&&s.tone==='ready');
-  start.textContent=s.tone==='working'?'Kanone baut':n?.state==='PAUSED'&&n.placed>0?'Bau fortsetzen':'Kanone starten';
-  setText('[data-hint]',((chosen?.kind==='clear'||(!chosen&&r?.kind==='clear'))?'Aushub entfernt Blöcke. ':'')+(!admin()?'Zum Laden und Starten als Admin anmelden.':last?.stale?'Projektversion geändert. Seite neu laden.':pending.length?'Die Homebox legt den vorgemerkten Plan nach dem laufenden Bau ein.':chosen&&!matches?'Diesen Plan zuerst laden. Ein laufender Bau bleibt erhalten.':s.tone==='working'?'Die Homebox lädt die Zielchunks während des Baus automatisch.':s.tone==='waiting'?s.title+'.':s.tone==='offline'?'Der Start wird nach der Live-Prüfung freigegeben.':'Der eingelegte Plan startet erst mit deinem Klick oder im Spiel.'));
- }
+ const root=document.getElementById('ereborQueue');
+ const find=selector=>root.querySelector(selector);
+ const grid=find('[data-sites]'),start=find('[data-start]'),auto=find('[data-auto]');
+ const prepare=find('[data-prepare]'),pause=find('[data-pause]');
+ const initial=new URL(location.href).searchParams.get('kanone');
+ let site=positions.includes(initial)?initial:'K01';
+ let last=null,busy=false,view='open',generation=0,loading=null;
+ const current=()=>last?.stations.find(r=>r.site===site);
+ const setText=(selector,value)=>{const element=find(selector);if(element.textContent!==value)element.textContent=value;};
+ const queue=()=>last?.queue?.site===site?last.queue:null;
  function draw(){
-  if(!grid.children.length)grid.innerHTML=positions.map(k=>'<button type="button" data-site="'+k+'"><i aria-hidden="true"></i>'+k+'</button>').join('');
-  for(const b of grid.children){const k=b.dataset.site,s=fleetState(last?.stations.find(r=>r.site===k));b.className=s.tone;b.setAttribute('aria-pressed',String(site===k));b.setAttribute('aria-label',k+': '+s.title);}
-  if(last){label.textContent=last.stale?'Projektversion geändert.':last.enabled?'Aktiv · '+last.phase:'Nachlegen pausiert.';}
-  prepare.classList.toggle('hide',!admin()||!!last?.enabled);pause.classList.toggle('hide',!admin()||!last?.enabled);prepare.disabled=pause.disabled=busy||!last||last.stale;
-  rebuild();detail();
+  if(!grid.children.length)for(const id of positions){
+   const button=document.createElement('button');button.type='button';button.dataset.site=id;
+   button.append(document.createElement('i'),id);grid.append(button);
+  }
+  for(const b of grid.children){
+   const station=last?.stations.find(r=>r.site===b.dataset.site);
+   const state=fleetState(station);
+   b.className=state.tone;b.setAttribute('aria-pressed',String(b.dataset.site===site));
+   b.setAttribute('aria-label',b.dataset.site+' · '+state.title+(station?.automatic?' · Automatik aktiv':''));
+   b.classList.toggle('auto-on',!!station?.automatic);
+  }
+  const r=current(),s=fleetState(r),live=s.tone!=='offline'?r?.live:null,plans=queue();
+  const editable=admin()&&!!last&&!last.stale&&!busy;
+  setText('[data-station-name]',site);
+  setText('[data-catalog-heading]','Abschnitte für '+site);
+  setText('[data-native]',s.title);find('[data-native]').className='fleet-pill '+s.tone;
+  setText('[data-job]',r?.file||'Kein Bauplan eingelegt');
+  setText('[data-placed]',live?fmt(live.placed)+(r.blocks?' / '+fmt(r.blocks):''):'Unbekannt');
+  setText('[data-fuel]',live?fmt(live.fuel)+' Schüsse':'Unbekannt');
+  setText('[data-target]',live?(live.target?live.target.join(' / '):live.chunks?'Blöcke im Flug':'Bei Baustart'):'Unbekannt');
+  const next=plans?.pending[0];
+  find('[data-waiting]').hidden=!next;
+  if(next)setText('[data-waiting]','Als Nächstes · '+next);
+  setText('[data-open-count]',plans?fmt(plans.pending.length+(r?.file?1:0)):'');
+  setText('[data-done-count]',plans?fmt(plans.done.length):'');
+  for(const tab of root.querySelectorAll('[data-list]'))tab.setAttribute('aria-pressed',String(tab.dataset.list===view));
+  auto.disabled=!editable||(!r?.automatic&&!plans);auto.setAttribute('aria-pressed',String(!!r?.automatic));
+  auto.textContent=r?.automatic?'Automatik ausschalten':'Automatik starten';
+  start.disabled=!editable||!live||s.tone!=='ready'||!!r?.automatic||!r?.upload||!!last.waiting?.some(w=>w.site===site);
+  start.textContent=s.tone==='working'?'Kanone baut':'Einmal starten';
+  const hint=r?.automatic?'Automatik aktiv. Jeder offene Abschnitt wird der Reihe nach geladen und gestartet.':'Die Automatik arbeitet alle offenen Abschnitte dieser Kanone ab.';
+  const problem=r?.status&&!r.inserted&&!r.status.startsWith('Fertig')?r.status:'';
+  setText('[data-hint]',!admin()?'Zum Starten als Admin anmelden.':problem&&r?.automatic?hint+' '+problem:hint);
+  if(last)setText('[data-summary]',last.enabled?'Automatisches Nachlegen ist für die Flotte aktiv.':'Automatisches Nachlegen ist pausiert.');
+  prepare.classList.toggle('hide',!admin()||!!last?.enabled);pause.classList.toggle('hide',!admin()||!last?.enabled);
+  prepare.disabled=pause.disabled=!editable;
  }
- grid.onclick=e=>{const b=e.target.closest('[data-site]');if(!b||busy)return;site=b.dataset.site;const url=new URL(location.href);url.searchParams.set('kanone',site);history.replaceState(null,'',url);draw();onSite?.(site);};
- pick.onchange=detail;
  async function refresh(){
   if(!active()||document.hidden)return;
-  if(!loading)loading=api(base).then(q=>{if(active()){last=q;draw();onStatus?.();}}).catch(e=>{last=null;draw();label.textContent=e.message;}).finally(()=>{loading=null;});
-  return loading;
+  if(loading)return loading;
+  const marker=generation,requested=site;
+  const pending=api(base+'?site='+encodeURIComponent(requested)).then(data=>{
+   if(marker!==generation||!active())return;
+   last=data;draw();onStatus?.();
+  }).catch(e=>{if(marker===generation){last=null;draw();setText('[data-hint]',e.message);onStatus?.();}});
+  loading=pending;try{await pending;}finally{if(loading===pending)loading=null;}
  }
+ async function afterChange(){generation++;loading=null;await refresh();}
  async function action(fn){
   if(busy)return;busy=true;draw();
-  try{await fn();}catch(e){notify(e.message,true);}finally{busy=false;await refresh();draw();}
+  try{await fn();}catch(e){notify(e.message,true);}finally{busy=false;await afterChange();draw();}
  }
- async function loadPlan(b,version){const receipt=await api(base+'/laden',{method:'POST',body:{version,sourceVersion:b.version,part:b.part,revision:b.revision,site:b.cannon,file:b.fileName,sha256:b.sha256}});await refresh();return receipt;}
- load.onclick=()=>{const b=selected();if(b&&!load.disabled)void action(async()=>{const r=await loadPlan(b,plansVersion);notify(r.status==='loaded'?site+': Plan ist eingelegt.':site+': Ladeauftrag angenommen.');});};
+ grid.onclick=e=>{
+  const b=e.target.closest('[data-site]');if(!b||busy||b.dataset.site===site)return;
+  site=b.dataset.site;view='open';
+  const url=new URL(location.href);url.searchParams.set('kanone',site);history.replaceState(null,'',url);
+  draw();onSite?.();void afterChange();
+ };
+ for(const tab of root.querySelectorAll('[data-list]'))tab.onclick=()=>{view=tab.dataset.list;draw();onSite?.();};
+ auto.onclick=()=>{if(!auto.disabled)void action(()=>api(base+'/automatik',{method:'POST',body:{site,version:last.version,enabled:!current()?.automatic}}));};
  start.onclick=()=>{const r=current();if(!r||start.disabled)return;void action(async()=>{
   const result=await api(base+'/start',{method:'POST',body:{site,version:last.version,upload:r.upload,file:r.file,sha256:r.sha256}});
-  notify(result.waiting?site+': Start angenommen, Create wartet.':site+(result.alreadyRunning?' baut bereits.':' gestartet.'));
+  notify(result.waiting?site+' wartet auf Create.':site+' gestartet.');
  });};
- for(const [button,kind] of [[prepare,'prepare'],[pause,'pause']])button.onclick=()=>void action(async()=>{await api(base,{method:'POST',body:{action:kind,version:last.version}});});
+ for(const [button,kind] of [[prepare,'prepare'],[pause,'pause']])button.onclick=()=>void action(()=>api(base,{method:'POST',body:{action:kind,version:last.version}}));
+ async function loadPlan(b,version){
+  const receipt=await api(base+'/laden',{method:'POST',body:{version,sourceVersion:b.version,part:b.part,revision:b.revision,site:b.cannon,file:b.fileName,sha256:b.sha256}});
+  await afterChange();return receipt;
+ }
+ async function promote(b,version){
+  await api(base+'/vorziehen',{method:'POST',body:{site:b.cannon,version,file:b.id,sha256:b.sha256}});
+  await afterChange();
+ }
+ function loadedStatus(file,hash){
+  const name=file.replace(/\.nbt$/,'');
+  const station=last?.stations.find(r=>r.file===name);
+  if(station?.live)return station.sha256===hash?fleetState(station).title:'Restplan eingelegt';
+  if(queue()?.done.some(row=>row.name===name))return 'Erledigt';
+  if(queue()?.preferred.includes(name))return 'Vorgezogen';
+  return null;
+ }
  setInterval(refresh,5000);draw();
- return {refresh,loadPlan,site:()=>site,setPlans(items,version){plans=items;plansVersion=version;group=new Map();for(const b of plans){if(!group.has(b.cannon))group.set(b.cannon,[]);group.get(b.cannon).push(b);}optionsKey='';draw();},
- loadedStatus(file,hash){const waiting=last?.waiting?.find(r=>r.name+'.nbt'===file&&r.sha===hash);if(waiting)return 'Für '+waiting.site+' vorgemerkt';const station=last?.stations.find(r=>r.file+'.nbt'===file);if(!station?.live)return null;return station.sha256===hash?fleetState(station).title:'Aktueller Restplan eingelegt';}};
+ return {refresh,loadPlan,promote,site:()=>site,queue,view:()=>view,station:current,loadedStatus};
 }
