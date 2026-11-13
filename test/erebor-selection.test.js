@@ -18,6 +18,7 @@ test('manual plan button changes an unstarted job and queues behind a running jo
  let native=empty();
  let starts=0;
  let ambiguous=0,supplyCalls=0;
+ let compact=false,foreign=false,oldHost=false;
  const unclear='Minecraft hat keine eindeutige Antwort für diese Kanonenposition geliefert. Bitte erneut prüfen.';
  const bridge=async(action,args)=>{
   if(action==='erebor-live')return {at:Date.now(),version:12,stations:{K01:{upload:native.components?.['create:schematic_file'],state:native.state,status:native.status,placed:native.amountPlaced,total:native.amountToPlace,fuel:400,chunks:[],target:null}}};
@@ -34,6 +35,11 @@ test('manual plan button changes an unstarted job and queues behind a running jo
   }else if(action==='erebor-supply'){
    assert.equal(args.computerId,12);assert.equal(args.chestSide,'right');supplyCalls++;
    if(ambiguous>0){ambiguous--;throw Error(unclear);}
+   if(oldHost&&args.target)throw Error('Erebor-Standortplan oder Auftrag passt nicht.');
+   if(compact&&args.target){
+    assert.deepEqual(args.target.size,[2,2,2]);assert.deepEqual(args.target.options,options);
+    return {confirmation:{file:foreign?'other.nbt':args.target.desired.file,sha256:native.fileHash,at:Date.now()/1000}};
+   }
   }else assert.equal(action,'erebor-inspect');
   return {applied:true,observed:{...native,at:Date.now()/1000}};
  };
@@ -68,6 +74,10 @@ test('manual plan button changes an unstarted job and queues behind a running jo
   const stillUncertain=await supply();
   assert.equal(supplyCalls-before,3);assert.equal(stillUncertain.message,unclear);
   assert.deepEqual(stillUncertain.items,[]);assert.equal(stillUncertain.options.gunpowder,0);
+  compact=true;assert.equal((await supply()).alignment.probeMode,'compact');
+  foreign=true;assert.deepEqual((await supply()).items,[]);foreign=false;
+  oldHost=true;assert.equal((await supply()).alignment.probeMode,'full');
+  oldHost=false;compact=false;
   const currentHash=native.fileHash;native.fileHash='0'.repeat(64);const rejected=await supply();
   assert.equal(rejected.options.gunpowder,0);assert.equal(rejected.options.paused,true);native.fileHash=currentHash;
   assert.equal((await pick(0)).json().status,'loaded');assert.equal(commands.length,1);

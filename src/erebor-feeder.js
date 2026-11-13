@@ -10,16 +10,27 @@ export function ereborFeeder(db,request,version){
  const lookup=db.prepare("SELECT s.state FROM erebor_queue_sites s JOIN erebor_queue_config q ON q.id=1 JOIN build_projects p ON p.id='erebor' WHERE s.site=? AND q.version=? AND p.current_version=q.version");
  const jobAt=site=>JSON.parse(lookup.get(site,version)?.state||'{}').job;
  const stationAt=db.prepare('SELECT status_json,options_json FROM cannons WHERE name=?');
- async function readSupply(site,reported,file){
+ let legacyUntil=0;
+ async function readSupply(site,reported,job){
+  const {options,...desired}=job.desired,file=desired.file;
   const args={site,version,computerId:reported.computerId,chestSide:reported.chestSide};
+  const target={desired,options,size:job.size};
   const key=JSON.stringify([site,file,args.computerId,args.chestSide]);
   if(pending.has(key))return pending.get(key);
   const read=(async()=>{
    const started=Date.now();
    for(let attempt=1;;attempt++){
     try{
-     const {observed}=await request('erebor-supply',args);
-     return {observed,attempt};
+     if(Date.now()>=legacyUntil){
+      try{
+       return {...await request('erebor-supply',{...args,target}),attempt};
+      }catch(e){
+       // Older hosts reject the additional key before reading the world.
+       if(e.message!=='Erebor-Standortplan oder Auftrag passt nicht.')throw e;
+       legacyUntil=Date.now()+60_000;
+      }
+     }
+     return {...await request('erebor-supply',args),attempt};
     }catch(e){
      // A competing RCON read can return no identifiable block. Only a new,
      // physically guarded read can authorize supply. Never retry a write.
@@ -40,19 +51,24 @@ export function ereborFeeder(db,request,version){
   if(!j||!j.loaded)return held('Kein bestätigter Bauplan in der Erebor-Kanone.');
   if(!Number.isInteger(reported.computerId)||!reported.chestSide||!(Math.abs(Date.now()-Date.parse(reported.at))<180000))return held('Wartet auf aktuelle Computer-ID und Kistenseite.');
   try{
-   const {observed:o,attempt}=await readSupply(site,reported,j.desired.file);
+   const {observed:o,confirmation,attempt}=await readSupply(site,reported,j);
    const current=jobAt(site),station=stationAt.get(row.name);
    const report=JSON.parse(station?.status_json||'null');
    if(!current?.loaded||current.desired.file!==j.desired.file||
       report?.computerId!==reported.computerId||report?.chestSide!==reported.chestSide||
       station.options_json!==row.options_json)return held('Standort, Auftrag oder Einstellungen während der Live-Prüfung geändert.');
-   const mismatch=verifyAlignment(j.desired,o,j.desired);
-   if(mismatch||!same(o.components?.['create:schematic_bounds'],j.size))return held(mismatch||'Der eingelegte Bauplan hat sich geändert.');
-   samples.set(site,o);
+   if(confirmation){
+    if(confirmation.file!==j.desired.file||confirmation.sha256!==j.desired.sha256||
+       !Number.isFinite(confirmation.at)||Math.abs(Date.now()/1000-confirmation.at)>10)return held('Der aktuelle Materialauftrag wurde nicht bestätigt.');
+   }else{
+    const mismatch=verifyAlignment(j.desired,o,j.desired);
+    if(mismatch||!same(o.components?.['create:schematic_bounds'],j.size))return held(mismatch||'Der eingelegte Bauplan hat sich geändert.');
+    samples.set(site,o);
+   }
    const amounts=new Map(),materials=j.phase==='stone'?{'minecraft:stone':j.blocks}:j.phase==='build'?j.materials:{};
    for(const [block,n] of Object.entries(materials||{}))for(const [item,each] of itemsFor(block))if(!item.endsWith('_bucket')&&n>0)amounts.set(item,(amounts.get(item)||0)+each*n);
    const items=[...amounts].map(([item,needed])=>({item,needed,stack:stackSize(item)})),total=items.reduce((s,i)=>s+i.needed,0);
-   return {...base,state:base.options.paused?'paused':'feeding',alignment:{enabled:true,state:'aligned',leaseSeconds:10,probeAttempts:attempt},blueprint:{id:j.desired.blueprint,name:j.desired.blueprint,version,origin:j.desired.anchor,size:j.size},items,totals:{start:total,needed:total,kinds:items.length}};
+   return {...base,state:base.options.paused?'paused':'feeding',alignment:{enabled:true,state:'aligned',leaseSeconds:10,probeAttempts:attempt,probeMode:confirmation?'compact':'full'},blueprint:{id:j.desired.blueprint,name:j.desired.blueprint,version,origin:j.desired.anchor,size:j.size},items,totals:{start:total,needed:total,kinds:items.length}};
   }catch(e){return held(e.message);}
  };
  const feeder=async(row,opts)=>{const plan=await poll(row,opts);views.set(row.name,{plan,at:Date.now()});return plan;};

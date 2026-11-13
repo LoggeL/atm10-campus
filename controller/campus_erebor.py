@@ -63,6 +63,8 @@ def handle(bridge, action, obj):
         required.update(('desired','kind','size'))
     if action == 'erebor-supply':
         required.update(('computerId','chestSide'))
+        if 'target' in obj:
+            required.add('target')
     if action == 'erebor-prepare':
         if 'previous' in obj:
             required.add('previous')
@@ -91,6 +93,10 @@ def handle(bridge, action, obj):
         # label and physical computer ID in the same world read as the schematic.
         proof = proof_command(candidate).replace('{ComputerId:'+str(obj['computerId'])+'}',
                 '{ComputerId:'+str(obj['computerId'])+',Label:"erebor-'+site['site']+'"}')
+        if 'target' in obj:
+            confirmation = confirm_supply(bridge, b, proof, obj['target'], site['site'], layout['version'])
+            if confirmation is not None:
+                return {'confirmation': confirmation}
         prefix = 'execute in minecraft:overworld'
         def checked(command):
             if not command.startswith(prefix+' '):
@@ -120,6 +126,70 @@ def handle(bridge, action, obj):
             validate_clear((bridge.base/'data/schematics/uploaded'/b['owner']/desired['file']).read_bytes(),obj['size'])
         return start(bridge,b,desired,opts,observed,erebor_clear=clear,bounds=obj['size'])
     return prepare_schematic(bridge,b,desired,obj['nbtBase64'],opts,obj['size'],erebor_kind=kind,previous=obj.get('previous'))
+
+
+def confirm_supply(bridge, binding, proof, target, site, version):
+    """Confirm an active printer in one small reply, regardless of how many blocks are in flight."""
+    import time
+    import secrets
+    from campus_probe import clean
+    from campus_snbt import Array, dumps
+    from campus_start import expected_components, validate_target
+
+    if not isinstance(target, dict) or set(target) != {'desired', 'options', 'size'}:
+        raise ValueError('Ungültiger Materialauftrag.')
+    desired, options, size = target['desired'], target['options'], target['size']
+    validate_target(binding, desired, options, erebor_clear=options.get('replace_mode') == 3)
+    if (desired['version'] != version or site not in desired['blueprint'].split('_')
+            or not isinstance(size, list) or len(size) != 3
+            or any(type(n) is not int or not 1 <= n <= 128 for n in size)):
+        raise ValueError('Erebor-Standort oder Bauplanmaße stimmen nicht.')
+    components = expected_components(desired)
+    components['create:schematic_deployed'] = True
+    components['create:schematic_anchor'] = Array('I', desired['anchor'])
+    components['create:schematic_bounds'] = Array('I', size)
+    guard = {'Inventory': {'Items': [{'Slot': 0, 'id': 'create:schematic', 'components': components}]},
+             'Options': options, 'Printer': {'Anchor': Array('I', desired['anchor'])}}
+    origin = tuple(binding[k] for k in ('x','y','z'))
+    # Position once; expressing the survey relative to the cannon leaves room
+    # for the item and printer predicates in Minecraft's RCON command packet.
+    def relative(match):
+        deltas = [int(p)-o for p,o in zip(match.groups(), origin)]
+        return ' '.join('~'+(str(d) if d else '') for d in deltas)
+    # Positive computer/chest/cannon tests themselves require loaded chunks,
+    # and a verified computer cannot also be an adjacent cannon.
+    cp = re.search(r' if block (-?\d+ -?\d+ -?\d+) computercraft:', proof).group(1)
+    proof = proof.replace(' unless block '+cp+' create:schematicannon','')
+    positive_chunks = set()
+    for x, _, z in re.findall(r' if block (-?\d+) (-?\d+) (-?\d+) ', proof):
+        positive_chunks.add((int(x)//16,int(z)//16))
+    def needed_chunk(match):
+        return '' if (int(match[1])//16,int(match[3])//16) in positive_chunks else match[0]
+    proof = re.sub(r' if loaded (-?\d+) (-?\d+) (-?\d+)', needed_chunk, proof)
+    compact = re.sub(r'(?<!\S)(-?\d+) (-?\d+) (-?\d+)(?!\S)', relative, proof)
+    prefix = 'execute in '+binding['dimension']
+    compact = compact.replace(prefix, 'execute in overworld positioned '+' '.join(map(str,origin)), 1)
+    compact = compact.replace(' minecraft:chest[',' chest[')
+    needle = ' if block ~ ~ ~ create:schematicannon'
+    if compact.count(needle) != 1:
+        raise ValueError('Kanonenposition im Standortnachweis fehlt.')
+    for state in ('RUNNING', 'PAUSED'):
+        guard['State'] = state
+        # Simple scalar SNBT strings may be unquoted. Keep namespaced strings
+        # quoted. A fresh, short storage name correlates the read-only reply.
+        predicate = re.sub(r'"([A-Za-z0-9_.+-]+)"', r'\1', dumps(guard))
+        marker = 'campus:'+secrets.token_hex(10)
+        command = compact.replace(needle, needle+predicate, 1)+' run data get storage '+marker
+        if len(command.encode())>950:
+            return None
+        result = clean(bridge.run(command))
+        if result == 'Storage '+marker+' has the following contents: {}':
+            if bridge.file_hash(binding['owner'], desired['file']) != desired['sha256']:
+                raise ValueError('Datei-/Revisionshash stimmt nicht mit der gewählten Campus-Version überein.')
+            return {'file': desired['file'], 'sha256': desired['sha256'], 'at': time.time()}
+    # An unstarted cannon may have no printer anchor. Use the full guarded
+    # inspection so the existing rules for that state still apply.
+    return None
 
 
 def release_unstarted(bridge,b,previous,block,read):
