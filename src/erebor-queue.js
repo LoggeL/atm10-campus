@@ -21,9 +21,16 @@ export function confirmedFinish(o,job,now=Date.now()/1000){
   o.outputItem==='create:empty_schematic'&&Number.isSafeInteger(job.baseline)&&o.outputCount===job.baseline+1&&
   same(o.options,job.desired.options);
 }
-export function recordedFinish(o,j,r,now=Date.now()){
+export function recordedFinish(o,j,r,now=Date.now(),witness=null){
+ // KubeJS retains only the most recent input -> finished transition at this
+ // physical station. Seeing another input clears it. After an outage, accept
+ // an older event only when the current signed report still witnesses it,
+ // and a separate native inspection confirms the reset and output count.
+ const retained=!!witness&&Number.isFinite(witness.at)&&now>=witness.at&&now-witness.at<45000&&
+  witness.at>=r?.at&&witness.signal?.upload===''&&witness.signal.state==='STOPPED'&&witness.signal.status==='finished'&&
+  same(witness.signal.finish,r)&&Number.isFinite(o.at)&&now>=o.at*1000-1000&&Math.abs(now-o.at*1000)<15000;
  return !!r && r.file===j.desired.file && Number.isFinite(r.at) && Number.isFinite(r.before) &&
-  r.before<=r.at && r.at-r.before<=10000 && r.at>=j.seen*1000 && now>=r.at && now-r.at<600000 &&
+  r.before<=r.at && r.at-r.before<=10000 && r.at>=j.seen*1000 && now>=r.at && (now-r.at<600000||retained) &&
   r.oldCount===j.baseline && r.newCount===o.outputCount &&
   confirmedFinish(o,{...j,seen:r.before/1000},r.at/1000);
 }
@@ -83,7 +90,7 @@ export function registerEreborQueue(app,campus){
   return result;
  }
  const current=v=>!closed&&db.prepare('SELECT 1 FROM erebor_queue_config q JOIN build_projects p ON p.id=\'erebor\' WHERE q.id=1 AND q.version=p.current_version AND q.version=? AND q.lease=? AND q.expires>?').get(v,owner,Date.now());
- function observe(site,s,o,finish){
+ function observe(site,s,o,witness){
   const j=s.job;
   s.inserted=false;
   if(!verifyAlignment(j.desired,o,j.desired)&&same(o.components['create:schematic_bounds'],j.size)){
@@ -98,7 +105,7 @@ export function registerEreborQueue(app,campus){
    else if(o.state==='PAUSED'&&o.status!=='ready')s.status='Pausiert: '+o.status;
    return true;
   }
-  if(confirmedFinish(o,j)||recordedFinish(o,j,finish)){
+  if(confirmedFinish(o,j)||recordedFinish(o,j,witness?.signal?.finish,Date.now(),witness)){
    s.cursor=j.next;s.completed++;s.job=null;s.status='Fertig, nächster Plan folgt';
    tx(db,()=>{
     production.finish(j.desired.version??cfg().version,site,j.desired.blueprint,new Date().toISOString());
@@ -146,9 +153,9 @@ export function registerEreborQueue(app,campus){
   const old=s.job;
   const aligned=old&&!verifyAlignment(old.desired,o,old.desired)&&same(o.components?.['create:schematic_bounds'],old.size);
   if(old){
-   const finish=o.inputEmpty===true&&o.status==='finished'?(await liveReport(c.version))?.stations?.[site]?.finish:null;
+   const report=o.inputEmpty===true&&o.status==='finished'?await liveReport(c.version):null;
    if(!current(c.version))return;
-   observe(site,s,o,finish);
+   observe(site,s,o,report?{at:report.at,signal:report.stations?.[site]}:null);
   }
   if(automatic()&&old&&s.job&&aligned){
    const completed=production.done(c.version,site,old.desired.blueprint);

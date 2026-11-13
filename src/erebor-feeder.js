@@ -86,6 +86,7 @@ export function ereborFeeder(db,request,version){
     if(confirmation.file!==j.desired.file||confirmation.sha256!==j.desired.sha256||
        !Number.isFinite(confirmation.at)||Math.abs(Date.now()/1000-confirmation.at)>10)return held('Der aktuelle Materialauftrag wurde nicht bestätigt.');
    }else{
+    if(o?.inputEmpty===true&&o.state==='STOPPED'&&o.status==='finished')return held('Kanone meldet fertig und der Eingabeslot ist leer. Wartet auf bestätigten Abschluss.');
     const mismatch=verifyAlignment(j.desired,o,j.desired);
     if(mismatch||!same(o.components?.['create:schematic_bounds'],j.size))return held(mismatch||'Der eingelegte Bauplan hat sich geändert.');
     samples.set(site,o);

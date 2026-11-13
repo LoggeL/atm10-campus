@@ -25,6 +25,13 @@ test('a delayed poll accepts only the witnessed finish of the very same input an
  assert.equal(recordedFinish(stopped,job,r,1200000),true);
  for(const wrong of [{file:'other'},{oldCount:1},{newCount:2},{before:900000}])assert.equal(recordedFinish(stopped,job,{...r,...wrong},1200000),false);
  assert.equal(recordedFinish(stopped,{...job,tainted:true},r,1200000),false);
+ const now=2200000,o={...stopped,at:now/1000};
+ const witness={at:now-1000,signal:{upload:'',state:'STOPPED',status:'finished',finish:r}};
+ assert.equal(recordedFinish(o,job,r,now,witness),true);
+ assert.equal(recordedFinish(o,job,r,now),false);
+ assert.equal(recordedFinish(o,job,r,now,{...witness,at:now-60000}),false);
+ assert.equal(recordedFinish(o,job,r,now,{...witness,signal:{...witness.signal,upload:'other'}}),false);
+ assert.equal(recordedFinish({...o,outputCount:2},job,r,now,witness),false);
 });
 test('the Campus action arms the persisted fleet and advances an observed finish exactly once',async()=>{
  const dir=mkdtempSync(join(tmpdir(),'erebor-queue-')),calls=[];
