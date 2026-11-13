@@ -17,6 +17,8 @@ test('manual plan button changes an unstarted job and queues behind a running jo
  const dir=mkdtempSync(join(tmpdir(),'erebor-pick-')),commands=[];
  let native=empty();
  let starts=0;
+ let ambiguous=0,supplyCalls=0;
+ const unclear='Minecraft hat keine eindeutige Antwort für diese Kanonenposition geliefert. Bitte erneut prüfen.';
  const bridge=async(action,args)=>{
   if(action==='erebor-live')return {at:Date.now(),version:12,stations:{K01:{upload:native.components?.['create:schematic_file'],state:native.state,status:native.status,placed:native.amountPlaced,total:native.amountToPlace,fuel:400,chunks:[],target:null}}};
   if(action==='erebor-start'){
@@ -29,7 +31,10 @@ test('manual plan button changes an unstarted job and queues behind a running jo
    commands.push(args);
    native={...empty(),inputEmpty:false,state:'PAUSED',status:'noGunpowder',item:'create:schematic',fileHash:d.sha256,printer:{...printer,Anchor:d.anchor,CurrentPos:[-1,0,0]},
     components:{'create:schematic_file':d.file,'create:schematic_owner':'Erebor','create:schematic_anchor':d.anchor,'create:schematic_bounds':args.size,'create:schematic_rotation':'none','create:schematic_mirror':'none','create:schematic_deployed':1}};
-  }else if(action==='erebor-supply'){assert.equal(args.computerId,12);assert.equal(args.chestSide,'right');}else assert.equal(action,'erebor-inspect');
+  }else if(action==='erebor-supply'){
+   assert.equal(args.computerId,12);assert.equal(args.chestSide,'right');supplyCalls++;
+   if(ambiguous>0){ambiguous--;throw Error(unclear);}
+  }else assert.equal(action,'erebor-inspect');
   return {applied:true,observed:{...native,at:Date.now()/1000}};
  };
  const app=await buildServer({dataDir:dir,worldSources:{},bootstrapInvite:'selection-ui',snapshotIntervalMin:0,cookieSecure:false,publicUrl:'http://test',cannonBridgeRequest:bridge});
@@ -55,6 +60,14 @@ test('manual plan button changes an unstarted job and queues behind a running jo
   assert.equal(report.statusCode,200);
   const approved=await supply();assert.equal(approved.alignment.state,'aligned');assert.equal(approved.options.gunpowder,16);
   assert.deepEqual(approved.items,[{item:'minecraft:stone',needed:1,stack:64}]);
+  let before=supplyCalls;ambiguous=1;
+  const recovered=await Promise.all([supply(),supply()]);
+  assert.equal(supplyCalls-before,2);
+  for(const p of recovered){assert.equal(p.alignment.state,'aligned');assert.equal(p.alignment.probeAttempts,2);}
+  before=supplyCalls;ambiguous=3;
+  const stillUncertain=await supply();
+  assert.equal(supplyCalls-before,3);assert.equal(stillUncertain.message,unclear);
+  assert.deepEqual(stillUncertain.items,[]);assert.equal(stillUncertain.options.gunpowder,0);
   const currentHash=native.fileHash;native.fileHash='0'.repeat(64);const rejected=await supply();
   assert.equal(rejected.options.gunpowder,0);assert.equal(rejected.options.paused,true);native.fileHash=currentHash;
   assert.equal((await pick(0)).json().status,'loaded');assert.equal(commands.length,1);
