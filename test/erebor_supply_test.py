@@ -1,9 +1,11 @@
 import json
-import re
+import importlib.util
+import subprocess
+import tempfile
 import sys
 import unittest
 from pathlib import Path
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'controller'))
@@ -51,6 +53,45 @@ class SupplyTest(unittest.TestCase):
         def success(cmd):return 'Storage '+cmd.split()[-1]+' has the following contents: {}'
         with self.assertRaisesRegex(ValueError,'hash'):
             self.prove(self.rows[0],success,'b'*64)
+
+
+class UserInstallerTest(unittest.TestCase):
+    def test_install_rollback_and_failed_restart_use_user_manager(self):
+        spec=importlib.util.spec_from_file_location('installer', ROOT/'tools/install-erebor-supply.py')
+        installer=importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(installer)
+        with tempfile.TemporaryDirectory() as temp:
+            kit=Path(temp)/'kit'; host=Path(temp)/'discord'
+            kit.mkdir();host.mkdir()
+            manifest={}
+            for name in ('campus_erebor.py','campus_cannon.py'):
+                (host/name).write_text('x=1');(kit/name).write_text('x=2')
+                manifest[name]={'old':[installer.digest(host/name)],'new':installer.digest(kit/name)}
+            (kit/'manifest.json').write_text(json.dumps(manifest))
+            for n in ('control.py','campus_probe.py','campus_discovery.py','campus_start.py','campus_snbt.py'):
+                (host/n).write_text('')
+            (host/'erebor-stations.json').write_text(json.dumps({'version':12,'sites':list(range(37))}))
+            real_path=Path
+            def mapped(path):
+                return host if str(path)=='/home/logge/minecraft/atm10/discord' else real_path(path)
+            with (patch.object(installer,'Path',side_effect=mapped),patch.object(installer,'__file__',str(kit/'install.py')),
+                  patch.object(sys,'platform','linux'),patch.object(installer.os,'geteuid',create=True,return_value=1234),
+                  patch.object(installer,'subprocess',wraps=subprocess) as service):
+                # Windows has no POSIX file owner. Patch just the owner check.
+                with patch.object(installer,'owns_service_directory',return_value=True):
+                    service.check_output.return_value='loaded\n'
+                    service.run.return_value=None
+                    for action in ('check','install','rollback'):
+                        with patch.object(sys,'argv',['install.py',action]):installer.main()
+                        value='x=2' if action=='install' else 'x=1'
+                        self.assertTrue(all((host/n).read_text()==value for n in manifest))
+                    for call in service.run.call_args_list:
+                        self.assertEqual(call.args[0][:2],['systemctl','--user'])
+                    service.CalledProcessError=subprocess.CalledProcessError
+                    service.run.side_effect=[subprocess.CalledProcessError(1,'systemctl'),None,None]
+                    with patch.object(sys,'argv',['install.py','install']), self.assertRaises(SystemExit):
+                        installer.main()
+                    self.assertTrue(all((host/n).read_text()=='x=1' for n in manifest))
 
 
 if __name__ == '__main__':

@@ -15,7 +15,13 @@ export function bridgeClient(config) {
     const signature=createHmac('sha256',config.cannonBridgeSecret).update(path+'\n'+stamp+'\n'+nonce+'\n'+body).digest('hex');
     let res;
     try { res=await fetch(config.cannonBridgeUrl+path,{method:'POST',headers:{'content-type':'application/json','X-Campus-Time':stamp,'X-Campus-Nonce':nonce,'X-Campus-Signature':signature},body,signal:AbortSignal.timeout(10000),redirect:'error'}); }
-    catch { throw new HttpError(503,'Live-Bridge offline oder Zeitüberschreitung; Material gesperrt.'); }
+    catch (e) {
+      const code=e.cause?.code;
+      if(e.name==='TimeoutError'||code==='UND_ERR_HEADERS_TIMEOUT')throw new HttpError(503,'Live-Bridge: keine Antwort innerhalb von 10 Sekunden.');
+      if(code==='ECONNREFUSED')throw new HttpError(503,'Live-Bridge: Verbindung am konfigurierten Port abgelehnt.');
+      if(['ENOTFOUND','EAI_AGAIN','EHOSTUNREACH','ENETUNREACH','ETIMEDOUT','UND_ERR_CONNECT_TIMEOUT'].includes(code))throw new HttpError(503,'Live-Bridge: Host nicht erreichbar ('+code+').');
+      throw new HttpError(503,'Live-Bridge: Verbindung unterbrochen; Material gesperrt.');
+    }
     let data; try { data=await res.json(); } catch { throw new HttpError(503,'Ungültige Live-Probe; Material gesperrt.'); }
     if (!res.ok) throw new HttpError(res.status===401 ? 503 : 409,data.error || 'Live-Probe abgelehnt.');
     return data;

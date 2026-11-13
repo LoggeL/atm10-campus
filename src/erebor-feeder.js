@@ -5,12 +5,37 @@ import {setTimeout as delay} from 'node:timers/promises';
 
 export const isEreborStation=name=>/^erebor-K(?:0[1-9]|[12][0-9]|3[0-7])$/i.test(name);
 
+// The host serializes Minecraft commands. Queue at the caller, before the
+// transport timeout starts, rather than sending 37 expiring HTTP requests.
+export function limitSupplyReads(request){
+ const waiting=[];
+ let active=0;
+ async function run(entry){
+  active++;
+  try{
+   if(Date.now()-entry.at>20_000)throw new Error('Materialprüfung wartet auf freie Controller-Kapazität.');
+   entry.resolve(await request('erebor-supply',entry.args));
+  }catch(e){entry.reject(e);}
+  finally{
+   active--;
+   if(waiting.length)void run(waiting.shift());
+  }
+ }
+ return args=>new Promise((resolve,reject)=>{
+  const entry={args,at:Date.now(),resolve,reject};
+  if(active<2)void run(entry);
+  else if(waiting.length<37)waiting.push(entry);
+  else reject(new Error('Materialprüfung wartet auf freie Controller-Kapazität.'));
+ });
+}
+
 export function ereborFeeder(db,request,version){
  const samples=new Map(),views=new Map(),pending=new Map();
  const lookup=db.prepare("SELECT s.state FROM erebor_queue_sites s JOIN erebor_queue_config q ON q.id=1 JOIN build_projects p ON p.id='erebor' WHERE s.site=? AND q.version=? AND p.current_version=q.version");
  const jobAt=site=>JSON.parse(lookup.get(site,version)?.state||'{}').job;
  const stationAt=db.prepare('SELECT status_json,options_json FROM cannons WHERE name=?');
  let legacyUntil=0;
+ const supplyRead=limitSupplyReads(request);
  async function readSupply(site,reported,job){
   const {options,...desired}=job.desired,file=desired.file;
   const args={site,version,computerId:reported.computerId,chestSide:reported.chestSide};
@@ -23,14 +48,14 @@ export function ereborFeeder(db,request,version){
     try{
      if(Date.now()>=legacyUntil){
       try{
-       return {...await request('erebor-supply',{...args,target}),attempt};
+       return {...await supplyRead({...args,target}),attempt};
       }catch(e){
        // Older hosts reject the additional key before reading the world.
        if(e.message!=='Erebor-Standortplan oder Auftrag passt nicht.')throw e;
        legacyUntil=Date.now()+60_000;
       }
      }
-     return {...await request('erebor-supply',args),attempt};
+     return {...await supplyRead(args),attempt};
     }catch(e){
      // A competing RCON read can return no identifiable block. Only a new,
      // physically guarded read can authorize supply. Never retry a write.

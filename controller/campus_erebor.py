@@ -93,15 +93,24 @@ def handle(bridge, action, obj):
         # label and physical computer ID in the same world read as the schematic.
         proof = proof_command(candidate).replace('{ComputerId:'+str(obj['computerId'])+'}',
                 '{ComputerId:'+str(obj['computerId'])+',Label:"erebor-'+site['site']+'"}')
+        # A large native inventory can turn a single inspection into dozens of
+        # RCON calls. Stop starting more calls once this feeder read is late.
+        import time
+        deadline = time.monotonic()+3
+        original_run = bridge.run
+        def timed_read(command):
+            if time.monotonic() >= deadline:
+                raise TimeoutError('Erebor supply read budget')
+            return original_run(command)
         if 'target' in obj:
-            confirmation = confirm_supply(bridge, b, proof, obj['target'], site['site'], layout['version'])
+            confirmation = confirm_supply(CannonBridge(bridge.base,timed_read), b, proof, obj['target'], site['site'], layout['version'])
             if confirmation is not None:
                 return {'confirmation': confirmation}
         prefix = 'execute in minecraft:overworld'
         def checked(command):
             if not command.startswith(prefix+' '):
                 raise ValueError('Unbekannte Standortabfrage.')
-            return bridge.run(proof+command[len(prefix):])
+            return timed_read(proof+command[len(prefix):])
         return {'observed':CannonBridge(bridge.base,checked).inspect(b)}
     kind = obj['kind']
     mode = {'stone':0, 'build':2, 'clear':3}.get(kind)

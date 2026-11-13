@@ -201,6 +201,38 @@ class ProbeTests(unittest.TestCase):
 
 
 class HttpTests(unittest.TestCase):
+    def test_failed_probe_logs_failure_before_disconnected_reply_once(self):
+        from campus_cannon import serve_campus
+        from types import SimpleNamespace
+        from unittest.mock import Mock
+        handler=SimpleNamespace(path='/campus/erebor-supply',headers={'Content-Length':'14'},
+                                rfile=io.BytesIO(b'{"site":"K01"}'),connection=Mock(),
+                                reply=Mock(side_effect=BrokenPipeError()))
+        bridge=Mock()
+        bridge.handle.side_effect=FileNotFoundError(2,'sensitive argument')
+        controller=SimpleNamespace(base=Path('/unused'),lock=threading.Lock())
+        with self.assertLogs('campus.bridge',level='ERROR') as logs:
+            serve_campus(handler,controller,bridge,SimpleNamespace(verify=lambda *args:True))
+        handler.reply.assert_called_once()
+        self.assertEqual(handler.reply.call_args.args[0],503)
+        self.assertIn('erebor-supply K01: FileNotFoundError', logs.output[0])
+        self.assertNotIn('sensitive argument', logs.output[0])
+        self.assertFalse(controller.lock.locked())
+
+    def test_busy_controller_does_not_execute_expired_probe(self):
+        from campus_cannon import serve_campus
+        from types import SimpleNamespace
+        from unittest.mock import Mock
+        handler=SimpleNamespace(path='/campus/erebor-supply',headers={'Content-Length':'2'},rfile=io.BytesIO(b'{}'),
+                                connection=Mock(),reply=Mock())
+        bridge=Mock()
+        lock=Mock()
+        lock.acquire.return_value=False
+        serve_campus(handler,SimpleNamespace(base=Path('/unused'),lock=lock),bridge,SimpleNamespace(verify=lambda *args:True))
+        self.assertEqual(handler.reply.call_args.args[0],503)
+        bridge.handle.assert_not_called()
+        lock.release.assert_not_called()
+
     def test_start_route_is_signed_and_not_a_general_command_endpoint(self):
         from campus_cannon import RequestAuth, serve_campus
         from types import SimpleNamespace

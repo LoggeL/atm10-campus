@@ -84,6 +84,8 @@ import secrets
 import time
 import threading
 import os
+import logging
+import traceback
 
 
 class CannonBridge:
@@ -266,8 +268,18 @@ class RequestAuth:
 
 def serve_campus(handler, controller, bridge, auth):
     """Only POSTs here; original controller bearer grants no Campus authority."""
+    log = logging.getLogger('campus.bridge')
+    def reply(status, data):
+        try:
+            handler.reply(status, data)
+        except (BrokenPipeError, ConnectionResetError, TimeoutError):
+            # A disconnected caller cannot receive a second error response.
+            log.debug('Campus client disconnected before HTTP %d', status)
     if handler.path not in ('/campus/probe','/campus/bind','/campus/discover','/campus/inspect','/campus/apply','/campus/prepare','/campus/start','/campus/erebor-inspect','/campus/erebor-prepare','/campus/erebor-supply','/campus/erebor-start','/campus/erebor-live'):
-        return handler.reply(404, {'error':'Unbekannter Endpunkt.'})
+        return reply(404, {'error':'Unbekannter Endpunkt.'})
+    action = handler.path.rsplit('/',1)[1]
+    site = '-'
+    began = time.monotonic()
     try:
         length = int(handler.headers.get('Content-Length','0'))
         limit = 24*1024*1024 if handler.path in ('/campus/prepare', '/campus/erebor-prepare') else 4096
@@ -275,7 +287,7 @@ def serve_campus(handler, controller, bridge, auth):
         handler.connection.settimeout(5)
         raw = handler.rfile.read(length)
         if not auth.verify(handler.path, handler.headers, raw):
-            return handler.reply(401, {'error':'Bridge-Authentifizierung fehlgeschlagen.'})
+            return reply(401, {'error':'Bridge-Authentifizierung fehlgeschlagen.'})
         def strict(pairs):
             out = {}
             for k,v in pairs:
@@ -283,13 +295,32 @@ def serve_campus(handler, controller, bridge, auth):
                 out[k] = v
             return out
         obj = json.loads(raw, object_pairs_hook=strict)
-        # Serializes against old controller stop/restart and chat jobs.
-        with controller.lock:
+        if not isinstance(obj,dict):
+            raise ValueError('Ungültiger Bridge-Auftrag.')
+        if isinstance(obj.get('site'),str) and re.fullmatch(r'K\d{2}',obj['site']):
+            site = obj['site']
+        if action == 'erebor-live':
+            # The report is a read-only file. It neither accesses Minecraft via
+            # RCON nor touches the controller registry or the running printer.
             if (controller.base / 'data/.paused').exists(): raise ValueError('Minecraft schläft; kein automatisches Aufwecken.')
-            result = bridge.handle(handler.path.rsplit('/',1)[1], obj)
-        handler.reply(200, result)
-    except (ValueError, TypeError, KeyError):
-        import sys
-        handler.reply(409, {'error':str(sys.exc_info()[1])})
-    except Exception:
-        handler.reply(503, {'error':'Live-Bridge offline oder Probe fehlgeschlagen; keine Freigabe.'})
+            from campus_erebor import handle
+            result = handle(bridge,action,obj)
+        else:
+            if not controller.lock.acquire(timeout=3):
+                return reply(503, {'error':'Controller belegt: keine freie Minecraft-Abfrage innerhalb von 3 Sekunden.'})
+            try:
+                if (controller.base / 'data/.paused').exists(): raise ValueError('Minecraft schläft; kein automatisches Aufwecken.')
+                result = bridge.handle(action,obj)
+            finally:
+                controller.lock.release()
+    except (ValueError, TypeError, KeyError) as exc:
+        return reply(409, {'error':str(exc)})
+    except Exception as exc:
+        # Log the failing location and error class without dumping commands,
+        # credentials, request bodies or captured Minecraft inventories.
+        frame = traceback.extract_tb(exc.__traceback__)[-1]
+        log.error('Campus %s %s: %s in %s:%d (%s), errno=%s exit=%s, %.2fs',
+                  action,site,type(exc).__name__,Path(frame.filename).name,frame.lineno,frame.name,
+                  getattr(exc,'errno',None),getattr(exc,'returncode',None),time.monotonic()-began)
+        return reply(503, {'error':'Live-Bridge: '+type(exc).__name__+' bei '+action+'; Details im Dienstjournal.'})
+    return reply(200,result)

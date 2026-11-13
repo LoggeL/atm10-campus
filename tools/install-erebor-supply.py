@@ -4,7 +4,6 @@ import hashlib
 import json
 import os
 from pathlib import Path
-import shutil
 import subprocess
 import sys
 import tempfile
@@ -19,8 +18,9 @@ def replace(source, dest):
     with tempfile.NamedTemporaryFile(dir=dest.parent, delete=False) as f:
         name = Path(f.name)
     try:
-        shutil.copyfile(source, name)
-        os.chown(name, stat.st_uid, stat.st_gid)
+        name.write_bytes(source.read_bytes())
+        if name.stat().st_gid != stat.st_gid:
+            os.chown(name, -1, stat.st_gid)
         os.chmod(name, stat.st_mode & 0o777)
         os.replace(name, dest)
     finally:
@@ -28,8 +28,12 @@ def replace(source, dest):
 
 
 def restart():
-    subprocess.run(['systemctl','restart','atm10-control.service'], check=True)
-    subprocess.run(['systemctl','is-active','--quiet','atm10-control.service'], check=True)
+    subprocess.run(['systemctl','--user','restart','atm10-control.service'], check=True)
+    subprocess.run(['systemctl','--user','is-active','--quiet','atm10-control.service'], check=True)
+
+
+def owns_service_directory(directory):
+    return os.geteuid()!=0 and directory.stat().st_uid==os.geteuid()
 
 
 def main():
@@ -39,43 +43,60 @@ def main():
     if not sys.platform.startswith('linux'):
         sys.exit('Bitte im Linux-Terminal der Minecraft-Homebox ausführen.')
     kit = Path(__file__).resolve().parent
-    target = Path('/home/logge/minecraft/atm10/discord/campus_erebor.py')
-    source = kit / 'campus_erebor.py'
+    directory = Path('/home/logge/minecraft/atm10/discord')
+    if not owns_service_directory(directory):
+        sys.exit('Als Besitzer des Controllers im Benutzer-Terminal der Homebox ausführen (ohne sudo).')
     manifest = json.loads((kit/'manifest.json').read_text())
-    if target.is_symlink() or not target.is_file() or digest(source)!=manifest['new']:
-        sys.exit('Installationspfad oder Paket passt nicht.')
-    if not all((target.parent/p).is_file() for p in ('control.py','campus_cannon.py','campus_probe.py','campus_discovery.py','campus_start.py','campus_snbt.py','erebor-stations.json')):
+    if not all((directory/p).is_file() for p in ('control.py','campus_probe.py','campus_discovery.py','campus_start.py','campus_snbt.py','erebor-stations.json')):
         sys.exit('Erwartete Controller-Dateien fehlen.')
-    layout=json.loads((target.parent/'erebor-stations.json').read_text())
+    layout=json.loads((directory/'erebor-stations.json').read_text())
     if layout.get('version')!=12 or len(layout.get('sites',[]))!=37:
         sys.exit('Standortliste des Hosts passt nicht zu Erebor V12.')
-    before = digest(target)
-    if before not in (manifest['old'],manifest['new']):
-        sys.exit('Eigene oder abweichende Host-Version gefunden. Bitte zuerst mit Logge abgleichen.')
-    compile(source.read_bytes(),str(source),'exec')
-    backup = target.with_name('campus_erebor.py.before-compact-supply-'+manifest['old'][:12])
+    unit = subprocess.check_output(['systemctl','--user','show','-p','LoadState','--value','atm10-control.service'],text=True).strip()
+    if unit!='loaded':
+        sys.exit('Der Benutzerdienst atm10-control.service ist nicht geladen.')
+    changes=[]
+    for name in ('campus_erebor.py','campus_cannon.py'):
+        target,source=directory/name,kit/name
+        spec=manifest[name]
+        if target.is_symlink() or not target.is_file() or digest(source)!=spec['new']:
+            sys.exit('Installationspfad oder Paket passt nicht: '+name)
+        before=digest(target)
+        if before not in (*spec['old'], spec['new']):
+            sys.exit('Abweichende Host-Version: '+name+'. Bitte zuerst mit Logge abgleichen.')
+        compile(source.read_bytes(),str(source),'exec')
+        backup=directory/(name+'.before-supply-v2')
+        if backup.is_symlink() or (backup.exists() and digest(backup) not in spec['old']):
+            sys.exit('Vorhandene Sicherung passt nicht: '+str(backup))
+        if args.action=='rollback':
+            if before==spec['new'] and backup.exists():
+                changes.append((target,backup,source))
+        elif before!=spec['new']:
+            if backup.exists() and digest(backup)!=before:
+                sys.exit('Vorhandene Sicherung weicht vom Ausgangsstand ab: '+name)
+            changes.append((target,source,backup))
     if args.action=='check':
-        print('Prüfung OK. '+('Update ist bereits installiert.' if before==manifest['new'] else 'Installation möglich.'))
+        print('Prüfung OK. '+('Installation möglich.' if changes else 'Update ist bereits installiert.'))
         return
-    if os.geteuid()!=0:
-        sys.exit('Für Installation und Rücknahme sudo verwenden.')
-    if (args.action=='install' and before==manifest['new']) or (args.action=='rollback' and before==manifest['old']):
+    if not changes:
         print('Gewünschte Version bereits vorhanden.')
         return
-    if args.action=='install' and not backup.exists():
-        with backup.open('xb') as out, target.open('rb') as inp:
-            shutil.copyfileobj(inp,out)
-    if backup.is_symlink() or not backup.is_file() or digest(backup)!=manifest['old']:
-        sys.exit('Sicherung fehlt oder ist ungültig.')
-    install = args.action=='install'
-    replace(source if install else backup, target)
+    applied=[]
     try:
+        for target,source,undo in changes:
+            if args.action=='install' and not undo.exists():
+                with undo.open('xb') as out:
+                    out.write(target.read_bytes())
+            replace(source,target)
+            applied.append((target,undo))
         restart()
     except (OSError, subprocess.CalledProcessError):
-        replace(backup if install else source, target)
-        restart()
+        for target,undo in reversed(applied):
+            replace(undo,target)
+        if applied:
+            restart()
         sys.exit('Controller-Neustart fehlgeschlagen. Vorherige Version wiederhergestellt.')
-    print('Controller aktiv. Sicherung: '+str(backup))
+    print('Benutzerdienst aktiv. Sicherungen liegen neben den aktualisierten Modulen.')
 
 
 if __name__=='__main__':

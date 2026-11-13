@@ -8,6 +8,26 @@ import {buildServer} from '../src/server.js';
 import {stoneNBT} from '../src/project-stone.js';
 import {zipStore} from '../src/zip.js';
 import {unstarted} from '../src/erebor-selection.js';
+import {limitSupplyReads} from '../src/erebor-feeder.js';
+
+test('37 simultaneous feeder reads reach the serial controller in bounded FIFO order after a failed read',async()=>{
+ const started=[],release=[];
+ let active=0,peak=0;
+ const read=limitSupplyReads(async(action,n)=>{
+  assert.equal(action,'erebor-supply');started.push(n);peak=Math.max(peak,++active);
+  await new Promise(resolve=>release.push(resolve));active--;
+  if(n===0)throw Error('probe failed');
+  return n;
+ });
+ const stations=Array.from({length:37},(_,n)=>n);
+ const results=Promise.allSettled(stations.map(read));
+ assert.deepEqual(started,[0,1]);
+ for(const n of stations){release[n]();await new Promise(resolve=>setImmediate(resolve));}
+ assert.equal(peak,2);assert.deepEqual(started,stations);
+ const settled=await results;
+ assert.equal(settled[0].status,'rejected');
+ assert.deepEqual(settled.slice(1).map(r=>r.value),stations.slice(1));
+});
 
 const layout=JSON.parse(readFileSync(new URL('../src/erebor-fleet/stations.json',import.meta.url)));
 const printer={DeferredBlocks:[],PrintStage:'BLOCKS',EntityProgress:-1};
