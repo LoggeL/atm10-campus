@@ -20,6 +20,36 @@ export function centeredStarts(lo,hi,width,step){
  return Array.from({length:count},(_,i)=>start+i*step);
 }
 
+export function tuffStripes(lo,hi,step=16){
+ return centeredStarts(lo+4,hi-4,2,step);
+}
+
+// Coordinates are block boundaries. Centre the entire plinth in an open bay,
+// and reflect the chosen bay so equal-distance ties cannot skew a row.
+function pairedBayCenters(lo,hi,targets,step,plinthWidth){
+ const stripes=tuffStripes(lo,hi,step),axis=(lo+hi)/2;
+ const bays=stripes.slice(1).flatMap((right,i)=>{
+  const left=stripes[i]+2,center=(left+right)/2;
+  return right-left>=plinthWidth+2 && Number.isInteger(center) && center<=axis?[center]:[];
+ });
+ const selected=new Set();
+ for(const target of targets.filter(t=>t<=axis)){
+  const candidates=bays.filter(b=>!selected.has(b)&&(target===axis||b<axis));
+  candidates.sort((a,b)=>Math.abs(a-target)-Math.abs(b-target)||a-b);
+  if(!candidates.length)throw Error('No free floor bay for a hall column');
+  selected.add(candidates[0]);
+ }
+ return [...new Set([...selected,...[...selected].map(b=>lo+hi-b)])].sort((a,b)=>a-b);
+}
+
+export function hallColumns(zone){
+ const [[x,,z],[X,,Z]]=zone.bounds,expanded=/^E3[0-8]$/.test(zone.id);
+ const bridge=zone.id==='E06',step=bridge?24:zone.id==='E07'?18:16,width=bridge?12:expanded?6:8;
+ const xs=bridge?[-64,64]:expanded?[x+36,X-36]:[x+18,X-18];
+ const zs=bridge?[-356,-260]:expanded?[z+48,Z-48]:centeredStarts(z+20,Z-20,0,28);
+ return {xs:pairedBayCenters(x,X,xs,step,width+4),zs:pairedBayCenters(z,Z,zs,step,width+4),step,width};
+}
+
 // Architectural wings share one canonical half; doors to the unequal neighbouring
 // functions are cut afterwards. Do not mirror skins, terrain, mines or machinery.
 export function balanceRooms(d,zones){

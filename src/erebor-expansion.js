@@ -1,5 +1,5 @@
 // Integer expansion of the interior; the entrance and exterior remain anchored.
-import {balanceRooms,centeredStarts} from './erebor-symmetry.js';
+import {balanceRooms,centeredStarts,hallColumns} from './erebor-symmetry.js';
 export const INTERIOR_IDS=new Set(['E05','E06','E07','E08','E09','E10','E11','E12','E13','E14','E15','E16','E17','E18','E19','E21A','E21B','S1','S2','S3','S4']);
 export const expandPoint=([x,y,z])=>[Math.round(x*1.5),y,z<-24?-24+Math.round((z+24)*1.5):z];
 export function expandedPlan(original){
@@ -53,8 +53,8 @@ export function appendExpandedInterior(target,source){
 export function addExpansion(d,p,M){
  const first=d.routes.length;
  for(const zone of p.zones.filter(z=>/^E3[0-8]$/.test(z.id))){
-  const {x,X,z,Z}=d.shell(zone,{columns:false});
-  for(const xx of [x+36,X-36])for(const zz of [z+48,Z-48])d.pillar(xx,zz,0,41,6,zone.style==='royal');
+  const supports=hallColumns(zone),{x,X,z,Z}=d.shell(zone,{columns:false,supports});
+  for(const xx of supports.xs)for(const zz of supports.zs)d.pillar(xx,zz,0,41,6,zone.style==='royal');
   d.gallery(x+4,z+4,X-4,Z-4,24,32);
   const step=Math.floor((X-x-36)/3/2)*2;
   for(const xx of centeredStarts(x+8,X-8,20,step))d.room(xx,24,z+8,20,20,16,{royal:zone.style==='royal',kind:zone.id==='E36'?'home':'library'});

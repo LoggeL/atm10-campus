@@ -3,11 +3,41 @@ import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {expandedPlan,interiorBasis,expandPoint,expandCorePoint} from '../src/erebor-expansion.js';
 import {compileErebor,readDesignBlock} from '../src/erebor-tiles.js';
-import {auditRoomSymmetry,SYMMETRIC_ROOMS,reflectState} from '../src/erebor-symmetry.js';
+import {auditRoomSymmetry,SYMMETRIC_ROOMS,reflectState,hallColumns,tuffStripes} from '../src/erebor-symmetry.js';
 const original=JSON.parse(readFileSync(new URL('./fixtures/erebor-plan.json',import.meta.url),'utf8'));
 original.envelope||={};original.stoneStart||={};original.packages||=[];
 const plan=expandedPlan(original),scene=compileErebor(plan);
 const at=(x,y,z)=>readDesignBlock(scene,plan.worldOrigin[0]+z,plan.worldOrigin[1]+y,plan.worldOrigin[2]-1-x);
+
+test('every freestanding hall plinth fits between both sets of tuff stripes',()=>{
+ const oldHalls=new Set(['E05','E06','E07','E09','E10','E12','E19']);
+ const halls=[...interiorBasis(plan).zones.filter(z=>oldHalls.has(z.id)),...plan.zones.filter(z=>/^E3[0-8]$/.test(z.id))];
+ assert.equal(halls.length,16);
+ for(const hall of halls){
+  const layout=hallColumns(hall),radius=layout.width/2+2;
+  for(const [axis,centers] of [[0,layout.xs],[2,layout.zs]]){
+   const lo=hall.bounds[0][axis],hi=hall.bounds[1][axis],stripes=tuffStripes(lo,hi,layout.step);
+   for(const c of centers){
+    const left=stripes.filter(s=>s+2<=c).at(-1)+2,right=stripes.find(s=>s>c);
+    assert.equal(c-left,right-c,hall.id);
+    assert.ok(c-radius>left && c+radius<right,hall.id+' plinth over stripe');
+    assert.ok(centers.includes(lo+hi-c),hall.id+' missing mirrored pillar');
+   }
+  }
+  if(hall.id==='E07'){
+   assert.equal(layout.xs.length*layout.zs.length,8);
+   for(const x of layout.xs)for(const z of layout.zs){
+    const a=expandPoint([x-radius,0,z-radius]),b=expandPoint([x+radius,0,z+radius]);
+    // The expanded design mirrors the canonical left wing after integer scaling.
+    if(x>0){a[0]=-expandPoint([-x+radius,0,z])[0];b[0]=-expandPoint([-x-radius,0,z])[0];}
+    for(let i=a[0];i<b[0];i++)for(let k=a[2];k<b[2];k++){
+     assert.equal(at(i,-1,k)?.name,'rechiseled:blackstone_tiles_connecting');
+     assert.equal(at(i,0,k)?.name,'rechiseled:blackstone_tiles_connecting',[x,z,i,k].join('/'));
+    }
+   }
+  }
+ }
+});
 
 test('persisted expansion round-trips without scaling its source zones twice',()=>{
  const saved=JSON.parse(JSON.stringify(plan));

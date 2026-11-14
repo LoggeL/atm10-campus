@@ -1,11 +1,11 @@
-// Erebor architecture, revision 4. Integer, half-open cuboids; local +Z faces east.
+// Erebor architecture, revision 5. Integer, half-open cuboids; local +Z faces east.
 // Empty cells are excavation intent, NEVER implicitly part of a placement file.
 import {gunzipSync} from 'node:zlib';
 import {appendExpandedInterior,appendExpandedOps,addExpansion,interiorBasis} from './erebor-expansion.js';
 
-import {balanceRooms,centeredStarts} from './erebor-symmetry.js';
+import {balanceRooms,centeredStarts,hallColumns,tuffStripes} from './erebor-symmetry.js';
 
-export const DESIGN_REVISION=4;
+export const DESIGN_REVISION=5;
 export const M={stone:'minecraft:stone_bricks',smooth:'chipped:smooth_stone_bricks',pillar:'create:polished_cut_tuff',dark:'rechiseled:blackstone_tiles_connecting',jade:'rechiseled:dark_prismarine_large_tiles_connecting',green:'rechiseledcreate:veridium_cut_polished_connecting',rune:'chipped:runic_carved_dark_prismarine',gold:'rechiseled:gold_block_polished_connecting',light:'chipped:inlayed_glowstone',black:'create:polished_cut_deepslate',wood:'minecraft:spruce_planks',log:'minecraft:stripped_spruce_log',roof:'minecraft:deepslate_tiles',glass:'minecraft:light_gray_stained_glass',air:'minecraft:air'};
 export const stair=(name='minecraft:stone_brick_stairs',facing='north')=>({name,props:{facing,half:'bottom',shape:'straight',waterlogged:'false'}});
 export const slab=(name='minecraft:stone_brick_slab',type='bottom')=>({name,props:{type,waterlogged:'false'}});
@@ -15,15 +15,15 @@ export class Design {
  box(x,y,z,X,Y,Z,block){const a=[x,y,z],b=[X,Y,Z];if(a.some((v,i)=>!Number.isSafeInteger(v)||!Number.isSafeInteger(b[i])))throw Error('Non-integer design');if(a.some((v,i)=>v>=b[i]))return;this.ops.push({a,b,s:block===M.air?0:this.state(block),g:this.group});}
  p(x,y,z,b){this.box(x,y,z,x+1,y+1,z+1,b);}
  clear(...bounds){this.box(...bounds,M.air);}
- floor(x,z,X,Z,y,wood=false){this.box(x,y-3,z,X,y-1,Z,wood?M.log:M.dark);this.box(x,y-1,z,X,y,Z,wood?M.wood:M.stone);if(!wood){this.box(x+2,y-1,z+2,X-2,y,Z-2,M.dark);for(const a of centeredStarts(x+4,X-4,2,16))this.box(a,y-1,z+3,a+2,y,Z-3,M.pillar);for(const b of centeredStarts(z+4,Z-4,2,16))this.box(x+3,y-1,b,X-3,y,b+2,M.pillar);}}
+ floor(x,z,X,Z,y,wood=false,step=16){this.box(x,y-3,z,X,y-1,Z,wood?M.log:M.dark);this.box(x,y-1,z,X,y,Z,wood?M.wood:M.stone);if(!wood){this.box(x+2,y-1,z+2,X-2,y,Z-2,M.dark);for(const a of tuffStripes(x,X,step))this.box(a,y-1,z+3,a+2,y,Z-3,M.pillar);for(const b of tuffStripes(z,Z,step))this.box(x+3,y-1,b,X-3,y,b+2,M.pillar);}}
  rail(x,z,X,Z,y,wood=false){this.box(x,y,z,X,y+2,Z,wood?M.log:M.dark);this.box(x,y+2,z,X,y+3,Z,wood?slab('minecraft:spruce_slab'):slab());}
  lamp(x,y,z,wood=false){this.box(x,y,z,x+1,y+3,z+1,wood?M.log:M.pillar);this.p(x,y+3,z,M.light);this.p(x,y+4,z,slab());}
  pillar(x,z,y,top,w=8,royal=false){const h=Math.floor(w/2);this.box(x-h-2,y,z-h-2,x+h+2,y+3,z+h+2,M.dark);this.box(x-h,y+3,z-h,x+h,top-4,z+h,royal?M.green:M.pillar);for(const k of [y+4,Math.floor((y+top)/2),top-8])this.box(x-h-1,k,z-h-1,x+h+1,k+2,z+h+1,M.gold);this.box(x-h-2,top-4,z-h-2,x+h+2,top,z+h+2,M.smooth);for(const sx of [-1,1])this.box(x+sx*h-(sx<0?1:0),y+8,z-1,x+sx*h+(sx>0?1:0),y+13,z+1,M.light);}
  // Faceted transverse ribs, with explicit 45-degree stepped haunches.
  rib(x,X,y,z,thick=3,royal=false){const span=X-x;this.box(x,y,z,X,y+3,z+thick,M.dark);this.box(x+2,y-1,z,X-2,y,z+thick,M.gold);for(let n=0;n<Math.min(14,Math.floor(span/4));n++){this.box(x+n,y-2-n,z,x+n+3,y+1-n,z+thick,royal?M.green:M.pillar);this.box(X-n-3,y-2-n,z,X-n,y+1-n,z+thick,royal?M.green:M.pillar);}}
- shell(zone,{floor=true,columns=true}={}){this.group=zone.id;const [[x,,z],[X,Y,Z]]=zone.bounds,y=zone.floors[0],royal=zone.style==='royal',wall=zone.style==='forge'?M.black:M.stone;this.box(x,y-4,z,X,Y,Z,wall);this.clear(x+4,y,z+4,X-4,Y-5,Z-4);if(floor)this.floor(x,z,X,Z,y);for(const h of [y+2,y+18,Y-10]){this.box(x+3,h,z+3,X-3,h+2,z+5,M.gold);this.box(x+3,h,Z-5,X-3,h+2,Z-3,M.gold);this.box(x+3,h,z+3,x+5,h+2,Z-3,M.gold);this.box(X-5,h,z+3,X-3,h+2,Z-3,M.gold);}
- for(const k of (zone.id==='E06'?[-356,-260]:/^E3[0-8]$/.test(zone.id)?[z+48,Z-48]:centeredStarts(z+20,Z-20,0,28)).map(v=>v-6)){for(const a of [x+3,X-5]){this.box(a,y+5,k,a+2,Y-12,k+12,royal?M.jade:M.smooth);this.box(a,y+7,k+4,a+2,y+13,k+8,M.light);}this.rib(x+4,X-4,Y-7,k+4,4,royal);}
- if(columns)for(const k of centeredStarts(z+20,Z-20,0,28))for(const a of [x+18,X-18])this.pillar(a,k,y,Y-7,8,royal);
+ shell(zone,{floor=true,columns=true,supports=null}={}){this.group=zone.id;const [[x,,z],[X,Y,Z]]=zone.bounds,y=zone.floors[0],royal=zone.style==='royal',wall=zone.style==='forge'?M.black:M.stone;this.box(x,y-4,z,X,Y,Z,wall);this.clear(x+4,y,z+4,X-4,Y-5,Z-4);if(floor)this.floor(x,z,X,Z,y,false,supports?.step??16);for(const h of [y+2,y+18,Y-10]){this.box(x+3,h,z+3,X-3,h+2,z+5,M.gold);this.box(x+3,h,Z-5,X-3,h+2,Z-3,M.gold);this.box(x+3,h,z+3,x+5,h+2,Z-3,M.gold);this.box(X-5,h,z+3,X-3,h+2,Z-3,M.gold);}
+ for(const k of (supports?.zs??centeredStarts(z+20,Z-20,0,28)).map(v=>v-6)){for(const a of [x+3,X-5]){this.box(a,y+5,k,a+2,Y-12,k+12,royal?M.jade:M.smooth);this.box(a,y+7,k+4,a+2,y+13,k+8,M.light);}this.rib(x+4,X-4,Y-7,k+4,4,royal);}
+ if(columns)for(const k of supports.zs)for(const a of supports.xs)this.pillar(a,k,y,Y-7,supports.width,royal);
  this.rooms.push({id:zone.id,title:zone.title,bounds:zone.bounds,floors:zone.floors});return {x,X,z,Z,y,Y,royal};}
  gallery(x,z,X,Z,y,w=8){this.floor(x,z,X,z+w,y);this.floor(x,Z-w,X,Z,y);this.floor(x,z+w,x+w,Z-w,y);this.floor(X-w,z+w,X,Z-w,y);this.rail(x+w,z+w,X-w,z+w+1,y);this.rail(x+w,Z-w-1,X-w,Z-w,y);this.rail(x+w,z+w+1,x+w+1,Z-w-1,y);this.rail(X-w-1,z+w+1,X-w,Z-w-1,y);}
  // A northbound straight run. Landing begins at (x, y, z), rises toward -Z.
@@ -53,9 +53,9 @@ function gate(d,p){const z=p.zones.find(z=>z.id==='E02');d.group='E02';d.box(-12
  for(const x of [-46,46]){d.floor(x-11,-23,x+11,-2,0);d.box(x-11,0,-23,x+11,3,-1,M.dark);d.box(x-11,2,-23,x+11,3,-1,M.gold);}
  d.floor(-15,-24,15,1,0);d.door(0,0,-24,30,48,'z',4);d.rooms.push({id:z.id,title:z.title,bounds:z.bounds,floors:[0]});
 }
-function grandHalls(d,p){for(const id of ['E05','E06','E07','E09','E10','E12','E19']){const zone=p.zones.find(z=>z.id===id),q=d.shell(zone,{floor:id!=='E06',columns:!['E05','E06'].includes(id)}),{x,X,z,Z,y,Y}=q;
- if(id==='E05'){for(const zz of centeredStarts(z+20,Z-20,0,28))for(const xx of [-32,32])d.pillar(xx,zz,0,72);d.gallery(x+4,z+4,X-4,Z-4,32,8);d.stairs(-44,0,-64,5,32);d.stairs(39,0,-64,5,32);}
- if(id==='E06'){d.floor(x,z,X,Z,-80);for(const xx of [-64,64])for(const zz of [-260,-356])d.pillar(xx,zz,-80,97,12,true);for(const yy of [-64,32,64])d.gallery(x+4,z+4,X-4,Z-4,yy,8);for(const yy of [-64,0]){d.floor(-10,z,10,Z,yy);d.floor(x,-314,X,-294,yy);for(const xx of [-11,10])d.rail(xx,z,xx+1,Z,yy);for(const zz of [-315,-294])d.rail(x,zz,X,zz+1,yy);d.clear(-12,yy,-316,12,yy+5,-292);}for(let zz=z+12;zz<Z-8;zz+=24)for(const xx of [-10,9])d.lamp(xx,0,zz);}
+function grandHalls(d,p){for(const id of ['E05','E06','E07','E09','E10','E12','E19']){const zone=p.zones.find(z=>z.id===id),supports=hallColumns(zone),q=d.shell(zone,{floor:id!=='E06',columns:!['E05','E06'].includes(id),supports}),{x,X,z,Z,y,Y}=q;
+ if(id==='E05'){for(const zz of supports.zs)for(const xx of supports.xs)d.pillar(xx,zz,0,72);d.gallery(x+4,z+4,X-4,Z-4,32,8);d.stairs(-44,0,-64,5,32);d.stairs(39,0,-64,5,32);}
+ if(id==='E06'){d.floor(x,z,X,Z,-80,false,supports.step);for(const xx of supports.xs)for(const zz of supports.zs)d.pillar(xx,zz,-80,97,12,true);for(const yy of [-64,32,64])d.gallery(x+4,z+4,X-4,Z-4,yy,8);for(const yy of [-64,0]){d.floor(-10,z,10,Z,yy);d.floor(x,-314,X,-294,yy);for(const xx of [-11,10])d.rail(xx,z,xx+1,Z,yy);for(const zz of [-315,-294])d.rail(x,zz,X,zz+1,yy);d.clear(-12,yy,-316,12,yy+5,-292);}for(let zz=z+12;zz<Z-8;zz+=24)for(const xx of [-10,9])d.lamp(xx,0,zz);}
  if(id==='E07'){for(let i=0;i<3;i++){const w=44-8*i,zz=-492-12*i,yy=4+4*i;d.box(-w/2,-1,zz-12,w/2,yy,zz,M.jade);d.stairs(-10,yy-4,zz+4,20,4);d.box(-w/2,yy-1,zz-12,w/2,yy,zz,M.gold);}d.box(-5,12,-529,5,15,-522,M.dark);d.box(-5,15,-530,5,29,-528,M.gold);d.box(-3,17,-528,3,26,-527,M.jade);d.box(-7,13,-528,-5,18,-521,M.gold);d.box(5,13,-528,7,18,-521,M.gold);d.box(-2,33,-532,2,37,-529,'minecraft:sea_lantern');d.box(-1,34,-529,1,36,-528,'minecraft:diamond_block');}
  if(id==='E09'){d.gallery(x+4,z+4,X-4,Z-4,24,8);for(const xx of [122,138,154,174,190,206]){d.box(xx,1,-160,xx+4,2,-108,slab('minecraft:spruce_slab','top'));for(let zz=-158;zz<-110;zz+=4){d.p(xx-1,0,zz,stair('minecraft:spruce_stairs','east'));d.p(xx+4,0,zz,stair('minecraft:spruce_stairs','west'));d.p(xx+1,2,zz,'minecraft:lantern');}}d.box(144,0,-186,184,2,-172,M.dark);d.box(148,3,-180,180,4,-176,slab('minecraft:spruce_slab','top'));d.stairs(110,0,-76,5,24);d.stairs(214,0,-76,5,24);}
  if(id==='E10'){d.gallery(x+4,z+4,X-4,Z-4,-64,8);for(const xx of [x+6,X-12])d.stairs(xx,-96,-576,6,32);for(let xx=-76;xx<80;xx+=32)for(let zz=-768;zz<-574;zz+=40){if(Math.abs(xx)<58&&zz>-704&&zz<-644)continue;const h=4+((xx+zz+3000)%13);for(let k=0;k<h;k++)d.box(xx-12+k/2|0,-96+k,zz-14+k/2|0,xx+12-(k/2|0),-95+k,zz+14-(k/2|0),'minecraft:gold_block');}d.features.push('Goldfelder 4–16 hoch, Hauptwege und Smaug-Reserve frei');}
