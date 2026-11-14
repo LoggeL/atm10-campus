@@ -170,11 +170,25 @@ export function registerEreborQueue(app,campus){
   job.started=true;observe(site,s,result.observed);
   logActivity(db,null,'erebor.automatic.start',site,{version,file:job.desired.blueprint});
  }
- async function station(site,s,c,p,archive){
+ async function station(site,s,c,p,archive,report){
   let choice=choices.next(c.version,site);
   const automatic=()=>!!production.mode(c.version,site).enabled;
   if(!automatic()&&!choice&&(s.exhausted||!c.enabled)&&!s.job?.loaded&&!s.job?.selection)return;
   const data={site,version:c.version};
+  const signal=report?.stations?.[site],tracked=s.job;
+  if(!choice&&tracked?.loaded&&signal&&Date.now()-report.at<15000){
+   if(signal.state==='STOPPED'&&signal.status==='finished'&&signal.empty&&!signal.finish&&Date.now()/1000-tracked.seen>=90){
+    s.inserted=false;s.status='Wartet auf bestätigten Abschluss';return;
+   }
+   if(isStationStone(tracked,site)&&signal.upload===tracked.desired.file&&signal.state==='RUNNING'&&signal.aligned&&
+      signal.owner===tracked.desired.owner&&same(signal.anchor,tracked.desired.anchor)&&same(signal.size,tracked.size)&&
+      same(signal.options,[0,false,false])&&Number.isSafeInteger(signal.placed)&&report.at>=tracked.seen*1000){
+    if(signal.status==='skipping'||signal.placed<(tracked.placed||0))tracked.tainted=true;
+    tracked.placed=signal.placed;tracked.seen=report.at/1000;tracked.started=true;s.inserted=true;s.status='Baut';
+    if(automatic()&&production.mode(c.version,site).started_upload!==signal.upload)production.started(c.version,site,signal.upload);
+    return;
+   }
+  }
   const sample=!choice&&s.job?.loaded?campus.ereborFeeder.sample(site):null;
   const o=sample&&sample.at>=s.job.seen?sample:(await request('erebor-inspect',data)).observed;
   if(!current(c.version))return;
@@ -291,7 +305,7 @@ export function registerEreborQueue(app,campus){
     if(report?.sharedChest===4&&signal&&Object.keys(signal).length===0)continue;
     db.prepare('UPDATE erebor_queue_config SET expires=? WHERE id=1 AND lease=?').run(Date.now()+120000,owner);
     const s=read(site);
-    try{await station(site,s,c,p,archive);}catch(e){s.status=e.message;s.inserted=false;}
+    try{await station(site,s,c,p,archive,report);}catch(e){s.status=e.message;s.inserted=false;}
     if(current(c.version)){s.checked=new Date().toISOString();persist(site,s);}
    }
    const renew=()=>{
@@ -347,6 +361,32 @@ export function registerEreborQueue(app,campus){
   })};
  }
  app.get(base,async(req,reply)=>{requireActor(req,'read');const report=await liveReport(cfg()?.version);return reply.header('Cache-Control','private, no-store').send(status(report,req.query.site));});
+ let inspecting=false;
+ const inspections=new Map();
+ app.get(base+'/drucker/:slot',async(req,reply)=>{
+  requireActor(req,'read');
+  const key=req.params.slot,site=key.slice(0,3),slot=key.slice(3),version=cfg()?.version;
+  if(!sites.includes(site)||!['A','B','C'].includes(slot)||version!==project()?.current_version)throw new HttpError(404,'Unbekannter Erebor-Drucker.');
+  const liveKey=slot==='A'?site:key;
+  const signal=(await liveReport(version))?.stations?.[liveKey];
+  if(signal?.state!=='RUNNING'||signal.status!=='searching')throw new HttpError(409,'Die Kanone sucht gerade nicht.');
+  const job=slot==='A'?read(site).job:helpers.jobAt(version,site,slot);
+  if(!isStationStone(job,site)||!job.loaded||job.desired.file!==signal.upload)throw new HttpError(409,'Kein passender Cleanstone-Auftrag.');
+  reply.header('Cache-Control','no-store');
+  const saved=inspections.get(key);
+  if(saved?.file===signal.upload&&Date.now()/1000-saved.at<20)return saved;
+  if(inspecting)throw new HttpError(429,'Eine Druckerprüfung läuft bereits.');
+  inspecting=true;
+  try{
+   const {observed:o}=await request('erebor-inspect',{site:liveKey,version});
+   const error=verifyAlignment(job.desired,o,job.desired);
+   if(error||!same(o.components?.['create:schematic_bounds'],job.size))throw new HttpError(409,error||'Bauplanmaße abweichend.');
+   const result={site,slot,file:job.desired.file,at:o.at,state:o.state,status:o.status,
+    anchor:job.desired.anchor,size:job.size,position:o.printer.CurrentPos,stage:o.printer.PrintStage,entity:o.printer.EntityProgress,
+    deferred:o.printer.DeferredCount??o.printer.DeferredBlocks?.length,placed:o.amountPlaced,total:o.amountToPlace,flights:o.flyingBlocks};
+   inspections.set(key,result);return result;
+  }finally{inspecting=false;}
+ });
  app.post(base+'/fortsetzen',async(req,reply)=>{
   const actor=requireActor(req,'admin'),v=req.body?.version;
   if(req.headers.origin&&req.headers.origin!==config.publicUrl)throw new HttpError(403,'Fremder Origin.');

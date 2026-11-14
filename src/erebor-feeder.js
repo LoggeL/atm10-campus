@@ -125,6 +125,10 @@ export function ereborFeeder(db,request,version,liveReport){
       if(n>0&&!item.endsWith('_bucket'))amounts.set(item,(amounts.get(item)||0)+count*n);
     }
     const items=[...amounts].map(([item,needed])=>({item,needed,stack:stackSize(item)}));
+    if(entries.every(([slot])=>isStationStone(group[slot],site))){
+     const stone=items.find(i=>i.item==='minecraft:stone');
+     if(stone)stone.confirmedPlaced=entries.reduce((n,[,r])=>n+r.placed,0);
+    }
     const total=items.reduce((sum,item)=>sum+item.needed,0),first=group[entries[0][0]];
     const identity=entries.map(([slot,r])=>slot+'='+r.file).sort().join('|');
     const assignment=parseInt(createHash('sha256').update(identity).digest('hex').slice(0,12),16);

@@ -27,6 +27,9 @@ export function parallelFleet(db,production,choices,request,recordedFinish,resum
     const row=lookup.get(v,site,slot);
     let job=row?.job&&JSON.parse(row.job);
     if(!signal?.state||(!job&&(!signal.ready||!enabled()||signal.upload||signal.state!=='STOPPED')))return;
+    if(job?.loaded&&signal.empty&&signal.state==='STOPPED'&&signal.status==='finished'&&!signal.finish){
+      save.run(JSON.stringify(job),'Wartet auf bestätigten Abschluss',v,site,slot);return;
+    }
     if(job?.loaded && !job.tainted && signal.upload===job.desired.file && signal.state==='RUNNING'){
       if(at<job.seen*1000)return;
       if(signal.status==='skipping' || signal.placed<(job.placed||0))job.tainted=true;

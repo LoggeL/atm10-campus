@@ -3,7 +3,7 @@
 -- through an Advanced Peripherals ME Bridge. Which blueprint and the options are set in the web app (tab "Kanonen");
 -- this computer only knows URL, a station token and its cannon name (install: wget run <url>/cc/install.lua).
 -- Strings shown on screen use Latin-1 escapes (\228 = ae-umlaut ...), the CC font is ISO-8859-1.
-local VERSION = "1.4.0"
+local VERSION = "1.4.1"
 
 settings.define("campus.url", { description = "Campus-URL", type = "string" })
 settings.define("campus.token", { description = "API-Token mit Scope Station", type = "string" })
@@ -285,7 +285,19 @@ local function feed()
     local have = counts[it.item] or 0
     -- Delivery limit per assignment: protects the ME from a hopper or player draining the chest.
     state.cap[it.item] = math.max(state.cap[it.item] or 0, math.ceil(it.needed * 1.1) + it.stack)
-    local allowed = state.cap[it.item] - (state.delivered[it.item] or 0)
+    local delivered = state.delivered[it.item] or 0
+    local allowed = state.cap[it.item] - delivered
+    if it.item == "minecraft:stone" and plan.alignment and plan.alignment.probeMode == "shared"
+        and type(it.confirmedPlaced) == "number" then
+      -- Allow one buffer, then replenish only blocks the verified cannons have consumed.
+      -- Keep the persisted delivery total when upgrading a station mid-assignment.
+      if not state.stoneLedger then
+        state.stoneLedger = {placed = it.confirmedPlaced, delivered = delivered}
+        dirty = true
+      end
+      local consumed = math.max(0, it.confirmedPlaced - state.stoneLedger.placed)
+      allowed = state.stoneLedger.delivered + consumed + buffer * it.stack - delivered
+    end
     local want = math.min(math.min(it.needed, buffer * it.stack) - have, allowed)
     if want > 0 then
       local roomInSlots = math.ceil(have / it.stack) * it.stack - have
@@ -470,8 +482,18 @@ local function tick()
   view.error = nil
   local ok, perr = findPeripherals()
   local iv = plan and plan.intervals or { plan = 60, status = 30, stock = 300 }
+  local stocked = false
+  if ok and plan and not plan.options.paused and plan.alignment and plan.alignment.probeMode == "shared"
+      and plan.items and #plan.items == 1 and plan.items[1].confirmedPlaced and now() - planAt < 25 then
+    local item = plan.items[1]
+    local counts, used, slots = chestContents()
+    local low = math.ceil(math.min(item.needed, plan.options.bufferStacks * item.stack) * 0.65)
+    stocked = low > 0 and (counts[item.item] or 0) >= low
+      and (counts[GUNPOWDER] or 0) >= math.ceil(plan.options.gunpowder / 2)
+    if stocked then view.chest = {slots=slots,used=used,name=chestName} end
+  end
 
-  if now() - planAt >= iv.plan then
+  if not stocked and now() - planAt >= iv.plan then
     local p, err = request("GET", "/api/cannons/" .. NAME .. "/plan")
     if p then
       plan, planAt, planReceivedAt = p, now(), now()
@@ -490,7 +512,8 @@ local function tick()
   elseif plan then
     local preparing = plan.schematic and plan.schematic.settings.enabled and plan.schematic.job and plan.schematic.job.state ~= "ready"
     if not preparing and plan.assignment ~= state.assignment then startAssignment(plan) end
-    if preparing then view.state, view.message, view.shortages = "alignment", latin1(plan.schematic.job.message or "Schematic wird vorbereitet"), {}
+    if stocked then view.state, view.message, view.shortages = "feeding", "Materialpuffer gefuellt", {}
+    elseif preparing then view.state, view.message, view.shortages = "alignment", latin1(plan.schematic.job.message or "Schematic wird vorbereitet"), {}
     elseif not alignmentReady(plan, planReceivedAt, now()) then view.state, view.message, view.shortages = "alignment", latin1(plan.message or "Live-Freigabe fehlt oder abgelaufen"), {}
     elseif not plan.blueprint then view.state, view.message, view.shortages = plan.state, plan.message and latin1(plan.message), {}
     elseif plan.options.paused then view.state, view.shortages = "paused", {}
