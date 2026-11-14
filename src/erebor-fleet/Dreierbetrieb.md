@@ -1,18 +1,11 @@
-# Erebor mit drei Kanonen je Standort
+# Erebor · A, B und C an einer Kiste
 
-Die bisherige Kanone übernimmt weiter ihre Baufolge. B und C bauen die veröffentlichten Cleanstone-Abschnitte ihres Standorts parallel. Jeder Abschnitt wird einmal vergeben. Die Zuordnung überlebt einen Neustart. Zwischen Standort und Schematic-Anker müssen weniger als 256 Blöcke liegen.
+An jedem Standort von K01 bis K37 gibt es eine eigene Liste von Bauabschnitten. Die ursprüngliche Kanone A und die Zusatzkanonen B und C reservieren unterschiedliche Abschnitte dieser Liste. B und C bauen Cleanstone. Der Campus bestätigt den Abschluss jeder einzelnen Kanone, bevor er ihren nächsten Abschnitt einlegt.
 
-## Einmal in der Base
-
-Zwei EnderStorage-Enderkisten aufstellen (JEI: `enderstorage:ender_chest`). Zwei freie Farbcodes wählen, einen für normalen Stein (`minecraft:stone`), den anderen für Schießpulver. Einen ME-Exportbus pro Kiste anschließen und auf genau das jeweilige Item filtern. Zwei freie Kanäle in der Base einplanen. Bei Bedarf Beschleunigungskarten einsetzen. Beide Kisten und das ME-Netz geladen halten. Einen ersten Stack jeder Sorte durch die Verbindung schicken. An allen Enden dieselbe Farbe und bei privaten Frequenzen denselben Besitzer verwenden.
-
-## Je Standort
-
-Im geladenen Stationschunk ein Quadrat von 2 × 2 nach der Koordinatenliste aufbauen. B und C bezeichnen die Kanonenblöcke. Auf die zwei übrigen Ecken kommen eine EnderStorage-Kiste auf der Steinfrequenz und eine auf der Pulverfrequenz. Beide Kisten berühren beide Kanonen mit einer ganzen Blockseite. Der alte Computer versorgt weiterhin seine eigene Einzelkiste. Das neue Paar benötigt vor Ort zwei Kanonen und zwei EnderStorage-Kisten. Bei allen 37 Standorten sind das 74 Zusatzkanonen und 74 Kisten vor Ort plus zwei Kisten in der Base. Die Liste beruht auf dem gespeicherten Standortplan. Die vier Felder vor dem Bauen auf vorhandene Kabel oder Maschinen prüfen.
-
-Beide Kanoneneingänge leer lassen, die zwei EnderStorage-Kisten füllen lassen und den Stationschunk geladen halten. Die Zusatzautomatik ist für alle 37 Standorte standardmäßig aktiv, sobald die Erebor-Planfolge eingerichtet ist. Auf der Seite Dreierbetrieb können Admins die Vergabe für alle Zusatzkanonen gemeinsam pausieren und freigeben. Der Campus erkennt die gebauten Zusatzkanonen im Zielchunk-Bericht, legt je einen freien Plan ein und startet ihn. Die Zusatzkanonen starten auch einzeln. Während des Aufbaus müssen die beiden Kisten und wenigstens eine Zusatzkanone stehen. Ein fremder Bauplan im Eingang hält diesen Platz an.
-
-Unter **Kanonen → Aufstellkoordinaten → Dreierbetrieb** stehen Koordinaten und Status für B und C. Der Zeitstempel bezieht sich auf die letzte Meldung der Minecraft-Welt. Für den ersten Test K01 aufbauen und dort zwei unterschiedliche Plannamen sowie steigende Blockzähler ablesen.
+1. Logge installiert V4 aus diesem Paket und lädt das Minecraft-Serverskript beim Serverstart. Falls V3 bereits genutzt wird, vor dem Wechsel die Zusatzvergabe pausieren, aktive Zusatzpläne abschließen lassen und für den Wechsel den Minecraft-Server stoppen.
+2. Am Standort die vorhandene Einzelkiste suchen. B und C auf die angegebenen Blöcke direkt an den Seiten der Kiste stellen. Bei K09 steht C direkt unter der Kiste; so liegen alle drei Kanonen im Stationschunk. Kiste, Computer, Bridge und Hauptkanone bleiben an ihren vorhandenen Plätzen. Pro Standort werden nur zwei weitere Schematicannons benötigt, insgesamt 74.
+3. Stationschunk und ME-Verbindung geladen halten. Die Eingaben von B und C leer lassen. Der vorhandene Stationscomputer füllt die gemeinsame Kiste auf den eingestellten Stein- und Pulvervorrat auf. Alle drei Kanonen entnehmen daraus.
+4. Unter **Erebor → Kanonen → Aufstellkoordinaten → Dreierbetrieb** die Aufstellkoordinaten und B/C prüfen. Neue Zusatzaufträge müssen freigegeben sein. Die Hauptkanone baut mit eingeschalteter Standortautomatik. Über die gemeinsame Starttaste können die 37 Hauptkanonen und die Zusatzvergabe in einem Schritt aktiviert werden. Bei drei freien, erreichbaren Cleanstone-Abschnitten sind dann drei verschiedene Pläne gleichzeitig möglich.
 
 ## Homebox · vor dem Start von Minecraft
 
@@ -21,10 +14,10 @@ Als Benutzer `logge` den folgenden Block im Homebox-Terminal ausführen. Das Pak
 ```bash
 (
   set -e
-  mkdir -p "$HOME/erebor-parallel-v3"
-  cd "$HOME/erebor-parallel-v3"
-  curl -fL --retry 2 'https://campus.logge.top/assets/erebor-parallel-v3.zip' -o update.zip ||
-    curl -fL 'https://raw.githubusercontent.com/LoggeL/atm10-campus/main/public/assets/erebor-parallel-v3.zip' -o update.zip
+  mkdir -p "$HOME/erebor-shared-v4"
+  cd "$HOME/erebor-shared-v4"
+  curl -fL --retry 2 'https://campus.logge.top/assets/erebor-shared-v4.zip' -o update.zip ||
+    curl -fL 'https://raw.githubusercontent.com/LoggeL/atm10-campus/main/public/assets/erebor-shared-v4.zip' -o update.zip
   python3 -m zipfile -e update.zip .
   python3 install.py check
   python3 install.py install
@@ -33,4 +26,4 @@ Als Benutzer `logge` den folgenden Block im Homebox-Terminal ausführen. Das Pak
 )
 ```
 
-Anschließend Minecraft wie gewohnt starten. Falls Minecraft während der Installation bereits lief, muss das geänderte KubeJS-Serverskript neu geladen werden, etwa beim nächsten Serverstart. Beide Campus-Komponenten müssen den Dreierbetrieb unterstützen. Zur Rückkehr auf die gesicherten Hostdateien im Dreierbetrieb neue Aufträge pausieren, laufende Zusatzaufträge abschließen lassen und `python3 "$HOME/erebor-parallel-v3/install.py" rollback` ausführen. Den Minecraft-Server anschließend mit dem wiederhergestellten Skript starten.
+Anschließend Minecraft wie gewohnt starten. Falls Minecraft während der Installation bereits lief, muss das geänderte KubeJS-Serverskript neu geladen werden, etwa beim nächsten Serverstart. Beide Campus-Komponenten müssen den Dreierbetrieb unterstützen. Zur Rückkehr auf die gesicherten Hostdateien im Dreierbetrieb neue Aufträge pausieren, laufende Zusatzaufträge abschließen lassen und `python3 "$HOME/erebor-shared-v4/install.py" rollback` ausführen. Den Minecraft-Server anschließend mit dem wiederhergestellten Skript starten.

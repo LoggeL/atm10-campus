@@ -45,7 +45,7 @@ def deploy(action):
     pairs=json.loads((KIT/'erebor-parallel.json').read_bytes())
     for path in (directory/'erebor-stations.json',kube/'config/erebor-stations.json'):
         survey=json.loads(path.read_bytes())
-        if survey['version']!=pairs['version'] or len(pairs['sites'])!=37 or {s['site']:s['cannon'] for s in survey['sites']}!={s['site']:s['main'] for s in pairs['sites']}:
+        if survey['version']!=pairs['version'] or len(pairs['sites'])!=37 or {s['site']:(s['cannon'],s['chest']) for s in survey['sites']}!={s['site']:(s['main'],s['chest']) for s in pairs['sites']}:
             raise ValueError('Standorte weichen ab: '+str(path))
     files=[(directory/n,n) for n in ('campus_erebor.py','campus_cannon.py','erebor-parallel.json')]
     files += [(kube/'config/erebor-parallel.json','erebor-parallel.json'),(kube/'server_scripts/campus/erebor-target-chunks.js','erebor-target-chunks.js')]
@@ -53,13 +53,13 @@ def deploy(action):
     for path,name in files:
         src=(KIT/name).read_bytes()
         spec=manifest[name]
-        backup=path.with_name(path.name+'.before-parallel-v3')
+        backup=path.with_name(path.name+'.before-shared-v4')
         if digest(src)!=spec['new'] or path.is_symlink() or backup.is_symlink() or not path.parent.is_dir():
             raise ValueError('Paket oder Ziel prüfen: '+str(path))
         if name.endswith('.py'):
             compile(src,name,'exec')
         old=path.read_bytes() if path.exists() else None
-        if old is None and spec['old']:
+        if old is None and name!='erebor-parallel.json':
             raise ValueError('Bestehendes Modul fehlt: '+str(path))
         if old is not None and digest(old) not in spec['old']+[spec['new']]:
             raise ValueError('Unbekannte Hostversion: '+str(path))
@@ -68,7 +68,7 @@ def deploy(action):
         if action=='rollback':
             if old is None or digest(old)!=spec['new']:
                 continue
-            if not backup.exists() and spec['old']:
+            if not backup.exists() and name!='erebor-parallel.json':
                 continue  # Already identical before this installation.
             new=backup.read_bytes() if backup.exists() else None
         else:

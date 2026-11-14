@@ -93,13 +93,13 @@ export function parallelFleet(db,production,choices,request,recordedFinish){
     }catch(e){if(current())set(e.message);}
   }
   return {reserved,list,isEnabled,switchAll,async tick(p,report,enabled,read,current,refresh){
-    if(report?.version!==parallelLayout.version||!report.stations)return;
+    if(report?.version!==parallelLayout.version||report.sharedChest!==4||!report.stations)return;
     for(const pair of parallelLayout.sites){
       for(const slot of slots){
         if(!current())return;
         if(Date.now()-report.at>=30000&&refresh){
           report=await refresh();
-          if(report?.version!==parallelLayout.version||!report.stations||!current())return;
+          if(report?.version!==parallelLayout.version||report.sharedChest!==4||!report.stations||!current())return;
         }
         const signal=report.stations[pair.site+slot];
         if(signal?.state && Date.now()-report.at<45000){

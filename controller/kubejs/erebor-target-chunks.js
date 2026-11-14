@@ -38,14 +38,23 @@
     var c = level.getBlockEntity(pos)
     if (!(c instanceof Cannon)) return false
     if (station.pair) {
-      function supplyChest(p) {
-        return String(Registries.BLOCK.getKey(level.getBlockState(position(p)).getBlock())) === 'enderstorage:ender_chest'
-      }
-      row.ready = supplyChest(station.pair.stone) && supplyChest(station.pair.powder)
+      var chestState = level.getBlockState(position(station.pair.chest))
+      row.ready = String(Registries.BLOCK.getKey(chestState.getBlock())) === 'minecraft:chest'
     }
     var item = c.inventory.getStackInSlot(0)
     row.upload=String(item.get(Components.SCHEMATIC_FILE)||'')
     row.state=String(c.state.name()); row.status=String(c.statusMsg)
+    row.empty=item.isEmpty()
+    if (row.upload) {
+      var origin=item.get(Components.SCHEMATIC_ANCHOR), size=item.get(Components.SCHEMATIC_BOUNDS)
+      row.owner=String(item.get(Components.SCHEMATIC_OWNER)||'')
+      row.anchor=origin?[origin.getX(),origin.getY(),origin.getZ()]:null
+      row.size=size?[size.getX(),size.getY(),size.getZ()]:null
+      row.aligned=String(item.id)==='create:schematic' && String(item.get(Components.SCHEMATIC_DEPLOYED))==='true' &&
+        String(item.get(Components.SCHEMATIC_ROTATION)).toLowerCase()==='none' && String(item.get(Components.SCHEMATIC_MIRROR)).toLowerCase()==='none' &&
+        !!origin && c.printer.isLoaded() && !c.printer.isErrored() && origin.equals(c.printer.getAnchor())
+      row.options=[Number(c.replaceMode),!!c.skipMissing,!!c.replaceBlockEntities]
+    }
     row.placed=Number(c.blocksPlaced); row.total=Number(c.blocksToPlace); row.fuel=Number(c.remainingFuel)
     row.chunks=[]; row.target=null
     // Keep the actual input -> finished/output transition even if Campus polls
@@ -100,7 +109,7 @@
     return row.chunks.length > 0
   }
 
-  var ticks = 0, lastReport = '', lastWrite = -600
+  var ticks = 0
   ServerEvents.tick(function (event) {
     if (++ticks % 10 !== 0) return
     var level = event.server.overworld(), chunks = level.getChunkSource()
@@ -122,11 +131,7 @@
       }
     })
     if (ticks%80===0) {
-      var serialized=JSON.stringify(report)
-      if (serialized!==lastReport || ticks-lastWrite>=320) {
-        JsonIO.write('kubejs/config/erebor-target-live.json',{version:survey.version,at:Date.now(),stations:report})
-        lastWrite=ticks;lastReport=serialized
-      }
+      JsonIO.write('kubejs/config/erebor-target-live.json',{version:survey.version,sharedChest:4,at:Date.now(),stations:report})
     }
   })
   console.info('Erebor-Zielchunks: '+stations.length+' Kanonen überwacht.')

@@ -63,6 +63,8 @@ def handle(bridge, action, obj):
         required.update(('desired','kind','size'))
     if action == 'erebor-supply':
         required.update(('computerId','chestSide'))
+        if 'targets' in obj:
+            required.add('targets')
         if 'target' in obj:
             required.add('target')
     if action == 'erebor-prepare':
@@ -106,6 +108,8 @@ def handle(bridge, action, obj):
         # label and physical computer ID in the same world read as the schematic.
         proof = proof_command(candidate).replace('{ComputerId:'+str(obj['computerId'])+'}',
                 '{ComputerId:'+str(obj['computerId'])+',Label:"erebor-'+site['site']+'"}')
+        if 'targets' in obj:
+            return shared_supply(bridge,layout,site,obj,proof)
         # A large native inventory can turn a single inspection into dozens of
         # RCON calls. Stop starting more calls once this feeder read is late.
         import time
@@ -148,6 +152,70 @@ def handle(bridge, action, obj):
             validate_clear((bridge.base/'data/schematics/uploaded'/b['owner']/desired['file']).read_bytes(),obj['size'])
         return start(bridge,b,desired,opts,observed,erebor_clear=clear,bounds=obj['size'])
     return prepare_schematic(bridge,b,desired,obj['nbtBase64'],opts,obj['size'],erebor_kind=kind,previous=obj.get('previous'))
+
+
+def shared_supply(bridge,layout,site,obj,proof):
+    """Use the tracker's printer state plus one live physical inventory check for the group."""
+    import time
+    from campus_discovery import condition
+    targets=obj['targets']
+    extra=json.loads(Path(__file__).with_name('erebor-parallel.json').read_text())
+    row=next((r for r in extra['sites'] if r['site']==site['site']),None)
+    if (not isinstance(targets,dict) or not 1<=len(targets)<=3 or set(targets)-{'A','B','C'} or
+            extra['version']!=layout['version'] or not row or row.get('chest')!=site['chest'] or row['main']!=site['cannon']):
+        raise ValueError('Unbekannte gemeinsame Materialkiste.')
+    report=handle(bridge,'erebor-live',{'version':layout['version']})
+    if report.get('sharedChest')!=4 or time.time()*1000-report['at']>10000:
+        raise ValueError('Wartet auf aktuellen V4-Standortbericht.')
+    confirmed={}
+    pos=lambda v:' '.join(map(str,v))
+    # Only loaded neighbouring chunks can extract items. Avoid making the
+    # K09 feeder depend on an unrelated, sleeping chunk across its boundary.
+    # The three authorised consumers and station computer are in the survey.
+    chunk=tuple(row['chest'][i]//16 for i in (0,2))
+    unloaded=set()
+    for x,y,z in re.findall(r' if loaded (-?\d+) (-?\d+) (-?\d+)',proof):
+        other=(int(x)//16,int(z)//16)
+        if other!=chunk and not condition(bridge,'execute in overworld if loaded '+' '.join((x,y,z))):
+            unloaded.add(other)
+    def inside(match):
+        if (int(match[1])//16,int(match[3])//16) not in unloaded:
+            return match[0]
+        return match[0].replace(' if loaded',' unless loaded') if ' if loaded' in match[0] else ''
+    proof=re.sub(r' if loaded (-?\d+) (-?\d+) (-?\d+)',inside,proof)
+    proof=re.sub(r' unless block (-?\d+) (-?\d+) (-?\d+) create:schematicannon',inside,proof)
+    for slot,coords in [('A',row['main']),('B',row['B']),('C',row['C'])]:
+        if sum(abs(a-b) for a,b in zip(coords,row['chest']))!=1:
+            raise ValueError('Kanone grenzt nicht an die Materialkiste.')
+        p=pos(coords)
+        if slot!='A':
+            proof=proof.replace(' unless block '+p+' create:schematicannon','')
+        signal=report['stations'].get(site['site']+('' if slot=='A' else slot),{})
+        target=targets.get(slot)
+        if signal.get('empty') is True or not signal:
+            proof+=' unless data block '+p+' Inventory.Items[{Slot:0}]'
+            continue
+        if not target or not signal.get('upload'):
+            raise ValueError('Unbestätigter Bauplan an '+site['site']+slot+'.')
+        file=target['file']
+        if (not re.fullmatch(r'campus_[0-9a-f-]{36}\.nbt',file) or signal['upload']!=file or
+                signal.get('owner')!='Erebor' or signal.get('anchor')!=target['anchor'] or
+                signal.get('size')!=target['size'] or signal.get('options')!=target['options'] or
+                not signal.get('aligned') or signal.get('state') not in ('RUNNING','PAUSED') or
+                type(signal.get('placed')) is not int or signal['placed']<0 or
+                bridge.file_hash('Erebor',file)!=target['sha256']):
+            raise ValueError('Bauplan, Ausrichtung oder Optionen an '+site['site']+slot+' prüfen.')
+        proof+=' if data block '+p+' Inventory.Items[{Slot:0,components:{"create:schematic_file":"'+file+'"}}]'
+        confirmed[slot]={'file':file,'placed':signal['placed']}
+    # Relative positions leave room for three independent input witnesses in a single RCON packet.
+    origin=row['chest']
+    def relative(match):
+        return ' '.join('~'+(str(int(v)-o) if int(v)!=o else '') for v,o in zip(match.groups(),origin))
+    proof=re.sub(r'(?<!\S)(-?\d+) (-?\d+) (-?\d+)(?!\S)',relative,proof)
+    proof=proof.replace('execute in minecraft:overworld','execute in overworld positioned '+pos(origin),1)
+    if not confirmed or not condition(bridge,proof) or time.time()*1000-report['at']>10000:
+        raise ValueError('Materialkiste, Computer oder Kanonenbelegung geändert.')
+    return {'confirmed':confirmed,'at':time.time()}
 
 
 def confirm_supply(bridge, binding, proof, target, site, version):

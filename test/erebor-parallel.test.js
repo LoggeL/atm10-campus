@@ -10,16 +10,18 @@ import {stoneNBT} from '../src/project-stone.js';
 import {zipStore} from '../src/zip.js';
 
 const fleet=JSON.parse(readFileSync(new URL('../src/erebor-fleet/stations.json',import.meta.url)));
-test('all 74 placements share their original chunk and both supplies without touching the original station',()=>{
+test('all 111 cannons touch their existing chest and all additional placements stay in the original chunk',()=>{
   assert.equal(parallelLayout.sites.length,37);
   for(const pair of parallelLayout.sites){
     const main=fleet.sites.find(s=>s.site===pair.site);
     assert.deepEqual(pair.main,main.cannon);
-    for(const p of [pair.B,pair.C,pair.stone,pair.powder]){
+    assert.deepEqual(pair.chest,main.chest);
+    for(const p of [pair.B,pair.C]){
       assert.deepEqual([p[0]>>4,p[2]>>4],[main.cannon[0]>>4,main.cannon[2]>>4]);
-      for(const k of ['chest','computer','bridge','connector','cannon'])assert.ok(main[k].reduce((d,n,i)=>d+Math.abs(n-p[i]),0)>=3);
+      for(const k of ['chest','computer','bridge','connector','cannon'])assert.notDeepEqual(p,main[k]);
     }
-    for(const s of [pair.B,pair.C])for(const k of ['stone','powder'])assert.equal(s.reduce((d,n,i)=>d+Math.abs(n-pair[k][i]),0),1);
+    assert.notDeepEqual(pair.B,pair.C);
+    for(const s of [pair.main,pair.B,pair.C])assert.equal(s.reduce((d,n,i)=>d+Math.abs(n-pair.chest[i]),0),1);
   }
 });
 
@@ -31,9 +33,19 @@ test('three real queue entries start once, survive restart and reconcile the ass
   const machines=Object.fromEntries(['K01','K01B','K01C'].map(k=>[k,idle()]));
   const started=[],receipts={};
   const bridge=async(action,b)=>{
-    if(action==='erebor-live')return {version:12,at:Date.now(),stations:Object.fromEntries(Object.entries(machines).map(([key,o])=>[key,{
+    if(action==='erebor-live')return {version:12,sharedChest:4,at:Date.now(),stations:Object.fromEntries(Object.entries(machines).map(([key,o])=>[key,{
       state:o.state,status:o.status,upload:o.components?.['create:schematic_file']||'',ready:true,placed:o.amountPlaced,total:100,finish:receipts[key]||null
     }]))};
+    if(action==='erebor-supply'){
+      const confirmed={};
+      for(const [slot,t] of Object.entries(b.targets)){
+        const o=machines[slot==='A'?b.site:b.site+slot];
+        if(o.inputEmpty)continue;
+        assert.equal(t.file,o.components['create:schematic_file']);
+        confirmed[slot]={file:t.file,placed:o.amountPlaced};
+      }
+      return {confirmed,at:Date.now()/1000};
+    }
     let o=machines[b.site];
     assert.ok(o,b.site);
     if(action==='erebor-prepare'){
@@ -69,6 +81,15 @@ test('three real queue entries start once, survive restart and reconcile the ass
     await until(()=>started.length===3);
     assert.deepEqual(started.map(([k])=>k),['K01','K01B','K01C']);
     assert.equal(new Set(started.map(([,n])=>n)).size,3);
+    const supply=async()=>(await app.inject({url:'/api/cannons/erebor-K01/plan',headers})).json();
+    await post('/api/cannons/erebor-K01/status',{computerId:17,chestSide:'right'});
+    const three=await supply();
+    assert.equal(three.alignment.probeMode,'shared');assert.equal(three.items[0].needed,3);
+    const main=machines.K01;
+    machines.K01=idle();
+    const two=await supply();
+    assert.equal(two.items[0].needed,2);assert.notEqual(two.assignment,three.assignment);
+    machines.K01=main;
     assert.equal((await post(path+'/laden',{site:'K01',version:12,sourceVersion:12,part:1,file:files[1].fileName,sha256:sha})).statusCode,409);
     const dash='/api/projects/erebor/cannon-sites/dreierbetrieb';
     assert.equal((await app.inject({url:dash})).statusCode,401);
@@ -87,5 +108,8 @@ test('three real queue entries start once, survive restart and reconcile the ass
     await until(()=>started.length===4);
     assert.equal(started[3][0],'K01B');assert.equal(new Set(started.map(([,n])=>n)).size,4);
     assert.equal(app.campus.db.prepare('SELECT count(*) n FROM erebor_finished_plans').get().n,1);
+    const fleetStart=await post(path+'/dreierbetrieb',{version:12,enabled:true,allMains:true});
+    assert.equal(fleetStart.statusCode,200);
+    assert.equal(app.campus.db.prepare('SELECT count(*) n FROM erebor_automatic WHERE enabled=1 AND version=12').get().n,37);
   }finally{await close();rmSync(directory,{recursive:true,force:true});}
 });

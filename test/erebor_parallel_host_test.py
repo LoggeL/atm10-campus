@@ -3,6 +3,7 @@ import json
 from pathlib import Path
 import sys
 import tempfile
+import time
 import unittest
 from unittest.mock import Mock, patch
 from zipfile import ZipFile
@@ -13,6 +14,47 @@ import campus_erebor
 
 
 class ParallelHost(unittest.TestCase):
+    def test_shared_supply_checks_all_three_inputs_in_one_rcon_command(self):
+        from campus_discovery import FACING, side_offset, validate_candidate, proof_command
+        layout=json.loads((ROOT/'src/erebor-fleet/stations.json').read_bytes())
+        pairs=json.loads((ROOT/'src/erebor-fleet/parallel.json').read_bytes())
+        xyz=lambda p:dict(zip('xyz',p))
+        with tempfile.TemporaryDirectory() as temp:
+            path=Path(temp)
+            (path/'erebor-parallel.json').write_text(json.dumps(pairs))
+            for site,row in zip(layout['sites'],pairs['sites']):
+                delta=tuple(a-b for a,b in zip(row['chest'],site['computer']))
+                face,side=next((f,s) for f in FACING for s in ('front','back','left','right') if side_offset(f,s)==delta)
+                binding={**xyz(row['main']),'owner':'Erebor','dimension':'minecraft:overworld'}
+                candidate=validate_candidate({'binding':binding,'computer':{**xyz(site['computer']),'facing':face,'id':2147483647,'block':site['computerBlock']},
+                    'chest':{**xyz(row['chest']),'block':site['inventoryBlock'],'side':side}})
+                proof=proof_command(candidate).replace('ComputerId:2147483647}','ComputerId:2147483647,Label:"erebor-'+site['site']+'"}')
+                targets={};signals={}
+                for slot in 'ABC':
+                    file='campus_'+slot.lower()*36+'.nbt'
+                    targets[slot]=dict(file=file,anchor=row['main'],size=[64,16,64],options=[0,False,False],sha256='1'*64)
+                    signals[site['site']+('' if slot=='A' else slot)]={**targets[slot],'empty':False,'upload':file,'owner':'Erebor','aligned':True,'state':'RUNNING','placed':12}
+                def run(cmd):
+                    self.assertLessEqual(len(cmd.encode()),950)
+                    if 'computercraft:' not in cmd:
+                        return ''  # Sleeping neighbour chunk; the final guard must prove it is still asleep.
+                    self.assertIn('minecraft:chest[type=single]',cmd)
+                    if site['site']=='K09':
+                        self.assertIn(' unless loaded ',cmd)
+                    self.assertIn('Label:"erebor-'+site['site']+'"',cmd)
+                    return 'Storage '+cmd.split()[-1]+' has the following contents: {}'
+                bridge=Mock(run=run,file_hash=lambda *_:'1'*64)
+                report=dict(at=time.time()*1000,sharedChest=4,stations=signals)
+                with patch.object(campus_erebor,'__file__',str(path/'campus_erebor.py')),patch.object(campus_erebor,'handle',return_value=report):
+                    result=campus_erebor.shared_supply(bridge,layout,site,{'targets':targets},proof)
+                    self.assertEqual(set(result['confirmed']),set('ABC'))
+                    signals[site['site']]={'empty':True}
+                    result=campus_erebor.shared_supply(bridge,layout,site,{'targets':targets},proof)
+                    self.assertEqual(set(result['confirmed']),set('BC'))
+                    signals[site['site']+'C']['upload']='foreign'
+                    with self.assertRaisesRegex(ValueError,'Bauplan'):
+                        campus_erebor.shared_supply(bridge,layout,site,{'targets':targets},proof)
+
     def test_install_rollback_and_addressing_all_helpers(self):
         with tempfile.TemporaryDirectory() as temp:
             root=Path(temp)
@@ -23,7 +65,7 @@ class ParallelHost(unittest.TestCase):
             cfg.mkdir(parents=True)
             script=root/'data/kubejs/server_scripts/campus/erebor-target-chunks.js'
             script.parent.mkdir(parents=True)
-            with ZipFile(ROOT/'public/assets/erebor-parallel-v3.zip') as archive:
+            with ZipFile(ROOT/'public/assets/erebor-shared-v4.zip') as archive:
                 archive.extractall(kit)
             with ZipFile(ROOT/'public/assets/erebor-controller-material-v2.zip') as old:
                 for name in ('campus_cannon.py','campus_erebor.py'):

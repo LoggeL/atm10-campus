@@ -75,7 +75,7 @@ export function registerEreborQueue(app,campus){
   const [x,y,z]=layout.sites.find(s=>s.site===name.slice(-3).toUpperCase()).cannon;
   return {x,y,z,dimension:'minecraft:overworld',owner:'Erebor'};
  };
- campus.ereborFeeder=ereborFeeder(db,request,layout.version);
+ campus.ereborFeeder=ereborFeeder(db,request,layout.version,liveReport);
  const owner=randomUUID();let worker=null,working=null,closed=false,queued=false;
  function stopWorker(){if(worker){void worker.terminate();worker=null;}}
  function generate(p,input){
@@ -350,7 +350,12 @@ export function registerEreborQueue(app,campus){
   if(b?.version!==layout.version||project()?.current_version!==b.version||typeof b.enabled!=='boolean')
    throw new HttpError(409,'Projektversion oder Betriebszustand prüfen.');
   if(!cfg())configureEreborQueue(db,{action:'pause',version:b.version},actor);
-  tx(db,()=>{helpers.switchAll(b.version,b.enabled);logActivity(db,actor,'erebor.helpers.mode','erebor',{version:b.version,enabled:b.enabled});});
+  if(b.allMains!==undefined&&b.allMains!==true)throw new HttpError(400,'Ungültige Flottenauswahl.');
+  tx(db,()=>{
+   helpers.switchAll(b.version,b.enabled);
+   if(b.allMains)for(const site of sites)production.switch(b.version,site,b.enabled);
+   logActivity(db,actor,'erebor.helpers.mode','erebor',{version:b.version,enabled:b.enabled,allMains:!!b.allMains});
+  });
   wake();return {enabled:b.enabled};
  });
  app.post(base+'/automatik',async req=>{

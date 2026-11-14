@@ -2,6 +2,7 @@ import {isDeepStrictEqual as same} from 'node:util';
 import {verifyAlignment} from './alignment.js';
 import {itemsFor,stackSize} from './materials.js';
 import {setTimeout as delay} from 'node:timers/promises';
+import {createHash} from 'node:crypto';
 
 export const isEreborStation=name=>/^erebor-K(?:0[1-9]|[12][0-9]|3[0-7])$/i.test(name);
 
@@ -29,13 +30,29 @@ export function limitSupplyReads(request){
  });
 }
 
-export function ereborFeeder(db,request,version){
+export function ereborFeeder(db,request,version,liveReport){
  const samples=new Map(),views=new Map(),pending=new Map();
  const lookup=db.prepare("SELECT s.state FROM erebor_queue_sites s JOIN erebor_queue_config q ON q.id=1 JOIN build_projects p ON p.id='erebor' WHERE s.site=? AND q.version=? AND p.current_version=q.version");
  const jobAt=site=>JSON.parse(lookup.get(site,version)?.state||'{}').job;
  const stationAt=db.prepare('SELECT status_json,options_json FROM cannons WHERE name=?');
  let legacyUntil=0;
  const supplyRead=limitSupplyReads(request);
+ const helperRows=db.prepare('SELECT slot,job FROM erebor_helpers WHERE site=? AND version=? AND job IS NOT NULL ORDER BY slot');
+ function groupJobs(site){
+  const jobs={},main=jobAt(site);
+  if(main?.loaded&&!main.tainted)jobs.A=main;
+  for(const r of helperRows.all(site,version)){
+   const job=JSON.parse(r.job);
+   if(job.loaded&&!job.tainted)jobs[r.slot]=job;
+  }
+  return jobs;
+ }
+ function groupTargets(jobs){
+  return Object.fromEntries(Object.entries(jobs).map(([slot,j])=>{
+   const {file,sha256,anchor,options}=j.desired;
+   return [slot,{file,sha256,anchor,size:j.size,options:[options.replace_mode,options.skip_missing,options.replace_block_entities]}];
+  }));
+ }
  async function readSupply(site,reported,job){
   const {options,...desired}=job.desired,file=desired.file;
   const args={site,version,computerId:reported.computerId,chestSide:reported.chestSide};
@@ -72,10 +89,42 @@ export function ereborFeeder(db,request,version){
   const site=row.name.slice(-3).toUpperCase(),j=jobAt(site),reported=JSON.parse(row.status_json||'{}')||{};
   const assignment=j?parseInt(j.desired.file.slice(7).replaceAll('-','').slice(0,12),16):row.assignment;
   const base={...opts,cannon:row.name,assignment,intervals:{...opts.intervals,plan:5},done:false,items:[],blueprint:null,totals:{start:0,needed:0,kinds:0}};
-  const held=message=>({...base,state:'alignment',message,alignment:{enabled:true,state:'blocked',leaseSeconds:10},options:{...base.options,paused:true,returnLeftovers:false,gunpowder:0,autoCraft:false}});
-  if(!j||!j.loaded)return held('Kein bestätigter Bauplan in der Erebor-Kanone.');
+  // The CC computer resets its per-job delivery limit when the assignment changes.
+  // A failed probe must not reset that limit while the same group is building.
+  const held=message=>({...base,assignment:views.get(row.name)?.plan.assignment??reported.assignment??assignment,state:'alignment',message,alignment:{enabled:true,state:'blocked',leaseSeconds:10},options:{...base.options,paused:true,returnLeftovers:false,gunpowder:0,autoCraft:false}});
   if(!Number.isInteger(reported.computerId)||!reported.chestSide||!(Math.abs(Date.now()-Date.parse(reported.at))<180000))return held('Wartet auf aktuelle Computer-ID und Kistenseite.');
   try{
+   const live=await liveReport(version);
+   const group=groupJobs(site);
+   if(live?.sharedChest===4&&(group.B||group.C||live.stations?.[site+'B']?.state||live.stations?.[site+'C']?.state)){
+    const targets=groupTargets(group);
+    if(!Object.keys(targets).length)return held('Wartet auf den ersten eingelegten Bauplan.');
+    const result=await supplyRead({site,version,computerId:reported.computerId,chestSide:reported.chestSide,targets});
+    const station=stationAt.get(row.name),after=JSON.parse(station?.status_json||'null');
+    if(!same(targets,groupTargets(groupJobs(site)))||station?.options_json!==row.options_json||
+       after?.computerId!==reported.computerId||after?.chestSide!==reported.chestSide||
+       !Number.isFinite(result.at)||Math.abs(Date.now()/1000-result.at)>10)
+     return held('Aufträge oder Standort während der Materialprüfung geändert.');
+    const entries=Object.entries(result.confirmed||{});
+    if(!entries.length||entries.some(([slot,r])=>!targets[slot]||r.file!==targets[slot].file||!Number.isSafeInteger(r.placed)||r.placed<0))
+     return held('Materialbedarf der Gruppe ist unbestätigt.');
+    const amounts=new Map();
+    for(const [slot,r] of entries){
+     const job=group[slot];
+     const materials=job.phase==='stone'?{'minecraft:stone':Math.max(0,job.blocks-r.placed)}:job.phase==='build'?job.materials:{};
+     for(const [block,n] of Object.entries(materials||{}))for(const [item,count] of itemsFor(block))
+      if(n>0&&!item.endsWith('_bucket'))amounts.set(item,(amounts.get(item)||0)+count*n);
+    }
+    const items=[...amounts].map(([item,needed])=>({item,needed,stack:stackSize(item)}));
+    const total=items.reduce((sum,item)=>sum+item.needed,0),first=group[entries[0][0]];
+    const identity=entries.map(([slot,r])=>slot+'='+r.file).sort().join('|');
+    const assignment=parseInt(createHash('sha256').update(identity).digest('hex').slice(0,12),16);
+    return {...base,assignment,state:base.options.paused?'paused':'feeding',options:{...base.options,returnLeftovers:false},
+     alignment:{enabled:true,state:'aligned',leaseSeconds:10,probeMode:'shared'},blueprint:{id:first.desired.blueprint,
+     name:site+' · '+entries.map(([slot])=>slot).join(' + '),origin:first.desired.anchor,size:first.size,version},items,
+     totals:{start:total,needed:total,kinds:items.length}};
+   }
+   if(!j?.loaded)return held('Kein bestätigter Bauplan in der Erebor-Kanone.');
    const {observed:o,confirmation,attempt}=await readSupply(site,reported,j);
    const current=jobAt(site),station=stationAt.get(row.name);
    const report=JSON.parse(station?.status_json||'null');
