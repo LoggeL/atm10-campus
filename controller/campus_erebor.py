@@ -52,7 +52,7 @@ def handle(bridge, action, obj):
         if not isinstance(obj,dict) or set(obj)!={'version'} or obj['version']!=layout['version']:
             raise ValueError('Unbekannte Erebor-Version.')
         path=bridge.base/'data/kubejs/config/erebor-target-live.json'
-        if path.stat().st_size>100000:
+        if path.stat().st_size>300000:
             raise ValueError('Ungültiger Erebor-Livebericht.')
         data=json.loads(path.read_text())
         if data.get('version')!=obj['version'] or not 0<=time.time()*1000-data.get('at',0)<45000:
@@ -71,10 +71,23 @@ def handle(bridge, action, obj):
         required.update(('desired','nbtBase64','size','kind'))
     if not isinstance(obj, dict) or set(obj) != required or obj['version'] != layout['version']:
         raise ValueError('Erebor-Standortplan oder Auftrag passt nicht.')
-    site = next((s for s in layout['sites'] if s['site'] == obj['site']), None)
+    key = obj['site']
+    helper = isinstance(key, str) and re.fullmatch(r'(K[0-9]{2})([BC])', key)
+    parent = helper[1] if helper else key
+    site = next((s for s in layout['sites'] if s['site'] == parent), None)
     if not site:
         raise ValueError('Unbekannter Kanonenplatz.')
     x,y,z = site['cannon']
+    if helper:
+        if action not in ('erebor-inspect', 'erebor-prepare', 'erebor-start') or (
+                action != 'erebor-inspect' and (obj.get('kind') != 'stone' or 'previous' in obj or
+                not obj['desired']['blueprint'].startswith('EREBOR_STEIN_'+parent+'_'))):
+            raise ValueError('Zusatzkanonen bauen nur Cleanstone des eigenen Standortes.')
+        extra = json.loads(Path(__file__).with_name('erebor-parallel.json').read_text())
+        row = next((s for s in extra['sites'] if s['site'] == parent), None)
+        if extra['version'] != layout['version'] or not row or row['main'] != site['cannon']:
+            raise ValueError('Zusatzposition passt nicht zur Hauptkanone.')
+        x,y,z = row[helper[2]]
     b = {'x':x, 'y':y, 'z':z, 'dimension':'minecraft:overworld', 'owner':'Erebor'}
     if action == 'erebor-inspect':
         return {'observed':bridge.inspect(b)}

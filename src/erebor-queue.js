@@ -1,5 +1,6 @@
 import {publishedPlan,selectionStore,unstarted} from './erebor-selection.js';
 import {productionStore} from './erebor-production.js';
+import {parallelFleet} from './erebor-parallel.js';
 import {ereborFeeder} from './erebor-feeder.js';
 import {Worker} from 'node:worker_threads';
 import {createHash,randomUUID} from 'node:crypto';
@@ -57,6 +58,15 @@ export function registerEreborQueue(app,campus){
  CREATE TABLE IF NOT EXISTS erebor_queue_sites(site TEXT PRIMARY KEY,state TEXT NOT NULL,payload BLOB);`);
  const choices=selectionStore(db);
  const production=productionStore(db);
+ const helpers=parallelFleet(db,production,choices,request,recordedFinish);
+ campus.ereborHelpers=helpers;
+ function available(p,site){
+  const busy=helpers.reserved(p.current_version,site);
+  const {open,done}=production.ordered(p,site);
+  const geometry=name=>name.replace(/_V\d+$/,'');
+  const taken=new Set([...busy,...done.keys()].map(geometry));
+  return open.filter(e=>!taken.has(geometry(e.name))&&(!busy.size||e.stage==='stone'));
+ }
  const cfg=()=>db.prepare('SELECT * FROM erebor_queue_config WHERE id=1').get();
  const project=()=>db.prepare("SELECT current_version,plan_json FROM build_projects WHERE id='erebor'").get();
  const read=site=>JSON.parse(db.prepare('SELECT state FROM erebor_queue_sites WHERE site=?').get(site).state);
@@ -164,7 +174,7 @@ export function registerEreborQueue(app,campus){
     return;
    }
    if(!choice){
-    const next=production.ordered(p,site).open[0];
+    const next=available(p,site)[0];
     if(!next){s.status='Baufolge erledigt';return;}
     const {job,bytes}=published(p,site,next);
     choices.add(c.version,site,job,bytes,old.desired.file);
@@ -192,6 +202,7 @@ export function registerEreborQueue(app,campus){
     const args={...data,kind:selected.phase,size:selected.size,desired,nbtBase64:Buffer.from(choices.bytes(choice.id)).toString('base64')};
     if(replace)args.previous={file:oldFile,sha256:old.desired.sha256,anchor:old.desired.anchor};
     const result=await request('erebor-prepare',args);
+    readAt=0;
     observed=result.observed;
     if(!result.applied||verifyAlignment(selected.desired,observed,selected.desired)||!same(observed.components?.['create:schematic_bounds'],selected.size))throw Error('Einlegen noch nicht bestätigt.');
    }
@@ -208,16 +219,22 @@ export function registerEreborQueue(app,campus){
   if(!automatic()&&(!cfg().enabled||s.exhausted||c.phase==='finished'))return;
   if(o.inputEmpty!==true||!cannonReset(o)){s.status='Kanone belegt';return;}
   if(!s.job&&(automatic()||production.priority(c.version,site))){
-   const next=production.ordered(p,site).open[0];
+   const next=available(p,site)[0];
    if(!next){s.status='Baufolge erledigt';s.exhausted=true;return;}
    const {job,bytes}=published(p,site,next);
    s.job={...job,next:s.cursor};
    db.prepare('UPDATE erebor_queue_sites SET state=?,payload=? WHERE site=?').run(JSON.stringify(s),bytes,site);
   }
   if(!s.job){
+   if(c.phase!=='stone'&&helpers.reserved(c.version,site).size)return;
    const selected=await generate(p,{site,phase:c.phase,cursor:s.cursor,architecture:archive?.[c.phase]?.[site]?.[s.cursor]});
    if(!current(c.version)||automatic()||production.priority(c.version,site)||choices.next(c.version,site))return;
    if(!selected.file){s.cursor=selected.next;s.exhausted=!!selected.exhausted;s.status=s.exhausted?'Phase erledigt':'Nächster Abschnitt wird geprüft';return;}
+   const name=selected.file.slice(0,-4),geometry=name.replace(/_V\d+$/,'');
+   const carried=production.ordered(p,site).done;
+   if([...helpers.reserved(c.version,site),...carried.keys()].some(n=>n.replace(/_V\d+$/,'')===geometry)){
+    s.cursor=selected.next;s.status='Abschnitt bereits vergeben oder fertig';return;
+   }
    if(production.done(c.version,site,selected.file.slice(0,-4))||choices.completed(c.version,site,selected.file.slice(0,-4))){s.cursor=selected.next;s.status='Gewählter Abschnitt bereits abgeschlossen';return;}
    const bytes=Buffer.from(selected.bytes),file='campus_'+randomUUID()+'.nbt';
    const desired={file,sha256:createHash('sha256').update(bytes).digest('hex'),blueprint:selected.file.slice(0,-4),owner:'Erebor',anchor:selected.origin,version:c.version,rotation:'none',mirror:'none',options:{replace_mode:modes[c.phase],skip_missing:false,replace_block_entities:false}};
@@ -229,6 +246,7 @@ export function registerEreborQueue(app,campus){
   const bytes=db.prepare('SELECT payload FROM erebor_queue_sites WHERE site=?').get(site).payload;
   if(!bytes)throw Error('Vorbereitete Datei fehlt.');
   const res=await request('erebor-prepare',{...data,desired,kind:j.phase,size:j.size,nbtBase64:Buffer.from(bytes).toString('base64')});
+  readAt=0;
   if(!res.applied||!observe(site,s,res.observed))throw Error('Einlegen noch nicht bestätigt.');
   persist(site,s);
   await startAutomatic(site,s,c.version,res.observed);
@@ -238,7 +256,8 @@ export function registerEreborQueue(app,campus){
   if(!c||!p||c.version!==p.current_version||closed)return;
   const tracking=db.prepare("SELECT site FROM erebor_queue_sites WHERE json_extract(state,'$.job.loaded')=1").all().map(r=>r.site);
   const active=[...production.enabled(c.version),...choices.active(c.version),...tracking];
-  if((!c.enabled||c.phase==='finished')&&!active.length)return;
+  const pendingHelpers=helpers.list(c.version).some(r=>r.name);
+  if((!c.enabled||c.phase==='finished')&&!active.length&&!pendingHelpers&&!(c.phase==='stone'&&helpers.isEnabled(c.version)))return;
   const acquired=db.prepare('UPDATE erebor_queue_config SET lease=?,expires=? WHERE id=1 AND (lease IS NULL OR expires<? OR lease=?)').run(owner,Date.now()+120000,Date.now(),owner);
   if(!acquired.changes)return;
   try{
@@ -250,7 +269,16 @@ export function registerEreborQueue(app,campus){
     try{await station(site,s,c,p,archive);}catch(e){s.status=e.message;s.inserted=false;}
     if(current(c.version)){s.checked=new Date().toISOString();persist(site,s);}
    }
-   if(current(c.version)&&cfg().enabled&&c.phase!=='finished'&&sites.every(site=>{const s=read(site);return s.exhausted&&!s.job;})){
+   const renew=()=>{
+    if(!current(c.version))return false;
+    db.prepare('UPDATE erebor_queue_config SET expires=? WHERE id=1 AND lease=?').run(Date.now()+120000,owner);
+    return true;
+   };
+   if(current(c.version)){
+    const report=await liveReport(c.version);
+    await helpers.tick(p,report,()=>c.phase==='stone'&&helpers.isEnabled(c.version),read,renew,()=>liveReport(c.version));
+   }
+   if(current(c.version)&&cfg().enabled&&c.phase!=='finished'&&!helpers.list(c.version).some(r=>r.name)&&sites.every(site=>{const s=read(site);return s.exhausted&&!s.job;})){
     const phase=({stone:'clear',clear:'build',build:'finished'})[c.phase];
     tx(db,()=>{
      const files=c.phase==='stone'?JSON.stringify(snapshotArchive(c.version)):c.archive;
@@ -274,6 +302,7 @@ export function registerEreborQueue(app,campus){
   if(!liveFetch)liveFetch=request('erebor-live',{version}).then(r=>r.version===version&&Math.abs(Date.now()-r.at)<45000?r:null).catch(()=>null).then(r=>{readAt=Date.now();liveCache=r;return r;}).finally(()=>{liveFetch=null;});
   return liveFetch;
  }
+ campus.ereborLiveReport=liveReport;
  function status(report=null,focus=null){
   const c=cfg(),v=project()?.current_version;
   let queue=null;
@@ -282,10 +311,11 @@ export function registerEreborQueue(app,campus){
    const waiting=choices.waiting(v).filter(r=>r.site===focus&&!done.has(r.name));
    const nextNames=new Set(waiting.map(r=>r.name));
    const promoted=[...new Set([...preferred,...nextNames])];
-   const pending=[...new Set([...promoted,...open.map(e=>e.name)])].filter(name=>name!==job?.desired.blueprint);
+   const busy=helpers.reserved(v,focus);
+   const pending=[...new Set([...promoted,...open.map(e=>e.name)])].filter(name=>name!==job?.desired.blueprint&&!busy.has(name));
    queue={site:focus,pending,preferred:promoted,done:[...done].map(([name,at])=>({name,at}))};
   }
-  return {queue,waiting:c?choices.waiting(c.version):[],enabled:!!c?.enabled,version:c?.version??v,stale:!!c&&c.version!==v,phase:c?(stages[c.phase]||'Fertig'):'Steinfüllung',stations:db.prepare('SELECT site,state FROM erebor_queue_sites ORDER BY site').all().map(r=>{
+  return {queue,helpers:c?helpers.list(c.version):[],waiting:c?choices.waiting(c.version):[],enabled:!!c?.enabled,version:c?.version??v,stale:!!c&&c.version!==v,phase:c?(stages[c.phase]||'Fertig'):'Steinfüllung',stations:db.prepare('SELECT site,state FROM erebor_queue_sites ORDER BY site').all().map(r=>{
    const s=JSON.parse(r.state),j=s.job,signal=report?.stations?.[r.site];
    const live=j?.loaded&&signal?.upload===j.desired.file?{state:signal.state,status:signal.status,placed:signal.placed,total:signal.total,fuel:signal.fuel,target:signal.target,chunks:signal.chunks?.length||0,at:report.at}:null;
    return {site:r.site,automatic:!!production.mode(c.version,r.site).enabled,status:s.status,live,upload:j?.desired.file??null,kind:j?.phase??null,inserted:!!s.inserted,sha256:j?.desired.sha256||null,file:j?.desired.blueprint||null,anchor:j?.desired.anchor||null,blocks:j?.blocks??null,completed:s.completed,checked:s.checked||null};
@@ -314,6 +344,15 @@ export function registerEreborQueue(app,campus){
   if(cfg().version!==b.version)throw new HttpError(409,'Veraltete Planfolge.');
   return {actor,b,p};
  }
+ app.post(base+'/dreierbetrieb',async req=>{
+  const actor=requireActor(req,'admin'),b=req.body;
+  if(req.headers.origin&&req.headers.origin!==config.publicUrl)throw new HttpError(403,'Fremder Origin.');
+  if(b?.version!==layout.version||project()?.current_version!==b.version||typeof b.enabled!=='boolean')
+   throw new HttpError(409,'Projektversion oder Betriebszustand prüfen.');
+  if(!cfg())configureEreborQueue(db,{action:'pause',version:b.version},actor);
+  tx(db,()=>{helpers.switchAll(b.version,b.enabled);logActivity(db,actor,'erebor.helpers.mode','erebor',{version:b.version,enabled:b.enabled});});
+  wake();return {enabled:b.enabled};
+ });
  app.post(base+'/automatik',async req=>{
   const {actor,b}=productionContext(req);
   if(typeof b.enabled!=='boolean')throw new HttpError(400,'Automatikzustand fehlt.');
@@ -322,6 +361,7 @@ export function registerEreborQueue(app,campus){
  });
  app.post(base+'/vorziehen',async req=>{
   const {actor,b,p}=productionContext(req);
+  if(helpers.reserved(b.version,b.site).has(b.file))throw new HttpError(409,'Dieser Abschnitt liegt bei einer Zusatzkanone.');
   const entry=production.ordered(p,b.site).open.find(f=>f.name===b.file&&f.sha256===b.sha256);
   if(!entry||entry.name===read(b.site).job?.desired.blueprint)throw new HttpError(409,'Nur einen offenen Abschnitt dieser Kanone vorziehen.');
   tx(db,()=>{production.promote(b.version,b.site,entry.name);logActivity(db,actor,'erebor.plan.priority',b.site,{file:entry.name,version:b.version});});
@@ -332,6 +372,8 @@ export function registerEreborQueue(app,campus){
   if(req.headers.origin&&req.headers.origin!==config.publicUrl)throw new HttpError(403,'Fremder Origin.');
   if(!p||!sites.includes(b?.site)||b.version!==layout.version||b.version!==p.current_version)throw new HttpError(409,'Kanonenplatz oder Projektversion nicht aktuell.');
   const {job,bytes}=publishedPlan(db,p,b);
+  const reserved=helpers.reserved(b.version,b.site);
+  if(reserved.has(job.desired.blueprint)||(reserved.size&&job.phase!=='stone'))throw new HttpError(409,'Zusatzkanonen bearbeiten noch die Steinfüllung.');
   if(!cfg())configureEreborQueue(db,{action:'pause',version:b.version},actor);
   if(cfg().version!==b.version)throw new HttpError(409,'Planfolge gehört zu einer anderen Projektversion.');
   const s=read(b.site),old=s.job;
@@ -340,6 +382,7 @@ export function registerEreborQueue(app,campus){
    if(!verifyAlignment(old.desired,observed,old.desired)&&same(observed.components?.['create:schematic_bounds'],job.size))return {status:'loaded',site:b.site};
   }
   const receipt=tx(db,()=>{
+   if(helpers.reserved(b.version,b.site).has(job.desired.blueprint))throw new HttpError(409,'Dieser Abschnitt wurde inzwischen einer Zusatzkanone zugeteilt.');
    const r=choices.add(b.version,b.site,job,bytes,old?.desired.file??null);
    logActivity(db,actor,'erebor.plan.laden',b.site,{file:b.file,version:b.version,id:r.id});return r;
   });

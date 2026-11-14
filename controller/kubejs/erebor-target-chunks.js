@@ -7,6 +7,7 @@
   var BlockPos = Java.loadClass('net.minecraft.core.BlockPos')
   var Cannon = Java.loadClass('com.simibubi.create.content.schematics.cannon.SchematicannonBlockEntity')
   var Components = Java.loadClass('com.simibubi.create.AllDataComponents')
+  var Registries = Java.loadClass('net.minecraft.core.registries.BuiltInRegistries')
   // Each script generation has its own ticket type. Minecraft expires these
   // after ten seconds of game time even on script reload; vanilla force-loads,
   // player tickets and other mods' tickets are independent.
@@ -19,6 +20,16 @@
     var p = s.cannon
     stations.push({site:s.site, pos:new BlockPos(p[0],p[1],p[2]), active:false, lastError:-1200})
   })
+  var pairs = JsonIO.read('kubejs/config/erebor-parallel.json')
+  function position(v) { return new BlockPos(v[0],v[1],v[2]) }
+  if (pairs && pairs.version === survey.version) {
+    pairs.sites.forEach(function (pair) {
+      if (!pair.B || !pair.C) return
+      ;['B','C'].forEach(function (slot) {
+        stations.push({site:pair.site+slot,pos:position(pair[slot]),pair:pair,active:false,lastError:-1200})
+      })
+    })
+  }
 
   function renew(level, chunks, station, row) {
     var pos = station.pos
@@ -26,6 +37,12 @@
     if (!chunks.getChunkNow(pos.getX() >> 4, pos.getZ() >> 4)) return false
     var c = level.getBlockEntity(pos)
     if (!(c instanceof Cannon)) return false
+    if (station.pair) {
+      function supplyChest(p) {
+        return String(Registries.BLOCK.getKey(level.getBlockState(position(p)).getBlock())) === 'enderstorage:ender_chest'
+      }
+      row.ready = supplyChest(station.pair.stone) && supplyChest(station.pair.powder)
+    }
     var item = c.inventory.getStackInSlot(0)
     row.upload=String(item.get(Components.SCHEMATIC_FILE)||'')
     row.state=String(c.state.name()); row.status=String(c.statusMsg)

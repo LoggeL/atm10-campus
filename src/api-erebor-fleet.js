@@ -2,6 +2,7 @@ import {readFileSync} from 'node:fs';
 import {Worker} from 'node:worker_threads';
 import {HttpError,requireActor} from './auth.js';
 import {zipStore} from './zip.js';
+import {parallelLayout} from './erebor-parallel.js';
 
 const folder=new URL('./erebor-fleet/',import.meta.url);
 const file=name=>readFileSync(new URL(name,folder));
@@ -33,6 +34,30 @@ function checkedLayout(req,campus) {
 }
 export function registerEreborFleet(app,campus) {
   const prefix='/api/projects/erebor/cannon-sites';
+  app.get(prefix+'/dreierbetrieb',async(req,reply)=>{
+    checkedLayout(req,campus);
+    const version=parallelLayout.version;
+    const report=await campus.ereborLiveReport(version);
+    const jobs=campus.ereborHelpers.list(version);
+    const stations=parallelLayout.sites.map(pair=>({...pair,helpers:['B','C'].map(slot=>({
+      slot,job:jobs.find(j=>j.site===pair.site&&j.slot===slot)||null,live:report?.stations?.[pair.site+slot]||null
+    }))}));
+    reply.header('Cache-Control','private, no-store');
+    const enabled=campus.ereborHelpers.isEnabled(version);
+    if(req.query.format==='json')return {version,enabled,at:report?.at||null,stations};
+    const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+    function status({slot,job,live}){
+      const label=live?.state ? (live.ready?'Kisten erkannt':'Versorgung aufbauen')+' · '+live.state+' / '+live.status :
+        report?'Kanone fehlt oder Chunk ungeladen':'Keine aktuelle Weltmeldung';
+      return '<div><b>'+slot+'</b> '+esc(label)+(live?.upload?' · '+esc(live.placed)+' Blöcke gesetzt':'')+
+        (job?'<br>'+esc(job.name||'')+' '+esc(job.message||'')+' · '+esc(job.completed)+' fertig':'')+'</div>';
+    }
+    return reply.type('text/html; charset=utf-8').send('<!doctype html><html lang="de"><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Erebor · Dreierbetrieb</title><link rel="stylesheet" href="/assets/app.css"><main>'+
+      '<a href="/app?project=erebor#cannon-coordinates">← Aufstellkoordinaten</a><h1>Erebor · Dreierbetrieb</h1><p>Alle Koordinaten in X / Y / Z. Pro Standort zwei Schematicannons diagonal und zwei EnderStorage-Kisten auf die übrigen Ecken stellen. In der Base je einen gefilterten ME-Exportbus für normalen Stein und Schießpulver auf die entsprechenden Frequenzen setzen. Kanoneneingänge leer lassen. Sobald der Tracker den Aufbau meldet, werden freie Abschnitte vergeben.</p>'+
+      '<p><a href="/assets/erebor-parallel-v3.zip">Homebox-Paket mit Anleitung (.zip)</a></p><p>Vergabe neuer Cleanstone-Pläne an alle Zusatzkanonen: <b>'+(enabled?'aktiv':'pausiert')+'</b>. '+(req.actor?.via==='session'&&req.actor?.user?.role==='admin'?'<button id="toggle" data-enabled="'+(!enabled)+'" data-version="'+version+'">'+(enabled?'Neue Aufträge pausieren':'Neue Aufträge freigeben')+'</button><output id="result"></output>':'')+'</p><script type="module" src="/assets/erebor-parallel.js"></script><p>'+esc(report?'Weltmeldung vom '+new Date(report.at).toLocaleString('de-DE',{timeZone:'Europe/Berlin'})+' Uhr':'Keine aktuelle Weltmeldung')+'</p>'+
+      '<div class="table-wrap"><table><thead><tr>'+['Platz','Kanone B','Kanone C','Steinkiste','Pulverkiste','Status'].map(t=>'<th>'+t+'</th>').join('')+'</tr></thead><tbody>'+
+      stations.map(s=>'<tr><th>'+s.site+'</th>'+['B','C','stone','powder'].map(k=>'<td>'+s[k].join(' / ')+'</td>').join('')+'<td>'+s.helpers.map(status).join('')+'</td></tr>').join('')+'</tbody></table></div></main></html>');
+  });
   app.get(prefix+'/installer.zip',async(req,reply)=>{
     checkedLayout(req,campus);
     const entries=['ANLEITUNG.txt','install.py','stations.json'].map(name=>({name,data:file(name)}));

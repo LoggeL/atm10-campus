@@ -40,7 +40,7 @@ export function productionStore(db) {
     const files=[];
     for(const pkg of packages.sort((a,b)=>a.part-b.part)){
       for(const f of JSON.parse(pkg.report_json).files){
-        if(f.cannon===site) files.push({name:f.fileName.slice(0,-4),sha256:f.sha256,stage:'stone',blocks:f.blocks,sourceVersion:pkg.version,part:pkg.part});
+        if(f.cannon===site) files.push({name:f.fileName.slice(0,-4),sha256:f.sha256,stage:'stone',origin:f.origin,blocks:f.blocks,sourceVersion:pkg.version,part:pkg.part});
       }
     }
     const architecture=[];

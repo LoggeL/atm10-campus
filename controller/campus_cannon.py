@@ -297,7 +297,7 @@ def serve_campus(handler, controller, bridge, auth):
         obj = json.loads(raw, object_pairs_hook=strict)
         if not isinstance(obj,dict):
             raise ValueError('Ungültiger Bridge-Auftrag.')
-        if isinstance(obj.get('site'),str) and re.fullmatch(r'K\d{2}',obj['site']):
+        if isinstance(obj.get('site'),str) and re.fullmatch(r'K\d{2}[BC]?',obj['site']):
             site = obj['site']
         if action == 'erebor-live':
             # The report is a read-only file. It neither accesses Minecraft via
