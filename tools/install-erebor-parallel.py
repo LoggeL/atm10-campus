@@ -53,7 +53,7 @@ def deploy(action):
     for path,name in files:
         src=(KIT/name).read_bytes()
         spec=manifest[name]
-        backup=path.with_name(path.name+'.before-shared-v4')
+        backup=path.with_name(path.name+'.before-shared-v5')
         if digest(src)!=spec['new'] or path.is_symlink() or backup.is_symlink() or not path.parent.is_dir():
             raise ValueError('Paket oder Ziel prüfen: '+str(path))
         if name.endswith('.py'):

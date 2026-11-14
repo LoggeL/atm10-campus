@@ -8,6 +8,7 @@
   var Cannon = Java.loadClass('com.simibubi.create.content.schematics.cannon.SchematicannonBlockEntity')
   var Components = Java.loadClass('com.simibubi.create.AllDataComponents')
   var Registries = Java.loadClass('net.minecraft.core.registries.BuiltInRegistries')
+  var supplyChests = ['minecraft:chest','sophisticatedstorage:netherite_chest']
   // Each script generation has its own ticket type. Minecraft expires these
   // after ten seconds of game time even on script reload; vanilla force-loads,
   // player tickets and other mods' tickets are independent.
@@ -18,7 +19,7 @@
   var stations = []
   survey.sites.forEach(function (s) {
     var p = s.cannon
-    stations.push({site:s.site, pos:new BlockPos(p[0],p[1],p[2]), active:false, lastError:-1200})
+    stations.push({site:s.site, pos:new BlockPos(p[0],p[1],p[2]), chest:s.chest, active:false, lastError:-1200})
   })
   var pairs = JsonIO.read('kubejs/config/erebor-parallel.json')
   function position(v) { return new BlockPos(v[0],v[1],v[2]) }
@@ -37,9 +38,11 @@
     if (!chunks.getChunkNow(pos.getX() >> 4, pos.getZ() >> 4)) return false
     var c = level.getBlockEntity(pos)
     if (!(c instanceof Cannon)) return false
-    if (station.pair) {
-      var chestState = level.getBlockState(position(station.pair.chest))
-      row.ready = String(Registries.BLOCK.getKey(chestState.getBlock())) === 'minecraft:chest'
+    if (station.chest || station.pair) {
+      var chestState = level.getBlockState(position(station.chest || station.pair.chest))
+      row.chestBlock = String(Registries.BLOCK.getKey(chestState.getBlock()))
+      row.ready = supplyChests.indexOf(row.chestBlock) >= 0 &&
+        String(chestState.getValue(chestState.getBlock().getStateDefinition().getProperty('type')).name()).toLowerCase() === 'single'
     }
     var item = c.inventory.getStackInSlot(0)
     row.upload=String(item.get(Components.SCHEMATIC_FILE)||'')
@@ -159,7 +162,7 @@ function campusReadNetwork(level,survey) {
     })
     if (ticks%80===0) {
       if(ticks%240===0 || !network)network=campusReadNetwork(level,survey)
-      JsonIO.write('kubejs/config/erebor-target-live.json',{version:survey.version,sharedChest:4,at:Date.now(),stations:report,network:network})
+      JsonIO.write('kubejs/config/erebor-target-live.json',{version:survey.version,sharedChest:4,chestTracker:5,at:Date.now(),stations:report,network:network})
     }
   })
   console.info('Erebor-Zielchunks: '+stations.length+' Kanonen überwacht.')

@@ -38,7 +38,7 @@ class ParallelHost(unittest.TestCase):
                     self.assertLessEqual(len(cmd.encode()),950)
                     if 'computercraft:' not in cmd:
                         return ''  # Sleeping neighbour chunk; the final guard must prove it is still asleep.
-                    self.assertIn('minecraft:chest[type=single]',cmd)
+                    self.assertIn(expected_chest+'[type=single]',cmd)
                     if site['site']=='K09':
                         self.assertIn(' unless loaded ',cmd)
                     self.assertIn('Label:"erebor-'+site['site']+'"',cmd)
@@ -46,6 +46,11 @@ class ParallelHost(unittest.TestCase):
                 bridge=Mock(run=run,file_hash=lambda *_:'1'*64)
                 report=dict(at=time.time()*1000,sharedChest=4,stations=signals)
                 with patch.object(campus_erebor,'__file__',str(path/'campus_erebor.py')),patch.object(campus_erebor,'handle',return_value=report):
+                    expected_chest='minecraft:chest'
+                    result=campus_erebor.shared_supply(bridge,layout,site,{'targets':targets},proof)
+                    self.assertEqual(set(result['confirmed']),set('ABC'))
+                    expected_chest='sophisticatedstorage:netherite_chest'
+                    proof=proof.replace('minecraft:chest[type=single]',expected_chest+'[type=single]')
                     result=campus_erebor.shared_supply(bridge,layout,site,{'targets':targets},proof)
                     self.assertEqual(set(result['confirmed']),set('ABC'))
                     signals[site['site']]={'empty':True}
@@ -65,7 +70,7 @@ class ParallelHost(unittest.TestCase):
             cfg.mkdir(parents=True)
             script=root/'data/kubejs/server_scripts/campus/erebor-target-chunks.js'
             script.parent.mkdir(parents=True)
-            with ZipFile(ROOT/'public/assets/erebor-shared-v4.zip') as archive:
+            with ZipFile(ROOT/'public/assets/erebor-shared-v5.zip') as archive:
                 archive.extractall(kit)
             with ZipFile(ROOT/'public/assets/erebor-controller-material-v2.zip') as old:
                 for name in ('campus_cannon.py','campus_erebor.py'):

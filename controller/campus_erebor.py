@@ -57,6 +57,8 @@ def handle(bridge, action, obj):
         data=json.loads(path.read_text())
         if data.get('version')!=obj['version'] or not 0<=time.time()*1000-data.get('at',0)<45000:
             raise ValueError('Kein aktueller Erebor-Livebericht.')
+        if data.get('chestTracker') == 5:
+            data['chestController'] = 5
         return data
     required = {'site', 'version'}
     if action == 'erebor-start':
@@ -108,6 +110,17 @@ def handle(bridge, action, obj):
         # label and physical computer ID in the same world read as the schematic.
         proof = proof_command(candidate).replace('{ComputerId:'+str(obj['computerId'])+'}',
                 '{ComputerId:'+str(obj['computerId'])+',Label:"erebor-'+site['site']+'"}')
+        if site['inventoryBlock'] == 'minecraft:chest':
+            # The tracker selects a candidate. The RCON command still proves the
+            # exact block and single-chest state together with every other guard.
+            try:
+                live=handle(bridge,'erebor-live',{'version':layout['version']})
+            except (OSError,ValueError):
+                live={}
+            slots=live.get('stations',{})
+            if live.get('chestTracker')==5 and any(slots.get(parent+s,{}).get('chestBlock')==
+                    'sophisticatedstorage:netherite_chest' for s in ('','B','C')):
+                proof=proof.replace(' minecraft:chest[type=single]', ' sophisticatedstorage:netherite_chest[type=single]')
         if 'targets' in obj:
             return shared_supply(bridge,layout,site,obj,proof)
         # A large native inventory can turn a single inspection into dozens of
@@ -213,6 +226,9 @@ def shared_supply(bridge,layout,site,obj,proof):
         return ' '.join('~'+(str(int(v)-o) if int(v)!=o else '') for v,o in zip(match.groups(),origin))
     proof=re.sub(r'(?<!\S)(-?\d+) (-?\d+) (-?\d+)(?!\S)',relative,proof)
     proof=proof.replace('execute in minecraft:overworld','execute in overworld positioned '+pos(origin),1)
+    # The computer is already proved at this exact position and cannot also be a cannon.
+    computer=' '.join('~'+(str(a-b) if a!=b else '') for a,b in zip(site['computer'],origin))
+    proof=proof.replace(' unless block '+computer+' create:schematicannon','')
     if not confirmed or not condition(bridge,proof) or time.time()*1000-report['at']>10000:
         raise ValueError('Materialkiste, Computer oder Kanonenbelegung geändert.')
     return {'confirmed':confirmed,'at':time.time()}

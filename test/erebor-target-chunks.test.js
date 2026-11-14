@@ -19,12 +19,15 @@ function machine(n,anchor,target){
  c.flyingBlocks={isEmpty:()=>!c.flights.length,size:()=>c.flights.length,get:i=>({target:c.flights[i]})};return c;
 }
 test('Erebor leases only native targets and in-flight blocks, never idle, foreign or off-plan chunks',()=>{
- let tick,ttl,report;const calls=[],sites=new Map(),supplies=new Set();
+ let tick,ttl,report,chestId='minecraft:chest',chestType='single';const calls=[],sites=new Map(),supplies=new Set();
  const classes={BlockPos:Pos,ChunkPos:class{constructor(p){this.chunk=[p.x>>4,p.z>>4];}},SchematicannonBlockEntity:Cannon,AllDataComponents:Components,Comparator:{naturalOrder:()=>({})},TicketType:{create:(name,cmp,t)=>{ttl=t;return name;}}};
- classes.BuiltInRegistries={BLOCK:{getKey:block=>block}};
+ classes.BuiltInRegistries={BLOCK:{getKey:block=>block.id}};
  vm.runInNewContext(script,{Java:{loadClass:n=>classes[n.split('.').at(-1)]},JsonIO:{read:p=>p.includes('parallel')?pairs:fleet,write:(_path,data)=>{report=data;}},ServerEvents:{tick:cb=>{tick=cb;}},console:{info(){},error(e){throw Error(e);}}});
  const chunks={getChunkNow:()=>true,addRegionTicket:(type,cp,d,p)=>calls.push([p.x,...cp.chunk])};
- const level={hasChunk:()=>false,getBlock:()=>{throw Error('diagnostics must not load chunks');},getBlockEntity:p=>sites.get(p.x+','+p.z),getChunkSource:()=>chunks,getBlockState:p=>({getBlock:()=>supplies.has([p.x,p.y,p.z].join(','))?'minecraft:chest':'minecraft:air'})};
+ const level={hasChunk:()=>false,getBlock:()=>{throw Error('diagnostics must not load chunks');},getBlockEntity:p=>sites.get(p.x+','+p.z),getChunkSource:()=>chunks,getBlockState:p=>({
+  getBlock:()=>({id:supplies.has([p.x,p.y,p.z].join(','))?chestId:'minecraft:air',getStateDefinition:()=>({getProperty:n=>n})}),
+  getValue:()=>({name:()=>chestType})
+ })};
  const poll=()=>{calls.length=0;for(let i=0;i<10;i++)tick({server:{overworld:()=>level}});};
  const a=machine('K01',new Pos(-214,-40,-10808),new Pos(-214,-40,-10808)),b=machine('K02',new Pos(-598,-40,-10808),new Pos(-592,-40,-10777));
  sites.set('-252,-11010',a);sites.set('-668,-10850',b);
@@ -41,6 +44,11 @@ test('Erebor leases only native targets and in-flight blocks, never idle, foreig
  supplies.add(one.chest.join(','));
  for(let i=0;i<8;i++)poll();
  assert.equal(report.stations.K01B.ready,true);
+ chestId='sophisticatedstorage:netherite_chest';
+ for(let i=0;i<8;i++)poll();
+ assert.equal(report.chestTracker,5);assert.equal(report.stations.K01B.ready,true);
+ assert.equal(report.stations.K01.chestBlock,chestId);
+ chestType='left';for(let i=0;i<8;i++)poll();assert.equal(report.stations.K01B.ready,false);
  assert.equal(Object.keys(report.stations).length,111);
  assert.equal(Object.keys(report.network.stations).length,37);
  assert.equal(report.network.stations.K01.loaded,false);

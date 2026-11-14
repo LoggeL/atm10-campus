@@ -39,7 +39,7 @@ test('members cannot edit bound cannons; unbound member edits omit privileged sc
 });
 test('invalid or absent quantities and unsafe replacement modes never form a request', () => {
   const c = station();
-  for (const invalid of ['', 'NaN', '0', '17', '2.5']) {
+  for (const invalid of ['', 'NaN', '0', '65', '2.5']) {
     const data = values(c); data.set('o_bufferStacks',invalid);
     assert.throws(() => cannonSettingsPayload(data,c,true), /gültige Mengen/);
   }

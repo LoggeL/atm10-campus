@@ -112,7 +112,12 @@ class Console:
         guard = "execute"
         for key, block in (("cannon","create:schematicannon"),("chest",row["inventoryBlock"]),("computer",row["computerBlock"]),("bridge","advancedperipherals:me_bridge")):
             guard += " if block " + xyz(row[key]) + " " + block
-        reply = self.run(guard + " run data get block " + xyz(row["computer"]) + " id")
+        check = guard + " run data get block " + xyz(row["computer"]) + " id"
+        reply = self.run(check)
+        if not reply.rstrip('"').endswith(row["computerBlock"]) and row["inventoryBlock"] == "minecraft:chest":
+            expected = " if block " + xyz(row["chest"]) + " minecraft:chest"
+            upgrade = " if block " + xyz(row["chest"]) + " sophisticatedstorage:netherite_chest[type=single]"
+            reply = self.run(check.replace(expected, upgrade))
         if not reply.rstrip('"').endswith(row["computerBlock"]):
             raise ValueError(row["site"] + ": Station nicht geladen oder Aufbau abweichend.")
         return self.number(row["computer"], "ComputerId")

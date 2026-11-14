@@ -91,7 +91,7 @@ export function cannonSettingsPayload(data, c, isAdmin) {
     const value = data.has('o_' + key);
     if (value !== c.options[key]) options[key] = value;
   }
-  for (const [key, lo, hi] of [['bufferStacks', 1, 16], ['gunpowder', 0, 64], ['craftBatch', 1, 4096]]) {
+  for (const [key, lo, hi] of [['bufferStacks', 1, 64], ['gunpowder', 0, 64], ['craftBatch', 1, 4096]]) {
     const raw = data.get('o_' + key), value = Number(raw);
     if (raw == null || raw === '' || !Number.isInteger(value) || value < lo || value > hi) throw new Error('Bitte gültige Mengen eintragen.');
     if (value !== c.options[key]) options[key] = value;
@@ -158,7 +158,7 @@ export function renderCannon(c, { isAdmin, alignmentHtml, ago }) {
             ${checkbox('o_paused', 'Materialzufuhr pausieren', o.paused)}
             <p class="footnote">Pausiert die Lieferung aus dem ME. Einen laufenden Bau hältst du an der Kanone im Spiel an.</p>
             ${checkbox('o_skipBlocked', 'Zellen mit Maschinen nicht beliefern', o.skipBlocked)}
-            <div class="form-row">${[['bufferStacks','Puffer (Stacks)',1,16],['gunpowder','Schießpulver',0,64],['craftBatch','Craft-Menge',1,4096]].map(([k,label,min,max]) => `<label>${label}<input type="number" name="o_${k}" min="${min}" max="${max}" step="1" value="${o[k]}" required></label>`).join('')}</div>
+            <div class="form-row">${[['bufferStacks','Puffer (Stacks)',1,64],['gunpowder','Schießpulver',0,64],['craftBatch','Craft-Menge',1,4096]].map(([k,label,min,max]) => `<label>${label}<input type="number" name="o_${k}" min="${min}" max="${max}" step="1" value="${o[k]}" required></label>`).join('')}</div>
           </div>
           <fieldset class="settings-group"${canSchematic ? '' : ' disabled'}><legend class="eyebrow">Schematic</legend><label class="setting">Blöcke ersetzen<select name="s_replaceMode">${[[0,'Feste Blöcke stehen lassen'],[1,'Feste Blöcke nur durch feste ersetzen'],[2,'Vorhandene Blöcke ersetzen']].map(([v,label]) => `<option value="${v}"${(sc.replaceMode ?? 2) === v ? ' selected' : ''}>${label}</option>`).join('')}</select></label>
             ${checkbox('s_autoUpdate', 'Neue Planversionen übernehmen', sc.autoUpdate !== false)}

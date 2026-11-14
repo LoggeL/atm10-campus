@@ -17,7 +17,7 @@ const ONLINE_MS = 3 * 60e3;
 export const INTERVALS = { plan: 60, status: 30, stock: 300 };
 
 export const DEFAULT_OPTIONS = { paused: false, bufferStacks: 2, gunpowder: 16, autoCraft: false, craftBatch: 256, returnLeftovers: true, skipBlocked: true };
-const LIMITS = { bufferStacks: [1, 16], gunpowder: [0, 64], craftBatch: [1, 4096] };
+const LIMITS = { bufferStacks: [1, 64], gunpowder: [0, 64], craftBatch: [1, 4096] };
 
 export function normalizeOptions(input, base = DEFAULT_OPTIONS) {
   const o = { ...DEFAULT_OPTIONS, ...base };

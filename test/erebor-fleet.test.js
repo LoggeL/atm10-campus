@@ -100,7 +100,7 @@ test('operator ZIP contains current feeder and all station mappings, only for th
     assert.deepEqual(rows.filter(r=>r.bufferStacks===12).map(r=>r.site),['K01','K37']);
     assert.ok(rows.every(r=>r.gunpowder===64));
     assert.equal((await call('POST',preset,{gunpowder:32})).json().verified,37);
-    for(const input of [{paused:true},{sites:[],bufferStacks:8},{sites:['K38'],gunpowder:8},{sites:['K01','K01'],gunpowder:32},{bufferStacks:17},{gunpowder:-1},{gunpowder:1.5},{gunpowder:'64'},{}])
+    for(const input of [{paused:true},{sites:[],bufferStacks:8},{sites:['K38'],gunpowder:8},{sites:['K01','K01'],gunpowder:32},{bufferStacks:65},{gunpowder:-1},{gunpowder:1.5},{gunpowder:'64'},{}])
       assert.equal((await call('POST',preset,input)).statusCode,400);
     for(const [method,url,payload] of [['GET','/api/status'],['GET','/api/tokens'],['POST','/api/tokens',{name:'broader',scope:'write'}],
       ['POST','/api/projects/erebor/planfolge/automatik',{site:'K01',version:12,enabled:true}],['PUT','/api/projects/erebor',{baseVersion:1,plan}],

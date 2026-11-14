@@ -46,7 +46,11 @@ def build():
         v3=json.loads(z.read('manifest.json'))
     for name,spec in manifest.items():
         spec['old']=sorted(set(spec['old']+[v3[name]['new']]))
-    with ZipFile(ASSETS/'erebor-shared-v4.zip','w',ZIP_DEFLATED) as z:
+    with ZipFile(ASSETS/'erebor-shared-v4.zip') as z:
+        previous=json.loads(z.read('manifest.json'))
+    for name,spec in manifest.items():
+        spec['old']=sorted(set(spec['old']+previous[name]['old']+[previous[name]['new']]))
+    with ZipFile(ASSETS/'erebor-shared-v5.zip','w',ZIP_DEFLATED) as z:
         for k,v in files.items():
             z.writestr(k,v)
         z.writestr('manifest.json',json.dumps(manifest))
