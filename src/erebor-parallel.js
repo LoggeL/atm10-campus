@@ -67,7 +67,8 @@ export function parallelFleet(db,production,choices,request,recordedFinish){
         tx(db,()=>{
           production.finish(v,site,desired.blueprint,new Date().toISOString());
           db.prepare("UPDATE erebor_helpers SET name=NULL,job=NULL,completed=completed+1,message='Abschnitt fertig' WHERE version=? AND site=? AND slot=?").run(v,site,slot);
-        });return;
+        });
+        return true;
       }
       if(job.tainted){set('Baufortschritt prüfen');return;}
       if(!matches(observed)){
@@ -103,7 +104,14 @@ export function parallelFleet(db,production,choices,request,recordedFinish){
         }
         const signal=report.stations[pair.site+slot];
         if(signal?.state && Date.now()-report.at<45000){
-          try{await service(p,pair,slot,signal,report.at,()=>enabled(pair.site),read(pair.site),current);}
+          try{
+            const active=()=>enabled(pair.site);
+            const finished=await service(p,pair,slot,signal,report.at,active,read(pair.site),current);
+            if(finished&&current()&&active()){
+              // Re-check the empty cannon before loading its next reserved section this round.
+              await service(p,pair,slot,signal,report.at,active,read(pair.site),current);
+            }
+          }
           catch(e){
             // A missing or corrupt package at one site cannot hold up the other 36.
             if(current())db.prepare(`INSERT INTO erebor_helpers(version,site,slot,message) VALUES(?,?,?,?)

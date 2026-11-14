@@ -262,8 +262,14 @@ export function registerEreborQueue(app,campus){
   if(!acquired.changes)return;
   try{
    const archive=c.archive?JSON.parse(c.archive):null;
+   let report=await liveReport(c.version);
    for(const site of new Set([...active,...(c.enabled&&c.phase!=='finished'?sites:[])])){
     if(!current(c.version))return;
+    if(report&&Date.now()-report.at>=30000)report=await liveReport(c.version);
+    // V4 emits an empty row when the station chunk is asleep or the cannon is absent.
+    // A missing row is inconclusive. Keep the native check in that case.
+    const signal=report?.stations?.[site];
+    if(report?.sharedChest===4&&signal&&Object.keys(signal).length===0)continue;
     db.prepare('UPDATE erebor_queue_config SET expires=? WHERE id=1 AND lease=?').run(Date.now()+120000,owner);
     const s=read(site);
     try{await station(site,s,c,p,archive);}catch(e){s.status=e.message;s.inserted=false;}

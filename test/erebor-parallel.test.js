@@ -31,11 +31,11 @@ test('three real queue entries start once, survive restart and reconcile the ass
   const printer={DeferredBlocks:[],EntityProgress:-1,PrintStage:'BLOCKS'};
   const idle=()=>({state:'STOPPED',status:'idle',inputEmpty:true,amountPlaced:0,amountToPlace:0,flyingBlocks:0,options,printer,outputCount:0});
   const machines=Object.fromEntries(['K01','K01B','K01C'].map(k=>[k,idle()]));
-  const started=[],receipts={};
+  const started=[],receipts={},inspected=[];
   const bridge=async(action,b)=>{
-    if(action==='erebor-live')return {version:12,sharedChest:4,at:Date.now(),stations:Object.fromEntries(Object.entries(machines).map(([key,o])=>[key,{
+    if(action==='erebor-live')return {version:12,sharedChest:4,at:Date.now(),stations:{K02:{},...Object.fromEntries(Object.entries(machines).map(([key,o])=>[key,{
       state:o.state,status:o.status,upload:o.components?.['create:schematic_file']||'',ready:true,placed:o.amountPlaced,total:100,finish:receipts[key]||null
-    }]))};
+    }]))}};
     if(action==='erebor-supply'){
       const confirmed={};
       for(const [slot,t] of Object.entries(b.targets)){
@@ -46,6 +46,7 @@ test('three real queue entries start once, survive restart and reconcile the ass
       }
       return {confirmed,at:Date.now()/1000};
     }
+    if(action==='erebor-inspect')inspected.push(b.site);
     let o=machines[b.site];
     assert.ok(o,b.site);
     if(action==='erebor-prepare'){
@@ -101,6 +102,7 @@ test('three real queue entries start once, survive restart and reconcile the ass
     machines.K01B={...idle(),status:'finished',outputItem:'create:empty_schematic',outputCount:1};
     await mode();
     await until(()=>app.campus.ereborHelpers.list(12).find(r=>r.slot==='B')?.completed===1);
+    await until(()=>started.length===4);
     await post(path+'/dreierbetrieb',{version:12,enabled:false});
     assert.equal(app.campus.ereborHelpers.isEnabled(12),false);
     await new Promise(r=>setTimeout(r,1600));
@@ -111,5 +113,7 @@ test('three real queue entries start once, survive restart and reconcile the ass
     const fleetStart=await post(path+'/dreierbetrieb',{version:12,enabled:true,allMains:true});
     assert.equal(fleetStart.statusCode,200);
     assert.equal(app.campus.db.prepare('SELECT count(*) n FROM erebor_automatic WHERE enabled=1 AND version=12').get().n,37);
+    await until(()=>inspected.includes('K03')); // Missing tracker entry falls back to the native check.
+    assert.equal(inspected.includes('K02'),false); // Explicitly reported absent or sleeping.
   }finally{await close();rmSync(directory,{recursive:true,force:true});}
 });
