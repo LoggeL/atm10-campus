@@ -4,6 +4,34 @@ import unittest
 from lupa import LuaRuntime
 
 class FeederTests(unittest.TestCase):
+    def test_shared_stone_limit_credits_only_confirmed_progress_after_upgrade(self):
+        code=(Path(__file__).resolve().parents[1]/'public/cc/campus.lua').read_text()
+        feed='local function feed()'+code.split('local function feed()',1)[1].split('-- ---------- reporting',1)[0]
+        lua=LuaRuntime(unpack_returned_tuples=True)
+        run=lua.execute('''
+          local GUNPOWDER="minecraft:gunpowder"
+          local stone="minecraft:stone"
+          local state={cap={[stone]=1500},delivered={[stone]=1500}}
+          local req={item=stone,needed=794,stack=64,confirmedPlaced=1357}
+          local plan={items={req},alignment={probeMode="shared"},options={gunpowder=0,bufferStacks=16}}
+          local counts={}
+          local chest={list=function() return {} end}
+          local view={}
+          local function chestContents() return counts,0,132 end
+          local function saveState() end
+          local function meAmount() return 10000000 end
+          local function export(item,n) counts[item]=(counts[item] or 0)+n;return n end
+        '''+feed+'''
+          return function(placed,need)
+            counts[stone]=0;req.confirmedPlaced=placed;req.needed=need
+            feed()
+            return counts[stone],state.delivered[stone]
+          end''')
+        self.assertEqual(run(1357,794),(794,2294))
+        self.assertEqual(run(1357,794),(230,2524))
+        self.assertEqual(run(1357,794),(0,2524))
+        self.assertEqual(run(1400,751),(43,2567))
+
     def test_alignment_lease_expires_and_offline_cannot_feed(self):
         code=(Path(__file__).resolve().parents[1]/'public/cc/campus.lua').read_text()
         self.assertIn('-- alignment-lease-start',code,'feeder has no alignment lease gate')

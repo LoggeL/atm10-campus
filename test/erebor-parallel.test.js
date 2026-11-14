@@ -7,7 +7,7 @@ import {createHash} from 'node:crypto';
 import {buildServer} from '../src/server.js';
 import {parallelLayout} from '../src/erebor-parallel.js';
 import {stoneNBT} from '../src/project-stone.js';
-import {zipStore} from '../src/zip.js';
+import {zipStore,storedZipEntry} from '../src/zip.js';
 
 const fleet=JSON.parse(readFileSync(new URL('../src/erebor-fleet/stations.json',import.meta.url)));
 test('all 111 cannons touch their existing chest and all additional placements stay in the original chunk',()=>{
@@ -34,7 +34,8 @@ test('three real queue entries start once, survive restart and reconcile the ass
   const started=[],receipts={},inspected=[];
   const bridge=async(action,b)=>{
     if(action==='erebor-live')return {version:12,sharedChest:4,at:Date.now(),stations:{K02:{},...Object.fromEntries(Object.entries(machines).map(([key,o])=>[key,{
-      state:o.state,status:o.status,upload:o.components?.['create:schematic_file']||'',ready:true,placed:o.amountPlaced,total:100,finish:receipts[key]||null
+      state:o.state,status:o.status,upload:o.components?.['create:schematic_file']||'',ready:true,placed:o.amountPlaced,total:100,finish:receipts[key]||null,
+      aligned:!o.inputEmpty,owner:'Erebor',target:null,chunks:[],anchor:o.printer?.Anchor,size:o.components?.['create:schematic_bounds'],options:[0,false,false]
     }]))}};
     if(action==='erebor-supply'){
       const confirmed={};
@@ -130,5 +131,17 @@ test('three real queue entries start once, survive restart and reconcile the ass
     assert.deepEqual(started.slice(4).map(([key])=>key),['K01','K01C']);
     await new Promise(r=>setTimeout(r,1600));
     assert.deepEqual((await post(resumeUrl,{version:12})).json().queued,[]);
+    const download=path+'/drucker-reparatur.zip';
+    assert.equal((await app.inject({url:download})).statusCode,401);
+    machines.K01C.status='searching';
+    await new Promise(r=>setTimeout(r,1600));
+    const pack=await app.inject({url:download,headers});
+    assert.equal(pack.statusCode,200);
+    const command=storedZipEntry(pack.rawPayload,'data/campus/function/erebor_drucker.mcfunction').toString().trim();
+    assert.equal(command.split('\n').length,1);
+    assert.ok(command.includes(machines.K01C.components['create:schematic_file']));
+    assert.ok(command.includes('MissingItem:{id:"minecraft:stone"}'));
+    assert.ok(command.includes('CurrentPos:[I;-1,0,0]'));
+    assert.ok(command.endsWith(' MissingItem'));
   }finally{await close();rmSync(directory,{recursive:true,force:true});}
 });

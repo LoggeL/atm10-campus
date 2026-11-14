@@ -2,6 +2,7 @@ import {publishedPlan,selectionStore,unstarted} from './erebor-selection.js';
 import {productionStore} from './erebor-production.js';
 import {parallelFleet,parallelLayout} from './erebor-parallel.js';
 import {Region} from './region.js';
+import {zipStore} from './zip.js';
 import {ereborFeeder,isStationStone} from './erebor-feeder.js';
 import {Worker} from 'node:worker_threads';
 import {createHash,randomUUID} from 'node:crypto';
@@ -362,6 +363,32 @@ export function registerEreborQueue(app,campus){
   })};
  }
  app.get(base,async(req,reply)=>{requireActor(req,'read');const report=await liveReport(cfg()?.version);return reply.header('Cache-Control','private, no-store').send(status(report,req.query.site));});
+ app.get(base+'/drucker-reparatur.zip',async(req,reply)=>{
+  requireActor(req,'admin');
+  const version=cfg()?.version,report=await liveReport(version);
+  if(!report||version!==project()?.current_version||report.version!==layout.version)throw new HttpError(503,'Keine aktuelle Erebor-Weltmeldung.');
+  const commands=[];
+  const ints=v=>'[I;'+v.join(',')+']';
+  for(const p of parallelLayout.sites)for(const slot of ['A','B','C']){
+   const s=report.stations?.[slot==='A'?p.site:p.site+slot];
+   if(s?.state!=='RUNNING'||s.status!=='searching'||!s.aligned||s.target!==null||s.chunks?.length!==0)continue;
+   const job=slot==='A'?read(p.site).job:helpers.jobAt(version,p.site,slot);
+   if(!job?.loaded||!isStationStone(job,p.site)||job.desired.file!==s.upload||!/^campus_[a-f0-9-]{36}\.nbt$/.test(s.upload)||
+      s.owner!=='Erebor'||!same(s.options,[0,false,false])||!same(job.desired.anchor,s.anchor)||!same(job.size,s.size)||
+      !Number.isSafeInteger(s.placed)||s.placed<0)continue;
+   const pos=p[slot==='A'?'main':slot].join(' '),anchor=ints(s.anchor);
+   const components='"create:schematic_file":"'+s.upload+'","create:schematic_owner":"Erebor","create:schematic_anchor":'+anchor+
+    ',"create:schematic_bounds":'+ints(s.size)+',"create:schematic_deployed":1b,"create:schematic_rotation":"none","create:schematic_mirror":"none"';
+   const guard='State:"RUNNING",Status:"searching",MissingItem:{id:"minecraft:stone"},AmountPlaced:'+s.placed+
+    ',FlyingBlocks:[],Options:{replace_mode:0,skip_missing:0b,replace_block_entities:0b},Printer:{Anchor:'+anchor+
+    ',CurrentPos:[I;-1,0,0],PrintStage:"BLOCKS",EntityProgress:-1,DeferredBlocks:[]},Inventory:{Items:[{Slot:0,id:"create:schematic",components:{'+components+'}}]}';
+   commands.push('execute in minecraft:overworld if block '+pos+' create:schematicannon{'+guard+'} run data remove block '+pos+' MissingItem');
+  }
+  if(!commands.length)throw new HttpError(409,'Aktuell keine passenden suchenden Cleanstone-Kanonen.');
+  const bytes=zipStore([{name:'pack.mcmeta',data:Buffer.from(JSON.stringify({pack:{pack_format:48,description:'Erebor · blockierte Cleanstone-Drucker'}}))},
+   {name:'data/campus/function/erebor_drucker.mcfunction',data:Buffer.from(commands.join('\n')+'\n')}]);
+  return reply.header('Cache-Control','private, no-store').header('Content-Disposition','attachment; filename="erebor-drucker.zip"').type('application/zip').send(bytes);
+ });
  let inspecting=false;
  const inspections=new Map();
  app.get(base+'/drucker/:slot',async(req,reply)=>{
