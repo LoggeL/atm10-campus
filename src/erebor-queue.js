@@ -61,7 +61,8 @@ export function registerEreborQueue(app,campus){
  const choices=selectionStore(db);
  const production=productionStore(db);
  db.exec('CREATE TABLE IF NOT EXISTS erebor_resume(version INTEGER,site TEXT,slot TEXT,upload TEXT,expires INTEGER,result TEXT,PRIMARY KEY(version,site,slot))');
- const helpers=parallelFleet(db,production,choices,request,recordedFinish,resumePaused);
+ const verifyStone=config.worldSources.live?(p,verifyStone)=>generate(p,{verifyStone}):null;
+ const helpers=parallelFleet(db,production,choices,request,recordedFinish,resumePaused,verifyStone);
  campus.ereborHelpers=helpers;
  function available(p,site){
   const busy=helpers.reserved(p.current_version,site);

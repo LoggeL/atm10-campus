@@ -5,12 +5,15 @@ import {nearestStoneCannon,stoneFileName} from '../public/assets/stone-placement
 import {compileErebor} from './erebor-tiles.js';
 import {architecturePackage} from './erebor-export.js';
 import {storedZipEntry} from './zip.js';
+import {stoneTargetsFilled} from './erebor-stone-targets.js';
 
 const {project,world}=workerData;
-const bySite=Object.groupBy(mountainTiles(project.plan).tiles,t=>nearestStoneCannon(project.plan,t.origin)?.id);
+let bySite;
 let scene;
-function next({site,cursor,phase,architecture}) {
+function next({site,cursor,phase,architecture,verifyStone}) {
+ if(verifyStone)return stoneTargetsFilled(world,verifyStone);
  if(phase==='stone'){
+  bySite??=Object.groupBy(mountainTiles(project.plan).tiles,t=>nearestStoneCannon(project.plan,t.origin)?.id);
   const tiles=bySite[site]||[],end=Math.min(cursor+8,tiles.length);
   for(let i=cursor;i<end;i++){
    const tile=tiles[i],{bytes,stats}=exportMountainTile(world,project.plan,tile);

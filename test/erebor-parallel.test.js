@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {readFileSync,mkdtempSync,rmSync} from 'node:fs';
+import {readFileSync,mkdtempSync,renameSync,rmSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {createHash} from 'node:crypto';
@@ -8,6 +8,7 @@ import {buildServer} from '../src/server.js';
 import {parallelLayout} from '../src/erebor-parallel.js';
 import {stoneNBT} from '../src/project-stone.js';
 import {zipStore,storedZipEntry} from '../src/zip.js';
+import {writeWorld} from './helpers.js';
 
 const fleet=JSON.parse(readFileSync(new URL('../src/erebor-fleet/stations.json',import.meta.url)));
 test('all 111 cannons touch their existing chest and all additional placements stay in the original chunk',()=>{
@@ -34,7 +35,7 @@ test('three real queue entries start once, survive restart and reconcile the ass
   const started=[],receipts={},inspected=[];
   const bridge=async(action,b)=>{
     if(action==='erebor-live')return {version:12,sharedChest:4,at:Date.now(),stations:{K02:{},...Object.fromEntries(Object.entries(machines).map(([key,o])=>[key,{
-      state:o.state,status:o.status,upload:o.components?.['create:schematic_file']||'',ready:true,placed:o.amountPlaced,total:100,finish:receipts[key]||null,
+      state:o.state,status:o.status,upload:o.components?.['create:schematic_file']||'',empty:o.inputEmpty,ready:true,placed:o.amountPlaced,total:100,finish:receipts[key]||null,
       aligned:!o.inputEmpty,owner:'Erebor',target:null,chunks:[],anchor:o.printer?.Anchor,size:o.components?.['create:schematic_bounds'],options:[0,false,false]
     }]))}};
     if(action==='erebor-supply'){
@@ -63,7 +64,7 @@ test('three real queue entries start once, survive restart and reconcile the ass
     machines[b.site]=o;
     return {observed:{...o,at:Date.now()/1000},applied:true,started:true};
   };
-  const boot=()=>buildServer({dataDir:directory,worldSources:{},publicUrl:'http://test',bootstrapInvite:'triple-test',cookieSecure:false,snapshotIntervalMin:0,cannonBridgeRequest:bridge});
+  const boot=()=>buildServer({dataDir:directory,worldSources:{live:directory},publicUrl:'http://test',bootstrapInvite:'triple-test',cookieSecure:false,snapshotIntervalMin:0,cannonBridgeRequest:bridge});
   let app=await boot();
   async function close(){await app.close();app.campus.db.close();}
   async function until(check){const end=Date.now()+6000;while(!check()&&Date.now()<end)await new Promise(r=>setTimeout(r,25));assert.ok(check(),JSON.stringify(started));}
@@ -143,5 +144,24 @@ test('three real queue entries start once, survive restart and reconcile the ass
     assert.ok(command.includes('MissingItem:{id:"minecraft:stone"}'));
     assert.ok(command.includes('CurrentPos:[I;-1,0,0]'));
     assert.ok(command.endsWith(' MissingItem'));
+    // Lose both receipts. B has one missing target, C's exact target exists.
+    // Only C may be counted as done. B must replay its own reserved plan.
+    const helper=slot=>app.campus.ereborHelpers.jobAt(12,'K01',slot);
+    const bName=helper('B').desired.blueprint,cName=helper('C').desired.blueprint;
+    const [x,y,z]=helper('C').desired.anchor;
+    writeWorld(directory,[{cx:x>>4,cz:z>>4,blocks:[{x,y,z,name:'minecraft:stone'}]}]);
+    renameSync(join(directory,'region/r.0.0.mca'),join(directory,'region',`r.${x>>9}.${z>>9}.mca`));
+    for(const key of ['K01B','K01C']){
+      delete receipts[key];
+      machines[key]={...idle(),status:'finished',outputItem:'create:empty_schematic',outputCount:1};
+    }
+    liveDb.prepare("UPDATE erebor_helpers SET job=json_set(job,'$.seen',1) WHERE site='K01'").run();
+    await new Promise(r=>setTimeout(r,1600));
+    await mode();
+    await until(()=>started.length===8);
+    assert.deepEqual(started.slice(6).map(([k])=>k),['K01B','K01C']);
+    assert.equal(started[6][1],bName);
+    assert.notEqual(started[7][1],cName);
+    assert.deepEqual(liveDb.prepare("SELECT name FROM erebor_finished_plans ORDER BY name").all().map(r=>r.name).sort(),[started[1][1],cName].sort());
   }finally{await close();rmSync(directory,{recursive:true,force:true});}
 });

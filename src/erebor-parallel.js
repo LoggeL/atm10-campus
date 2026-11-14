@@ -1,12 +1,13 @@
 import {readFileSync} from 'node:fs';
 import {isDeepStrictEqual as same} from 'node:util';
-import {verifyAlignment,cannonReset} from './alignment.js';
+import {verifyAlignment,cannonReset,emptyStopped} from './alignment.js';
+import {isStationStone} from './erebor-feeder.js';
 import {publishedPlan} from './erebor-selection.js';
 import {tx} from './db.js';
 
 export const parallelLayout=JSON.parse(readFileSync(new URL('./erebor-fleet/parallel.json',import.meta.url)));
 const slots=['B','C'];
-export function parallelFleet(db,production,choices,request,recordedFinish,resumePaused){
+export function parallelFleet(db,production,choices,request,recordedFinish,resumePaused,verifyStone){
   db.exec(`CREATE TABLE IF NOT EXISTS erebor_helpers(
     version INTEGER NOT NULL, site TEXT NOT NULL, slot TEXT NOT NULL, name TEXT,
     job TEXT, completed INTEGER NOT NULL DEFAULT 0, message TEXT, PRIMARY KEY(version,site,slot),
@@ -27,8 +28,11 @@ export function parallelFleet(db,production,choices,request,recordedFinish,resum
     const row=lookup.get(v,site,slot);
     let job=row?.job&&JSON.parse(row.job);
     if(!signal?.state||(!job&&(!signal.ready||!enabled()||signal.upload||signal.state!=='STOPPED')))return;
-    if(job?.loaded&&signal.empty&&signal.state==='STOPPED'&&signal.status==='finished'&&!signal.finish){
-      save.run(JSON.stringify(job),'Wartet auf bestätigten Abschluss',v,site,slot);return;
+    const missingReceipt=job?.loaded&&signal.empty&&signal.state==='STOPPED'&&signal.status==='finished'&&!signal.finish;
+    if(missingReceipt && (!verifyStone||!job.source||!isStationStone(job,site)||!enabled()||!signal.ready||
+       at-Math.max(job.seen*1000,job.lastWorldCheck||0)<90000)){
+      if(!job?.lastWorldCheck)save.run(JSON.stringify(job),'Wartet auf bestätigten Abschluss',v,site,slot);
+      return;
     }
     if(job?.loaded && !job.tainted && signal.upload===job.desired.file && signal.state==='RUNNING'){
       if(at<job.seen*1000)return;
@@ -64,22 +68,38 @@ export function parallelFleet(db,production,choices,request,recordedFinish,resum
     const operation={...args,desired,kind:'stone',size:job.size};
     const matches=o=>!verifyAlignment(job.desired,o,job.desired)&&same(o.components?.['create:schematic_bounds'],job.size);
     try{
+      let filled=false,original;
+      const published={...job.source,version:v,site,file:desired.blueprint+'.nbt'};
+      if(missingReceipt){
+        job.lastWorldCheck=at;
+        set('Prüft die Steinziele in der gespeicherten Welt');
+        original=publishedPlan(db,p,published);
+        if(!same(original.job.desired,job.desired)||!same(original.job.size,job.size))throw Error('Auftrag stimmt nicht mit dem veröffentlichten Steinplan überein.');
+        filled=await verifyStone(p,{bytes:original.bytes,anchor:desired.anchor,size:job.size,blocks:original.job.blocks});
+      }
       let {observed}=await request('erebor-inspect',args);
       if(!current())return;
-      if(job.loaded && recordedFinish(observed,job,signal.finish,Date.now(),{signal,at})){
+      if(missingReceipt&&(!emptyStopped(observed)||observed.status!=='finished'||!same(observed.options,job.desired.options)))return;
+      if(job.loaded && (filled||recordedFinish(observed,job,signal.finish,Date.now(),{signal,at}))){
         tx(db,()=>{
           production.finish(v,site,desired.blueprint,new Date().toISOString());
           db.prepare("UPDATE erebor_helpers SET name=NULL,job=NULL,completed=completed+1,message='Abschnitt fertig' WHERE version=? AND site=? AND slot=?").run(v,site,slot);
         });
         return true;
       }
+      if(missingReceipt){
+        if(!enabled())return;
+        // Keep the reservation and replay the original fill-only plan. A crash
+        // after prepare is reconciled by the usual matching-input inspection.
+        job={...original.job,source:job.source,lastWorldCheck:at};
+        set('Offene Steinziele erneut eingeplant');
+      }
       if(job.loaded && await resumePaused(site,slot,v,job,observed))return;
       if(job.tainted){set('Baufortschritt prüfen');return;}
       if(!matches(observed)){
         if(job.loaded || !observed.inputEmpty || !cannonReset(observed)){set('Wartet auf passenden Bauplan oder bestätigten Abschluss');return;}
         if(!enabled()||!signal.ready)return;
-        const entry=job.source;
-        const {bytes}=publishedPlan(db,p,{...entry,version:v,site,file:entry.name+'.nbt'});
+        const {bytes}=original??publishedPlan(db,p,published);
         const result=await request('erebor-prepare',{...operation,nbtBase64:bytes.toString('base64')});
         if(!current())return;
         observed=result.observed;
