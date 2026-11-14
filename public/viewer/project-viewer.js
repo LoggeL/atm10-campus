@@ -1,7 +1,7 @@
 import * as THREE from 'three';
-import { ProjectGeometry } from './project-geometry.js?v=20261105-cannon-coordinates-1';
-import { installViewerControls } from './controls.js?v=20261105-cannon-coordinates-1';
-import { connectPolling } from '/assets/live-updates.js?v=20261105-cannon-coordinates-1';
+import { ProjectGeometry } from './project-geometry.js?v=20261114-status-1';
+import { installViewerControls } from './controls.js?v=20261114-status-1';
+import { connectPolling } from '/assets/live-updates.js?v=20261114-status-1';
 
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));

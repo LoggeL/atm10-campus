@@ -131,7 +131,7 @@ export class ProjectGeometry {
     return ray.intersectObjects(this.pickables.filter(visible),false).find(h=>h.point.y<=this.clip.constant)?.object.userData.item || null;
   }
   async loadPreview(preview) {
-    const { loadBlockPreview } = await import('./block-preview.js?v=20261105-cannon-coordinates-1');
+    const { loadBlockPreview } = await import('./block-preview.js?v=20261114-status-1');
     const { mesh, bounds, blockCount } = await loadBlockPreview(preview);
     mesh.rotation.y = this.data.rotationDegrees * Math.PI/180;
     mesh.position.set(...this.data.origin); mesh.updateMatrixWorld(true);

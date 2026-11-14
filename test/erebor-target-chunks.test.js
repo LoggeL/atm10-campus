@@ -24,7 +24,7 @@ test('Erebor leases only native targets and in-flight blocks, never idle, foreig
  classes.BuiltInRegistries={BLOCK:{getKey:block=>block}};
  vm.runInNewContext(script,{Java:{loadClass:n=>classes[n.split('.').at(-1)]},JsonIO:{read:p=>p.includes('parallel')?pairs:fleet,write:(_path,data)=>{report=data;}},ServerEvents:{tick:cb=>{tick=cb;}},console:{info(){},error(e){throw Error(e);}}});
  const chunks={getChunkNow:()=>true,addRegionTicket:(type,cp,d,p)=>calls.push([p.x,...cp.chunk])};
- const level={getBlockEntity:p=>sites.get(p.x+','+p.z),getChunkSource:()=>chunks,getBlockState:p=>({getBlock:()=>supplies.has([p.x,p.y,p.z].join(','))?'minecraft:chest':'minecraft:air'})};
+ const level={hasChunk:()=>false,getBlock:()=>{throw Error('diagnostics must not load chunks');},getBlockEntity:p=>sites.get(p.x+','+p.z),getChunkSource:()=>chunks,getBlockState:p=>({getBlock:()=>supplies.has([p.x,p.y,p.z].join(','))?'minecraft:chest':'minecraft:air'})};
  const poll=()=>{calls.length=0;for(let i=0;i<10;i++)tick({server:{overworld:()=>level}});};
  const a=machine('K01',new Pos(-214,-40,-10808),new Pos(-214,-40,-10808)),b=machine('K02',new Pos(-598,-40,-10808),new Pos(-592,-40,-10777));
  sites.set('-252,-11010',a);sites.set('-668,-10850',b);
@@ -42,5 +42,7 @@ test('Erebor leases only native targets and in-flight blocks, never idle, foreig
  for(let i=0;i<8;i++)poll();
  assert.equal(report.stations.K01B.ready,true);
  assert.equal(Object.keys(report.stations).length,111);
+ assert.equal(Object.keys(report.network.stations).length,37);
+ assert.equal(report.network.stations.K01.loaded,false);
  assert.deepEqual(calls,[[one.B[0],-14,-676]]);
 });

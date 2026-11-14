@@ -1,13 +1,14 @@
-import {setupEreborQueue} from './erebor-queue.js?v=20261105-cannon-coordinates-1&revision=baufolge-2';
-import { createProjectBlueprints } from './project-blueprints.js?v=20261105-cannon-coordinates-1&revision=baufolge-2';
-import { createCannonSites } from './cannon-sites.js?v=20261105-cannon-coordinates-1&fleet=20261110';
-import { esc, fmt } from './format.js?v=20261105-cannon-coordinates-1';
-import { updateCannonPicker } from './cannon-picker.js?v=20261105-cannon-coordinates-1';
-import { createCannonPickerDialog } from './cannon-picker-dialog.js?v=20261105-cannon-coordinates-1';
-import { renderCannon, cannonSettingsPayload, cannonStartState, updateCannonLive } from './cannon-ui.js?v=20261105-cannon-coordinates-1';
-import { coordinateFields, placementCard, placementValues, coordinateListText } from './placement.js?v=20261105-cannon-coordinates-1';
-import { blueprintPreview, installPreviewFallbacks } from './blueprint-preview.js?v=20261105-cannon-coordinates-1';
-import { connectPolling, createRefreshQueue } from './live-updates.js?v=20261105-cannon-coordinates-1';
+import {setupEreborQueue} from './erebor-queue.js?v=20261114-status-1&revision=baufolge-2';
+import { createProjectBlueprints } from './project-blueprints.js?v=20261114-status-1&revision=baufolge-2';
+import { createCannonSites } from './cannon-sites.js?v=20261114-status-1&fleet=20261110';
+import { esc, fmt } from './format.js?v=20261114-status-1';
+import { updateCannonPicker } from './cannon-picker.js?v=20261114-status-1';
+import { createCannonPickerDialog } from './cannon-picker-dialog.js?v=20261114-status-1';
+import { renderCannon, cannonSettingsPayload, cannonStartState, updateCannonLive } from './cannon-ui.js?v=20261114-status-1';
+import {renderFleetIssues} from './connection-status.js?v=20261114-status-1';
+import { coordinateFields, placementCard, placementValues, coordinateListText } from './placement.js?v=20261114-status-1';
+import { blueprintPreview, installPreviewFallbacks } from './blueprint-preview.js?v=20261114-status-1';
+import { connectPolling, createRefreshQueue } from './live-updates.js?v=20261114-status-1';
 installPreviewFallbacks();
 const $ = id => document.getElementById(id);
 const when = t => t ? new Date(t).toLocaleString('de-DE', { dateStyle: 'short', timeStyle: 'short' }) : '–';
@@ -360,11 +361,25 @@ async function loadCannons(force = false) {
 async function refreshCannons() {
   const revision = cannonRevision;
   const sequence = ++cannonReadSequence;
-  const list = await api('/api/cannons');
+  let list;
+  try {list=await api('/api/cannons');}
+  catch(error){
+    let faults=document.getElementById('fleet-connection-faults');
+    if(!faults){faults=document.createElement('section');faults.id='fleet-connection-faults';cannonParent().before(faults);}
+    faults.innerHTML='<p class="notice error" role="status">Verbindung zur Status-API unterbrochen. Angezeigte Stationsdaten sind nicht live; Stromzustand unbekannt.</p>';
+    for(const card of cannonParent().querySelectorAll('[data-cannon]')){
+      const slot=card.querySelector('[data-connection-faults]');
+      if(slot)slot.innerHTML=faults.innerHTML;
+    }
+    throw error;
+  }
   if (revision !== cannonRevision) return false;
   $('ccInstall').textContent = `wget run ${location.origin}/cc/install.lua`;
   if (!list.length) $('ccSetup').open = true;
   const parent = cannonParent();
+  let faults=document.getElementById('fleet-connection-faults');
+  if(!faults){faults=document.createElement('section');faults.id='fleet-connection-faults';parent.before(faults);}
+  faults.innerHTML=renderFleetIssues(list);
   for (const c of list) if (!renderCannonCard(c, sequence)) refreshQueue.request('cannon:' + c.name);
   for (const old of [...parent.querySelectorAll('[data-cannon]')]) {
     if (!list.some(c => c.name === old.dataset.cannon) && !removeCannonCard(old.dataset.cannon, sequence)) refreshQueue.request('cannon:' + old.dataset.cannon);

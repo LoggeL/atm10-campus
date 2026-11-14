@@ -1,4 +1,4 @@
-import {esc,fmt} from './format.js?v=20261105-cannon-coordinates-1';
+import {esc,fmt} from './format.js?v=20261114-status-1';
 
 export function cannonSiteRows(project,prepared){
  if(prepared.version!==project.version)throw Error('Der Projektstand wurde geändert. Bitte erneut aktualisieren.');

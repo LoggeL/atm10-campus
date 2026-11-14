@@ -1,4 +1,4 @@
-import { loadBlockPreview } from '/viewer/block-preview.js?v=20261105-cannon-coordinates-1';
+import { loadBlockPreview } from '/viewer/block-preview.js?v=20261114-status-1';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 

@@ -139,7 +139,7 @@ export function registerStationRoutes(app, campus, mat, alignment, schematics) {
     if(isEreborStation(row.name)){
       const live=campus.ereborFeeder.view(row.name),status=JSON.parse(row.status_json||'null'),online=!!row.last_seen_at&&Date.now()-Date.parse(row.last_seen_at)<ONLINE_MS;
       const message=live?.message||(live?null:'Wartet auf die nächste Live-Prüfung der Erebor-Station.');
-      return {name:row.name,assignment:live?.assignment??row.assignment,online,createdAt:row.created_at,updatedAt:row.updated_at,lastSeenAt:row.last_seen_at,
+      return {name:row.name,network:await campus.ereborNetworkView?.(row.name)||null,assignment:live?.assignment??row.assignment,online,createdAt:row.created_at,updatedAt:row.updated_at,lastSeenAt:row.last_seen_at,
         options:normalizeOptions(JSON.parse(row.options_json||'{}')),state:online?(live?.state||'alignment'):'offline',message,blueprint:live?.blueprint||null,
         totals:live?.totals||null,done:false,items:live?.items||[],status:status&&{...status,stale:status.assignment!==live?.assignment},
         alignment:{...(live?.alignment||{enabled:true,state:'blocked'}),binding:campus.ereborStationBinding(row.name),message},

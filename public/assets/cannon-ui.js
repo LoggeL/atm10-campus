@@ -1,8 +1,9 @@
-import { esc, fmt } from './format.js?v=20261105-cannon-coordinates-1';
-import { renderPickerButton, renderNativeProgress, nativeProgressLabel } from './cannon-picker.js?v=20261105-cannon-coordinates-1';
-import { cannonRangeCard, distanceText } from './cannon-range.js?v=20261105-cannon-coordinates-1';
-import { coordinateFields, placementValues } from './placement.js?v=20261105-cannon-coordinates-1';
-import { blueprintPreview } from './blueprint-preview.js?v=20261105-cannon-coordinates-1';
+import { esc, fmt } from './format.js?v=20261114-status-1';
+import {renderConnectionIssues} from './connection-status.js?v=20261114-status-1';
+import { renderPickerButton, renderNativeProgress, nativeProgressLabel } from './cannon-picker.js?v=20261114-status-1';
+import { cannonRangeCard, distanceText } from './cannon-range.js?v=20261114-status-1';
+import { coordinateFields, placementValues } from './placement.js?v=20261114-status-1';
+import { blueprintPreview } from './blueprint-preview.js?v=20261114-status-1';
 
 const checked = value => value ? ' checked' : '';
 const states = { outofrange:'Außer Reichweite', alignment:'Material gesperrt', offline:'Computer offline', nocomputer:'Kein Computer', feeding:'Aktiv', preparing:'Wartet auf Schematic', waiting:'Wartet auf Material', full:'Kiste voll', done:'Fertig', paused:'Pausiert', unassigned:'Kein Bauplan', missing:'Bauplan fehlt', nosnapshot:'Kein Live-Bestand', error:'Fehler', start:'Startet', unknown:'Status ausstehend' };
@@ -61,6 +62,8 @@ function renderCannonStart(c,isAdmin) {
 
 // Live status must keep moving while editable form nodes and their baselines stay intact.
 export function updateCannonLive(card,c,{isAdmin,busy=false,sameAssignment=true}) {
+  const faults=card.querySelector('[data-connection-faults]');
+  if(faults)faults.innerHTML=renderConnectionIssues(c);
   const progress=card.querySelector('[data-cannon-progress]');
   if(progress)progress.innerHTML=(sameAssignment?'':`<p class="notice">Der Auftrag wurde geändert.${c.blueprint?` Live-Fortschritt für ${esc(c.blueprint.name)} · v${esc(c.blueprint.version)}.`:''} Deine Eingaben bleiben erhalten.</p>`)+renderCannonProgress(c);
   const supply=card.querySelector('[data-cannon-state]');
@@ -121,6 +124,7 @@ export function renderCannon(c, { isAdmin, alignmentHtml, ago }) {
   const shortages = (live?.shortages || []).map(x => `<li${x.crafting ? '' : ' class="warn"'}>${fmt(x.missing)} × ${esc(String(x.item).replace(/^minecraft:/,''))} <span class="muted">· im ME ${fmt(x.inME)}${x.crafting ? ' · wird gecraftet' : x.craftable ? ' · craftbar' : ''}</span>${x.error ? ` <span class="err">${esc(x.error)}</span>` : ''}</li>`).join('');
   return `<article class="panel cannon" data-cannon="${esc(c.name)}" aria-label="${esc(c.name)}">
     <header class="cannon-heading"><h2>${esc(c.name)}</h2><span class="connection"><span class="dot${c.online ? ' on' : ''}"></span>${c.online ? 'Online' : 'Offline'}</span><span class="last-seen">${c.lastSeenAt ? 'Meldung ' + esc(ago(c.lastSeenAt)) : 'Noch keine Meldung'}</span><span data-cannon-state title="Materialversorgung" class="badge ${blocked ? 'warning' : state === 'done' ? 'built' : 'ok'}">${esc(states[state] || state)}</span></header>
+    <div data-connection-faults>${renderConnectionIssues(c)}</div>
     <div class="cannon-job${bp ? '' : ' unassigned'}">
       ${bp ? blueprintPreview(bp,{size:'large'}) : ''}
       <div class="cannon-job-body">

@@ -1,4 +1,4 @@
-import {esc,fmt} from './format.js?v=20261105-cannon-coordinates-1';
+import {esc,fmt} from './format.js?v=20261114-status-1';
 
 export async function showPreparedStone(project,api){
  const target=document.querySelector('#stonePrepared');if(!target)return;

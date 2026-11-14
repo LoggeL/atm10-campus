@@ -3,6 +3,7 @@ import {Worker} from 'node:worker_threads';
 import {HttpError,requireActor} from './auth.js';
 import {zipStore} from './zip.js';
 import {parallelLayout} from './erebor-parallel.js';
+import {renderConnectionIssues,renderFleetIssues} from '../public/assets/connection-status.js';
 
 const folder=new URL('./erebor-fleet/',import.meta.url);
 const file=name=>readFileSync(new URL(name,folder));
@@ -33,18 +34,29 @@ function checkedLayout(req,campus) {
     throw new HttpError(409,'Der Erebor-Standortplan hat sich geändert. Installer-Zuordnung neu prüfen.');
 }
 export function registerEreborFleet(app,campus) {
+  campus.ereborNetworkView=async name=>{
+    const site=/^erebor-(K\d{2})$/i.exec(name)?.[1]?.toUpperCase();
+    if(!site)return null;
+    const network=(await campus.ereborLiveReport(parallelLayout.version))?.network;
+    return network?.stations?.[site]?{...network.stations[site],at:network.at,source:network.source,power:network.power}:{stale:true,at:null};
+  };
   const prefix='/api/projects/erebor/cannon-sites';
   app.get(prefix+'/dreierbetrieb',async(req,reply)=>{
     checkedLayout(req,campus);
     const version=parallelLayout.version;
     const report=await campus.ereborLiveReport(version);
     const jobs=campus.ereborHelpers.list(version);
+    const diagnostics=await Promise.all(layout.sites.map(async s=>{
+      const row=campus.db.prepare('SELECT status_json,last_seen_at FROM cannons WHERE name=?').get('erebor-'+s.site);
+      const status=JSON.parse(row?.status_json||'null');
+      return {name:s.site,online:!!row?.last_seen_at&&Date.now()-Date.parse(row.last_seen_at)<180000,status,network:await campus.ereborNetworkView('erebor-'+s.site)};
+    }));
     const stations=parallelLayout.sites.map(pair=>({...pair,helpers:['B','C'].map(slot=>({
       slot,job:jobs.find(j=>j.site===pair.site&&j.slot===slot)||null,live:report?.stations?.[pair.site+slot]||null
     }))}));
     reply.header('Cache-Control','private, no-store');
     const enabled=campus.ereborHelpers.isEnabled(version);
-    if(req.query.format==='json')return {version,enabled,at:report?.at||null,stations};
+    if(req.query.format==='json')return {version,enabled,at:report?.at||null,stations,diagnostics,power:report?.network?.power||[]};
     const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
     function status({slot,job,live}){
       const label=live?.state ? (live.ready?'Materialkiste erkannt':'Materialkiste prüfen')+' · '+live.state+' / '+live.status :
@@ -55,8 +67,8 @@ export function registerEreborFleet(app,campus) {
     return reply.type('text/html; charset=utf-8').send('<!doctype html><html lang="de"><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Erebor · Dreierbetrieb</title><link rel="stylesheet" href="/assets/app.css"><main>'+
       '<a href="/app?project=erebor#cannon-coordinates">← Aufstellkoordinaten</a><h1>Erebor · Dreierbetrieb</h1><p>Alle Koordinaten in X / Y / Z. An jedem der 37 Standorte B und C direkt an die bestehende Materialkiste stellen. Der Stationscomputer versorgt alle drei Kanonen. Bei K09 steht C unter der Kiste. Für drei gleichzeitig laufende Pläne die Hauptkanone auf Automatik stellen. Kanoneneingänge leer lassen. Sobald der Tracker den Aufbau meldet, werden freie Abschnitte vergeben.</p>'+
       '<p><a href="/assets/erebor-shared-v4.zip">Homebox-Paket mit Anleitung (.zip)</a></p><p>Vergabe neuer Cleanstone-Pläne an alle Zusatzkanonen: <b>'+(enabled?'aktiv':'pausiert')+'</b>. '+(req.actor?.via==='session'&&req.actor?.user?.role==='admin'?'<button id="toggle" data-enabled="'+(!enabled)+'" data-version="'+version+'">'+(enabled?'Neue Aufträge pausieren':'Neue Aufträge freigeben')+'</button> <button id="all-mains" data-enabled="true" data-version="'+version+'">Alle 37 Standorte im Dreierbetrieb starten</button> <output id="result"></output>':'')+'</p><script type="module" src="/assets/erebor-parallel.js"></script><p>'+esc(report?'Weltmeldung vom '+new Date(report.at).toLocaleString('de-DE',{timeZone:'Europe/Berlin'})+' Uhr':'Keine aktuelle Weltmeldung')+'</p>'+
-      '<div class="table-wrap"><table><thead><tr>'+['Platz','A (vorhanden)','B (neu)','C (neu)','Gemeinsame Kiste','Status'].map(t=>'<th>'+t+'</th>').join('')+'</tr></thead><tbody>'+
-      stations.map(s=>'<tr><th>'+s.site+'</th>'+['main','B','C','chest'].map(k=>'<td>'+s[k].join(' / ')+'</td>').join('')+'<td>'+s.helpers.map(status).join('')+'</td></tr>').join('')+'</tbody></table></div></main></html>');
+      '<section data-fleet-faults>'+renderFleetIssues(diagnostics)+'</section><div class="table-wrap"><table><thead><tr>'+['Platz','A (vorhanden)','B (neu)','C (neu)','Gemeinsame Kiste','Status'].map(t=>'<th>'+t+'</th>').join('')+'</tr></thead><tbody>'+
+      stations.map(s=>'<tr><th>'+s.site+'</th>'+['main','B','C','chest'].map(k=>'<td>'+s[k].join(' / ')+'</td>').join('')+'<td><div data-site-fault="'+s.site+'">'+renderConnectionIssues(diagnostics.find(d=>d.name===s.site))+'</div>'+s.helpers.map(status).join('')+'</td></tr>').join('')+'</tbody></table></div></main></html>');
   });
   app.get(prefix+'/installer.zip',async(req,reply)=>{
     checkedLayout(req,campus);

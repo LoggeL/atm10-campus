@@ -1,5 +1,5 @@
-import { esc, fmt } from './format.js?v=20261105-cannon-coordinates-1';
-import { coordinateFields, coordinateListText } from './placement.js?v=20261105-cannon-coordinates-1';
+import { esc, fmt } from './format.js?v=20261114-status-1';
+import { coordinateFields, coordinateListText } from './placement.js?v=20261114-status-1';
 
 const states = {built:'Gebaut', ok:'Restarbeiten', conflict:'Konflikt', warning:'Seit Planung geändert', unknown:'Kein Weltvergleich'};
 const when = value => value ? new Date(value).toLocaleString('de-DE', {timeZone:'Europe/Berlin', dateStyle:'medium', timeStyle:'short'}) : 'unbekannt';

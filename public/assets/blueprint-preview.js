@@ -1,4 +1,4 @@
-import { esc } from './format.js?v=20261105-cannon-coordinates-1';
+import { esc } from './format.js?v=20261114-status-1';
 
 // Always pin the image to the displayed version, including older cannon assignments.
 export function blueprintPreview(bp, {size = 'thumbnail', eager = false, source = null} = {}) {

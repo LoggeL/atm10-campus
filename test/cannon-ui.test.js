@@ -153,7 +153,7 @@ test('partial live rendering touches status slots only, including during an in-f
   const c=station();c.state='done';c.done=true;c.nativeProgress={state:'completed',sent:4,total:4,percent:100,fresh:true};
   const progress={},supply={},start={innerHTML:'in-flight button',querySelector:()=>null};
   const schematic={};
-  const slots={'[data-cannon-progress]':progress,'[data-cannon-state]':supply,'[data-cannon-start]':start,'[data-cannon-schematic]':schematic};
+  const slots={'[data-connection-faults]':{},'[data-cannon-progress]':progress,'[data-cannon-state]':supply,'[data-cannon-start]':start,'[data-cannon-schematic]':schematic};
   const card={querySelector:key=>{assert.ok(key in slots,'forms and editable controls are never replaced');return slots[key];}};
   updateCannonLive(card,c,{isAdmin:true,busy:true});
   assert.match(progress.innerHTML,/100 % · Kanone/);assert.equal(supply.textContent,'Fertig');assert.equal(schematic.textContent,'Auftrag abgeschlossen · v2');assert.equal(start.innerHTML,'in-flight button');

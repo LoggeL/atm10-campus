@@ -8,6 +8,7 @@ ROOT = Path(__file__).resolve().parents[1]
 ASSETS = ROOT / 'public/assets'
 FLEET = ROOT / 'src/erebor-fleet'
 KUBE_V2 = '6c0a4fc8f89df823fea8be1bb8cfd454162a7e1d6a7e4e193212f16c94b82b91'
+KUBE_V4 = '1f16317c21f9647daa1434cadfcbddcd56c20e9cb77a4deea0b3da5f9ec3c5cb'
 SURVEY = json.loads((FLEET / 'stations.json').read_bytes())
 
 
@@ -40,7 +41,7 @@ def build():
     files['erebor-target-chunks.js']=(ROOT/'controller/kubejs/erebor-target-chunks.js').read_bytes()
     files['erebor-parallel.json']=layout+b'\n'
     manifest={k:dict(new=digest(v),old=prior[k]['old']+[prior[k]['new']] if k in prior else []) for k,v in files.items()}
-    manifest['erebor-target-chunks.js']['old']=[KUBE_V2]
+    manifest['erebor-target-chunks.js']['old']=[KUBE_V2,KUBE_V4]
     with ZipFile(ASSETS/'erebor-parallel-v3.zip') as z:
         v3=json.loads(z.read('manifest.json'))
     for name,spec in manifest.items():

@@ -109,6 +109,33 @@
     return row.chunks.length > 0
   }
 
+
+// Read-only telemetry: bounded to the installed 37-site survey. Never calls
+// getBlock until hasChunk, never adds tickets, never changes energy/world state.
+function campusReadNetwork(level,survey) {
+ var result={at:Date.now(),source:'AE2 server-thread',stations:{},power:[]};
+ function probe(p) {
+  var row={position:p,loaded:level.hasChunk(p[0]>>4,p[2]>>4)};
+  if(!row.loaded)return row;
+  try {
+   var b=level.getBlock(p[0],p[1],p[2]);row.block=String(b.id);
+   if(row.block!=='advancedperipherals:me_bridge' && row.block!=='ae2:energy_acceptor')return row;
+   var node=b.entity.getGridNode();row.nodePresent=node!=null;
+   if(node){
+    row.powered=node.isPowered();row.online=node.isOnline();row.channelsSatisfied=node.meetsChannelRequirements();
+    var g=node.getGrid();row.booting=g.getPathingService().isNetworkBooting();
+    row.storedAE=Number(g.getEnergyService().getStoredPower());
+   }
+  }catch(e){row.error='probe_unavailable';}
+  return row;
+ }
+ survey.sites.forEach(function(s){result.stations[s.site]=probe(s.bridge);});
+ // Dependency chain measured individually: an unloaded source has unknown
+ // generation state, not zero energy. Coordinates are observation targets only.
+ [[-367,316,-9998],[-368,316,-9998],[-46,62,69]].forEach(function(p){result.power.push(probe(p));});
+ return result;
+}
+  var network=null
   var ticks = 0
   ServerEvents.tick(function (event) {
     if (++ticks % 10 !== 0) return
@@ -131,7 +158,8 @@
       }
     })
     if (ticks%80===0) {
-      JsonIO.write('kubejs/config/erebor-target-live.json',{version:survey.version,sharedChest:4,at:Date.now(),stations:report})
+      if(ticks%240===0 || !network)network=campusReadNetwork(level,survey)
+      JsonIO.write('kubejs/config/erebor-target-live.json',{version:survey.version,sharedChest:4,at:Date.now(),stations:report,network:network})
     }
   })
   console.info('Erebor-Zielchunks: '+stations.length+' Kanonen überwacht.')

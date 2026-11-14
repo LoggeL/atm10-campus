@@ -1,4 +1,4 @@
-import {esc,fmt} from './format.js?v=20261105-cannon-coordinates-1';
+import {esc,fmt} from './format.js?v=20261114-status-1';
 
 const base='/api/projects/erebor/planfolge';
 const positions=Array.from({length:37},(_,i)=>'K'+String(i+1).padStart(2,'0'));
