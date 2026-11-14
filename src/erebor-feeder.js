@@ -6,6 +6,12 @@ import {createHash} from 'node:crypto';
 
 export const isEreborStation=name=>/^erebor-K(?:0[1-9]|[12][0-9]|3[0-7])$/i.test(name);
 
+export function isStationStone(job,site){
+ const d=job?.desired;
+ return job?.phase==='stone' && d?.owner==='Erebor' && d.blueprint?.startsWith('EREBOR_STEIN_'+site+'_') &&
+  d.options?.replace_mode===0 && d.options.skip_missing===false && d.options.replace_block_entities===false;
+}
+
 // The host serializes Minecraft commands. Queue at the caller, before the
 // transport timeout starts, rather than sending 37 expiring HTTP requests.
 export function limitSupplyReads(request){
@@ -40,10 +46,13 @@ export function ereborFeeder(db,request,version,liveReport){
  const helperRows=db.prepare('SELECT slot,job FROM erebor_helpers WHERE site=? AND version=? AND job IS NOT NULL ORDER BY slot');
  function groupJobs(site){
   const jobs={},main=jobAt(site);
-  if(main?.loaded&&!main.tainted)jobs.A=main;
+  // A counter discontinuity invalidates completion evidence. The host can still
+  // independently prove the identity of the loaded stone plan for material supply.
+  const eligible=job=>job?.loaded&&(!job.tainted||isStationStone(job,site));
+  if(eligible(main))jobs.A=main;
   for(const r of helperRows.all(site,version)){
    const job=JSON.parse(r.job);
-   if(job.loaded&&!job.tainted)jobs[r.slot]=job;
+   if(eligible(job))jobs[r.slot]=job;
   }
   return jobs;
  }

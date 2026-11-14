@@ -115,5 +115,20 @@ test('three real queue entries start once, survive restart and reconcile the ass
     assert.equal(app.campus.db.prepare('SELECT count(*) n FROM erebor_automatic WHERE enabled=1 AND version=12').get().n,37);
     await until(()=>inspected.includes('K03')); // Missing tracker entry falls back to the native check.
     assert.equal(inspected.includes('K02'),false); // Explicitly reported absent or sleeping.
+    const liveDb=app.campus.db;
+    liveDb.prepare("UPDATE erebor_queue_sites SET state=json_set(state,'$.job.tainted',json('true')) WHERE site='K01'").run();
+    const threeAgain=await supply();
+    assert.equal(threeAgain.items[0].needed,3);
+    assert.equal(liveDb.prepare("SELECT json_extract(state,'$.job.tainted') t FROM erebor_queue_sites WHERE site='K01'").get().t,1);
+    for(const key of ['K01','K01C'])Object.assign(machines[key],{state:'PAUSED',status:'ready'});
+    await new Promise(r=>setTimeout(r,1600));
+    const resumeUrl=path+'/fortsetzen';
+    assert.equal((await app.inject({method:'POST',url:resumeUrl,payload:{version:12}})).statusCode,401);
+    const resume=await post(resumeUrl,{version:12});
+    assert.equal(resume.statusCode,202);assert.deepEqual(resume.json().queued,['K01A','K01C']);
+    await until(()=>started.length===6);
+    assert.deepEqual(started.slice(4).map(([key])=>key),['K01','K01C']);
+    await new Promise(r=>setTimeout(r,1600));
+    assert.deepEqual((await post(resumeUrl,{version:12})).json().queued,[]);
   }finally{await close();rmSync(directory,{recursive:true,force:true});}
 });

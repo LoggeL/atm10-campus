@@ -1,7 +1,7 @@
 import {publishedPlan,selectionStore,unstarted} from './erebor-selection.js';
 import {productionStore} from './erebor-production.js';
 import {parallelFleet} from './erebor-parallel.js';
-import {ereborFeeder} from './erebor-feeder.js';
+import {ereborFeeder,isStationStone} from './erebor-feeder.js';
 import {Worker} from 'node:worker_threads';
 import {createHash,randomUUID} from 'node:crypto';
 import {readFileSync} from 'node:fs';
@@ -58,7 +58,8 @@ export function registerEreborQueue(app,campus){
  CREATE TABLE IF NOT EXISTS erebor_queue_sites(site TEXT PRIMARY KEY,state TEXT NOT NULL,payload BLOB);`);
  const choices=selectionStore(db);
  const production=productionStore(db);
- const helpers=parallelFleet(db,production,choices,request,recordedFinish);
+ db.exec('CREATE TABLE IF NOT EXISTS erebor_resume(version INTEGER,site TEXT,slot TEXT,upload TEXT,expires INTEGER,result TEXT,PRIMARY KEY(version,site,slot))');
+ const helpers=parallelFleet(db,production,choices,request,recordedFinish,resumePaused);
  campus.ereborHelpers=helpers;
  function available(p,site){
   const busy=helpers.reserved(p.current_version,site);
@@ -138,6 +139,23 @@ export function registerEreborQueue(app,campus){
  function published(project,site,entry){
   return publishedPlan(db,project,{...entry,version:project.current_version,site,file:entry.name+'.nbt'});
  }
+ const resumeRow=db.prepare('SELECT upload,expires FROM erebor_resume WHERE version=? AND site=? AND slot=? AND result IS NULL');
+ const finishResume=db.prepare('UPDATE erebor_resume SET result=? WHERE version=? AND site=? AND slot=? AND upload=? AND result IS NULL');
+ async function resumePaused(site,slot,version,job,observed){
+  const row=resumeRow.get(version,site,slot);
+  if(!row)return false;
+  const finish=message=>finishResume.run(message,version,site,slot,row.upload);
+  if(row.expires<=Date.now()||job.desired.file!==row.upload){finish('Auftrag abgelaufen oder Bauplan gewechselt');return false;}
+  if(observed.state==='RUNNING'){finish('Läuft bereits');return false;}
+  if(observed.state!=='PAUSED'||!['ready','searching','placing'].includes(observed.status)||observed.flyingBlocks!==0)return false;
+  if(!current(version)||!isStationStone(job,site)||verifyAlignment(job.desired,observed,job.desired)||
+     !same(observed.components?.['create:schematic_bounds'],job.size))return false;
+  try{
+   const result=await startJob(slot==='A'?site:site+slot,version,job);
+   finish(result.observed.state==='RUNNING'?'Fortgesetzt':'Create wartet nach dem Start auf '+result.observed.status);
+  }catch(e){finish(e.message);}
+  return true;
+ }
  async function startAutomatic(site,s,version,observed){
   const mode=production.mode(version,site),job=s.job;
   if(!mode.enabled||!job||job.tainted)return;
@@ -167,6 +185,7 @@ export function registerEreborQueue(app,campus){
    if(!current(c.version))return;
    observe(site,s,o,report?{at:report.at,signal:report.stations?.[site]}:null);
   }
+  if(!choice&&aligned&&s.job&&await resumePaused(site,'A',c.version,s.job,o))return;
   if(automatic()&&old&&s.job&&aligned){
    const completed=production.done(c.version,site,old.desired.blueprint);
    if(!completed || !unstarted(old,o)){
@@ -328,6 +347,29 @@ export function registerEreborQueue(app,campus){
   })};
  }
  app.get(base,async(req,reply)=>{requireActor(req,'read');const report=await liveReport(cfg()?.version);return reply.header('Cache-Control','private, no-store').send(status(report,req.query.site));});
+ app.post(base+'/fortsetzen',async(req,reply)=>{
+  const actor=requireActor(req,'admin'),v=req.body?.version;
+  if(req.headers.origin&&req.headers.origin!==config.publicUrl)throw new HttpError(403,'Fremder Origin.');
+  if(v!==layout.version||project()?.current_version!==v||cfg()?.version!==v)throw new HttpError(409,'Projektversion geändert.');
+  const report=await liveReport(v);
+  if(report?.sharedChest!==4||!report.stations)throw new HttpError(503,'Keine aktuelle Weltmeldung.');
+  const expires=Date.now()+10*60000;
+  const save=db.prepare('INSERT INTO erebor_resume VALUES(?,?,?,?,?,NULL) ON CONFLICT(version,site,slot) DO UPDATE SET upload=excluded.upload, expires=excluded.expires,result=NULL');
+  const queued=tx(db,()=>{
+   const slots=[];
+   for(const site of sites)for(const slot of ['A','B','C']){
+    const signal=report.stations[slot==='A'?site:site+slot];
+    if(!signal?.ready||signal.state!=='PAUSED'||!signal.upload)continue;
+    const job=slot==='A'?read(site).job:helpers.jobAt(v,site,slot);
+    if(!job?.loaded||!isStationStone(job,site)||signal.upload!==job.desired.file||slot==='A'&&choices.next(v,site))continue;
+    save.run(v,site,slot,signal.upload,expires);slots.push(site+slot);
+   }
+   logActivity(db,actor,'erebor.resume','erebor',{version:v,slots});
+   return slots;
+  });
+  wake();
+  return reply.code(202).send({queued,expires});
+ });
  app.post(base+'/start',async req=>{
   const actor=requireActor(req,'admin'),b=req.body;
   if(req.headers.origin&&req.headers.origin!==config.publicUrl)throw new HttpError(403,'Fremder Origin.');

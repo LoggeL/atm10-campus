@@ -6,7 +6,7 @@ import {tx} from './db.js';
 
 export const parallelLayout=JSON.parse(readFileSync(new URL('./erebor-fleet/parallel.json',import.meta.url)));
 const slots=['B','C'];
-export function parallelFleet(db,production,choices,request,recordedFinish){
+export function parallelFleet(db,production,choices,request,recordedFinish,resumePaused){
   db.exec(`CREATE TABLE IF NOT EXISTS erebor_helpers(
     version INTEGER NOT NULL, site TEXT NOT NULL, slot TEXT NOT NULL, name TEXT,
     job TEXT, completed INTEGER NOT NULL DEFAULT 0, message TEXT, PRIMARY KEY(version,site,slot),
@@ -70,6 +70,7 @@ export function parallelFleet(db,production,choices,request,recordedFinish){
         });
         return true;
       }
+      if(job.loaded && await resumePaused(site,slot,v,job,observed))return;
       if(job.tainted){set('Baufortschritt prüfen');return;}
       if(!matches(observed)){
         if(job.loaded || !observed.inputEmpty || !cannonReset(observed)){set('Wartet auf passenden Bauplan oder bestätigten Abschluss');return;}
@@ -93,7 +94,8 @@ export function parallelFleet(db,production,choices,request,recordedFinish){
       if(current()&&result.started&&matches(result.observed)){job.started=true;set('Gestartet');}
     }catch(e){if(current())set(e.message);}
   }
-  return {reserved,list,isEnabled,switchAll,async tick(p,report,enabled,read,current,refresh){
+  const jobAt=(version,site,slot)=>JSON.parse(lookup.get(version,site,slot)?.job||'null');
+  return {reserved,list,isEnabled,switchAll,jobAt,async tick(p,report,enabled,read,current,refresh){
     if(report?.version!==parallelLayout.version||report.sharedChest!==4||!report.stations)return;
     for(const pair of parallelLayout.sites){
       for(const slot of slots){
