@@ -31,6 +31,7 @@
     <div class="summary-line" id="cards" aria-label="Campus-Status"></div>
     <section id="ereborQueue" class="hide" aria-labelledby="ereborQueueTitle">
       <div class="fleet-headed"><div><p class="eyebrow">EREBOR · BAULEITUNG</p><h2 id="ereborQueueTitle">Kanonen</h2></div><details class="fleet-settings"><summary>Nachlegen für alle Kanonen</summary><p data-summary role="status">Planfolge wird geladen …</p><div class="row"><button type="button" class="hide" data-prepare>Nachlegen aktivieren</button><button type="button" class="hide" data-pause>Nachlegen pausieren</button></div></details></div>
+      <div class="fleet-actions"><button type="button" class="primary" data-resume-fleet disabled>Pausierte Cleanstone-Kanonen fortsetzen</button><output data-resume-status></output></div>
       <div class="fleet-layout"><nav class="fleet-nav" aria-label="Kanone auswählen"><div class="fleet-grid" data-sites></div><p class="fleet-legend"><i></i> Baut <i></i> Bereit <i></i> Wartet</p></nav>
       <section class="fleet-station" aria-label="Ausgewählte Kanone">
         <div class="fleet-station-heading"><div><p class="eyebrow">AUSGEWÄHLTE KANONE</p><h3 data-station-name>K01</h3></div><span class="fleet-pill" data-native>Wird geladen</span></div>
@@ -135,5 +136,5 @@
 <dialog class="form-dialog" id="editDialog" aria-labelledby="editTitle"></dialog>
 <dialog class="picker-dialog" id="cannonPickerDialog" aria-labelledby="pickerTitle"></dialog>
 <input type="file" id="hiddenFile" accept=".nbt" class="hide">
-<script type="module" src="/assets/app.js?v=20261114-status-1&amp;revision=erebor-supply-token"></script>
+<script type="module" src="/assets/app.js?v=20261114-status-1&amp;revision=erebor-resume"></script>
 </body></html>

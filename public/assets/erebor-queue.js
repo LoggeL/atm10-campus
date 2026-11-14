@@ -18,6 +18,7 @@ export function setupEreborQueue({api,admin,active,notify,onStatus,onSite}){
  const find=selector=>root.querySelector(selector);
  const grid=find('[data-sites]'),start=find('[data-start]'),auto=find('[data-auto]');
  const prepare=find('[data-prepare]'),pause=find('[data-pause]');
+ const resume=find('[data-resume-fleet]');
  const initial=new URL(location.href).searchParams.get('kanone');
  let site=positions.includes(initial)?initial:'K01';
  let last=null,busy=false,view='open',generation=0,loading=null;
@@ -38,6 +39,11 @@ export function setupEreborQueue({api,admin,active,notify,onStatus,onSite}){
   }
   const r=current(),s=fleetState(r),live=s.tone!=='offline'?r?.live:null,plans=queue();
   const editable=admin()&&!!last&&!last.stale&&!busy;
+  if(resume){
+   resume.disabled=!editable;
+   if(!admin())setText('[data-resume-status]','Zum Sammelstart als Campus-Admin anmelden.');
+   else if(find('[data-resume-status]').textContent==='Zum Sammelstart als Campus-Admin anmelden.')setText('[data-resume-status]','');
+  }
   setText('[data-station-name]',site);
   setText('[data-catalog-heading]','Abschnitte für '+site);
   setText('[data-native]',s.title);find('[data-native]').className='fleet-pill '+s.tone;
@@ -85,6 +91,10 @@ export function setupEreborQueue({api,admin,active,notify,onStatus,onSite}){
  };
  for(const tab of root.querySelectorAll('[data-list]'))tab.onclick=()=>{view=tab.dataset.list;draw();onSite?.();};
  auto.onclick=()=>{if(!auto.disabled)void action(()=>api(base+'/automatik',{method:'POST',body:{site,version:last.version,enabled:!current()?.automatic}}));};
+ if(resume)resume.onclick=()=>{if(!resume.disabled)void action(async()=>{
+  const result=await api(base+'/fortsetzen',{method:'POST',body:{version:last.version}});
+  setText('[data-resume-status]',result.queued.length?result.queued.length+' Kanonen zum Fortsetzen vorgemerkt.':'Keine passenden pausierten Kanonen gemeldet.');
+ });};
  start.onclick=()=>{const r=current();if(!r||start.disabled)return;void action(async()=>{
   const result=await api(base+'/start',{method:'POST',body:{site,version:last.version,upload:r.upload,file:r.file,sha256:r.sha256}});
   notify(result.waiting?site+' wartet auf Create.':site+' gestartet.');
