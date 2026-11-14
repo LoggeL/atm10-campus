@@ -42,5 +42,31 @@ test('operator ZIP contains current feeder and all station mappings, only for th
     assert.deepEqual(files.get('campus.lua'),readFileSync(new URL('../public/cc/campus.lua',import.meta.url)));
     assert.equal(JSON.parse(files.get('stations.json')).sites.length,37);
     assert.equal(files.get('Funkverbindungen.csv').toString().trim().split('\r\n').length,38);
+    const db=app.campus.db;
+    const preset='/api/projects/erebor/cannon-sites/materialpuffer';
+    const post=h=>app.inject({method:'POST',url:preset,headers:h});
+    assert.equal((await post({})).statusCode,401);
+    assert.equal((await post({cookie:headers.cookie})).statusCode,403);
+    const add=db.prepare("INSERT INTO cannons(name,created_at,updated_at,assignment,options_json) VALUES(?,datetime('now'),datetime('now'),42,?)");
+    const original=JSON.stringify({bufferStacks:8,gunpowder:64,autoCraft:true});
+    const row=name=>db.prepare('SELECT options_json,assignment FROM cannons WHERE name=?').get(name);
+    for(const s of layout.sites.slice(0,-1))add.run('erebor-'+s.site,original);
+    add.run('campus-other',original);
+    assert.equal((await post(headers)).statusCode,409);
+    assert.equal(row('erebor-K01').options_json,original);
+    add.run('erebor-K37','{}');
+    const saved=await post(headers);
+    assert.equal(saved.statusCode,200,saved.body);
+    assert.deepEqual(saved.json(),{verified:37,total:37});
+    for(const {site} of layout.sites){
+      const stored=row('erebor-'+site);
+      assert.equal(stored.assignment,42);
+      assert.equal(JSON.parse(stored.options_json).bufferStacks,16);
+      assert.equal(JSON.parse(stored.options_json).gunpowder,64);
+    }
+    assert.equal(JSON.parse(row('erebor-K01').options_json).autoCraft,true);
+    assert.equal(row('campus-other').options_json,original);
+    assert.equal((await post(headers)).statusCode,200);
+    assert.equal(db.prepare("SELECT COUNT(*) AS n FROM activity WHERE action='erebor.supply.settings'").get().n,1);
   }finally{await app.close();app.campus.db.close();rmSync(temp,{recursive:true,force:true});}
 });

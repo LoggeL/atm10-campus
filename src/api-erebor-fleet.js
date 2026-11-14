@@ -1,6 +1,8 @@
 import {readFileSync} from 'node:fs';
 import {Worker} from 'node:worker_threads';
 import {HttpError,requireActor} from './auth.js';
+import {tx,now,logActivity} from './db.js';
+import {normalizeOptions} from './api-stations.js';
 import {zipStore} from './zip.js';
 import {parallelLayout} from './erebor-parallel.js';
 import {renderConnectionIssues,renderFleetIssues} from '../public/assets/connection-status.js';
@@ -41,6 +43,32 @@ export function registerEreborFleet(app,campus) {
     return network?.stations?.[site]?{...network.stations[site],at:network.at,source:network.source,power:network.power}:{stale:true,at:null};
   };
   const prefix='/api/projects/erebor/cannon-sites';
+  const profile={bufferStacks:16,gunpowder:64};
+  const stationOptions=campus.db.prepare('SELECT options_json FROM cannons WHERE name=?');
+  function supplySettings(){
+    return layout.sites.map(({site})=>{
+      const row=stationOptions.get('erebor-'+site);
+      const opts=row&&normalizeOptions(JSON.parse(row.options_json));
+      return {site,configured:opts?.bufferStacks===profile.bufferStacks&&opts?.gunpowder===profile.gunpowder};
+    });
+  }
+  app.post(prefix+'/materialpuffer',async req=>{
+    const actor=requireActor(req,'admin');
+    if(req.headers.origin&&req.headers.origin!==campus.config.publicUrl)throw new HttpError(403,'Fremder Origin.');
+    checkedLayout(req,campus);
+    const update=campus.db.prepare("UPDATE cannons SET options_json=json_set(options_json,'$.bufferStacks',?,'$.gunpowder',?),updated_at=? WHERE name=?");
+    return tx(campus.db,()=>{
+      const pending=supplySettings().filter(s=>!s.configured);
+      for(const {site} of pending){
+        if(update.run(profile.bufferStacks,profile.gunpowder,now(),'erebor-'+site).changes!==1)
+          throw new HttpError(409,'Stationscomputer '+site+' ist noch nicht registriert.');
+      }
+      const verified=supplySettings().filter(s=>s.configured).length;
+      if(verified!==layout.sites.length)throw new HttpError(409,'Die gespeicherten Puffer konnten nicht vollständig bestätigt werden.');
+      if(pending.length)logActivity(campus.db,actor,'erebor.supply.settings','erebor',{...profile,sites:pending.map(s=>s.site)});
+      return {verified,total:layout.sites.length};
+    });
+  });
   app.get(prefix+'/dreierbetrieb',async(req,reply)=>{
     checkedLayout(req,campus);
     const version=parallelLayout.version;
@@ -56,7 +84,9 @@ export function registerEreborFleet(app,campus) {
     }))}));
     reply.header('Cache-Control','private, no-store');
     const enabled=campus.ereborHelpers.isEnabled(version);
-    if(req.query.format==='json')return {version,enabled,at:report?.at||null,stations,diagnostics,power:report?.network?.power||[]};
+    const settings=supplySettings();
+    const supplyLabel=settings.filter(s=>s.configured).length+' von '+settings.length+' Standorten auf 16 Stacks und 64 Schießpulver eingestellt.';
+    if(req.query.format==='json')return {version,enabled,at:report?.at||null,stations,diagnostics,power:report?.network?.power||[],supplySettings:settings};
     const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
     function status({slot,job,live}){
       const label=live?.state ? (live.ready?'Materialkiste erkannt':'Materialkiste prüfen')+' · '+live.state+' / '+live.status :
@@ -67,6 +97,7 @@ export function registerEreborFleet(app,campus) {
     return reply.type('text/html; charset=utf-8').send('<!doctype html><html lang="de"><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Erebor · Dreierbetrieb</title><link rel="stylesheet" href="/assets/app.css"><main>'+
       '<a href="/app?project=erebor#cannon-coordinates">← Aufstellkoordinaten</a><h1>Erebor · Dreierbetrieb</h1><p>Alle Koordinaten in X / Y / Z. An jedem der 37 Standorte B und C direkt an die bestehende Materialkiste stellen. Der Stationscomputer versorgt alle drei Kanonen. Bei K09 steht C unter der Kiste. Für drei gleichzeitig laufende Pläne die Hauptkanone auf Automatik stellen. Kanoneneingänge leer lassen. Sobald der Tracker den Aufbau meldet, werden freie Abschnitte vergeben.</p>'+
       '<p><a href="/assets/erebor-shared-v4.zip">Homebox-Paket mit Anleitung (.zip)</a></p><p>Vergabe neuer Cleanstone-Pläne an alle Zusatzkanonen: <b>'+(enabled?'aktiv':'pausiert')+'</b>. '+(req.actor?.via==='session'&&req.actor?.user?.role==='admin'?'<button id="toggle" data-enabled="'+(!enabled)+'" data-version="'+version+'">'+(enabled?'Neue Aufträge pausieren':'Neue Aufträge freigeben')+'</button> <button id="all-mains" data-enabled="true" data-version="'+version+'">Alle 37 Standorte im Dreierbetrieb starten</button> <output id="result"></output>':'')+'</p><script type="module" src="/assets/erebor-parallel.js"></script><p>'+esc(report?'Weltmeldung vom '+new Date(report.at).toLocaleString('de-DE',{timeZone:'Europe/Berlin'})+' Uhr':'Keine aktuelle Weltmeldung')+'</p>'+
+      '<p id="materialpuffer">'+(req.actor?.via==='session'&&req.actor.user?.role==='admin'?'<button id="set-supply">K01–K37 auf 16 Stacks und 64 Schießpulver stellen</button> ':'')+'<output id="supply-result">'+supplyLabel+'</output></p>'+
       '<section data-fleet-faults>'+renderFleetIssues(diagnostics)+'</section><div class="table-wrap"><table><thead><tr>'+['Platz','A (vorhanden)','B (neu)','C (neu)','Gemeinsame Kiste','Status'].map(t=>'<th>'+t+'</th>').join('')+'</tr></thead><tbody>'+
       stations.map(s=>'<tr><th>'+s.site+'</th>'+['main','B','C','chest'].map(k=>'<td>'+s[k].join(' / ')+'</td>').join('')+'<td><div data-site-fault="'+s.site+'">'+renderConnectionIssues(diagnostics.find(d=>d.name===s.site))+'</div>'+s.helpers.map(status).join('')+'</td></tr>').join('')+'</tbody></table></div></main></html>');
   });

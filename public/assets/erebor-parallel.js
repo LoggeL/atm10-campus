@@ -16,6 +16,18 @@ async function refreshDiagnostics(){
 }
 setInterval(refreshDiagnostics,15000);
 refreshDiagnostics();
+const supplyButton=document.getElementById('set-supply');
+supplyButton?.addEventListener('click',async()=>{
+  supplyButton.disabled=true;
+  const output=document.getElementById('supply-result');
+  try{
+    const response=await fetch('/api/projects/erebor/cannon-sites/materialpuffer',{method:'POST',headers:{'x-campus-csrf':'1'}});
+    const result=await response.json();
+    if(!response.ok)throw Error(result.error||'Speichern fehlgeschlagen.');
+    output.textContent=result.verified+' von '+result.total+' Standorten auf 16 Stacks und 64 Schießpulver eingestellt.';
+  }catch(error){output.textContent=error.message;}
+  finally{supplyButton.disabled=false;}
+});
 for(const button of document.querySelectorAll('button[data-enabled]'))button.addEventListener('click',async()=>{
   button.disabled=true;
   try{
