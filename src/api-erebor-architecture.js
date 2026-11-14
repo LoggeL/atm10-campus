@@ -4,6 +4,7 @@ import {requireActor,HttpError} from './auth.js';
 import {tx,logActivity} from './db.js';
 import {regionMtime} from './region.js';
 import {storedZipEntry} from './zip.js';
+import {sameArchitectureOutput} from './erebor-export.js';
 import {DESIGN_REVISION} from './erebor-design.js';
 import {ereborViewTarget} from './erebor-view-target.js';
 import {sendPackagePreview} from './preview/service.js';
@@ -21,7 +22,17 @@ export function registerEreborArchitectureRoutes(app,campus,blueprintPreviews){c
  app.post('/api/projects/:id/architecture/prepare',async req=>{const actor=requireActor(req,'write'),p=project(req),b=req.body;if(!b||b.baseVersion!==p.version)throw new HttpError(409,'Aktuelle baseVersion verwenden.');if(typeof b.dryRun!=='boolean'||!/^([ES]\d{1,2}[AB]?)_\d{3}$/.test(b.package||''))throw new HttpError(400,'dryRun und gültige Paketkennung erforderlich.');const exists=row(p,b.package);if(exists)return{unchanged:true,package:summary(exists),worldPlacement:false};
   for(const [k,v]of previews)if(v.expires<Date.now())previews.delete(k);
   if(b.dryRun){if(!campus.config.worldSources.live)throw new HttpError(503,'Gespeicherte Welt fehlt');const out=await run({project:p,package:b.package,worldDir:campus.config.worldSources.live});if(project(req).version!==p.version)throw new HttpError(409,'Projekt während Prüfung geändert');const bytes=Buffer.from(out.bytes),sha256=createHash('sha256').update(bytes).digest('hex'),preview=randomUUID();previews.clear();previews.set(preview,{project:p.id,version:p.version,package:b.package,user:actor.user.id,bytes,sha256,report:out.report,expires:Date.now()+300000});return{dryRun:true,preview,sha256,report:out.report,worldPlacement:false};}
-  const v=previews.get(b.preview);if(!v||v.project!==p.id||v.version!==p.version||v.package!==b.package||v.user!==actor.user.id)throw new HttpError(409,'Erst dryRun durchführen.');for(const r of v.report.sourceRegions){const t=regionMtime(campus.config.worldSources.live,...r.region);if((t?new Date(t).toISOString():null)!==r.savedAt)throw new HttpError(409,'Welt seit dryRun geändert; erneut prüfen.');}
+  const v=previews.get(b.preview);if(!v||v.project!==p.id||v.version!==p.version||v.package!==b.package||v.user!==actor.user.id)throw new HttpError(409,'Erst dryRun durchführen.');const worldDir=campus.config.worldSources.live;
+  const refresh=v.report.sourceRegions.some(r=>{
+   const stamp=regionMtime(worldDir,...r.region);
+   return r.changedDuringRead || (stamp?new Date(stamp).toISOString():null)!==r.savedAt;
+  });
+  if(refresh){
+   // Repeat protection, terrain and chunk-coverage checks from fresh region
+   // buffers. Never publish a preview if any resulting NBT differs.
+   const current=await run({project:p,package:b.package,worldDir});
+   if(!sameArchitectureOutput(v.report,current.report))throw new HttpError(409,'Bauzellen oder Schutzbereich seit dryRun geändert; erneut prüfen.');
+  }
   return tx(db,()=>{if(project(req).version!==p.version)throw new HttpError(409,'Projekt inzwischen geändert');const at=new Date().toISOString();db.prepare('INSERT INTO project_architecture_packages VALUES(?,?,?,?,?,?,?,?,?)').run(p.id,p.version,DESIGN_REVISION,b.package,v.sha256,v.bytes,JSON.stringify(v.report),at,actor.user.id);logActivity(db,actor,'project.architecture.prepare',p.id,{baseVersion:p.version,revision:DESIGN_REVISION,package:b.package,files:v.report.files.length,blocks:v.report.blocks});previews.delete(b.preview);return{saved:true,package:summary(row(p,b.package)),worldPlacement:false};});
  });
  const downloadRow=req=>{const p=project(req),revision=Number(req.query.revision),version=Number(req.query.version);if(!Number.isSafeInteger(revision)||!Number.isSafeInteger(version))throw new HttpError(400,'version und revision fehlen');const r=row(p,req.params.package,revision,version);if(!r)throw new HttpError(404,'Architekturpaket nicht veröffentlicht');return r;};

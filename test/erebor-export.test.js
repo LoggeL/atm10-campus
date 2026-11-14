@@ -1,10 +1,10 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {mkdtempSync,rmSync,readFileSync} from 'node:fs';
+import {mkdtempSync,rmSync,readFileSync,utimesSync,existsSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {writeWorld} from './helpers.js';
-import {architecturePackage} from '../src/erebor-export.js';
+import {architecturePackage,sameArchitectureOutput} from '../src/erebor-export.js';
 import {storedZipEntry} from '../src/zip.js';
 import {parseStructure} from '../src/nbt.js';
 import {buildServer} from '../src/server.js';
@@ -19,7 +19,11 @@ test('architecture protects machines and inventories, excludes unknown excavatio
   assert.deepEqual(readFileSync(join(dir,'region','r.0.0.mca')),before);
   assert.throws(()=>architecturePackage(scene,{id:'E02_001',group:'E02',title:'Tor',tiles:[tile]},dir,{id:'erebor',version:7,plan:{site:{requireKnownArchitecture:true}}}),/Standort noch nicht vollständig erkundet/);
   const known={...tile,ops:[{a:[10,10,10],b:[12,12,12],s:1,g:'E02'}]};
-  assert.equal(architecturePackage(scene,{id:'E02_002',group:'E02',title:'Tor',tiles:[known]},dir,{id:'erebor',version:7,plan:{site:{requireKnownArchitecture:true}}}).report.unknownCells,0);
+  const current=()=>architecturePackage(scene,{id:'E02_002',group:'E02',title:'Tor',tiles:[known]},dir,{id:'erebor',version:7,plan:{site:{requireKnownArchitecture:true}}}).report;
+  const checked=current();assert.equal(checked.unknownCells,0);
+  assert.ok(sameArchitectureOutput(checked,current()));
+  writeWorld(dir,[{cx:0,cz:0,blocks:[{x:10,y:10,z:10,name:'ae2:cable_bus'}]}]);
+  assert.equal(sameArchitectureOutput(checked,current()),false);
  }finally{rmSync(dir,{recursive:true,force:true});}
 });
 
@@ -35,6 +39,10 @@ test('architecture API requires dryRun, publishes immutable authenticated downlo
   assert.equal((await post({baseVersion:1,dryRun:false,package:'E02_001'})).statusCode,409);
   const dry=await post({baseVersion:1,dryRun:true,package:'E02_001'});assert.equal(dry.statusCode,200,dry.body);assert.ok(dry.json().report.files.length>0);
   assert.equal((await app.inject({url:'/api/projects/erebor/architecture',headers})).json().packages.length,0);
+  for(const r of dry.json().report.sourceRegions){
+   const path=join(world,'region','r.'+r.region.join('.')+'.mca');
+   if(existsSync(path))utimesSync(path,new Date(),new Date(Date.now()+2000));
+  }
   const saved=await post({baseVersion:1,dryRun:false,package:'E02_001',preview:dry.json().preview});assert.equal(saved.statusCode,200,saved.body);assert.equal(saved.json().worldPlacement,false);
   const f=saved.json().package.files[0],url=`/api/projects/erebor/architecture/E02_001/${f.id}.nbt?version=1&revision=${saved.json().package.revision}`;assert.equal((await app.inject(url)).statusCode,401);const n=await app.inject({url,headers});assert.equal(n.statusCode,200);assert.equal(n.headers['x-campus-sha256'],f.sha256);assert.equal(n.headers['x-campus-origin'],f.origin.join(','));
   const imageUrl=url.replace('.nbt?','/preview.png?');
