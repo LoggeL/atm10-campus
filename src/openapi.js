@@ -39,6 +39,14 @@ export function openapi(baseUrl) {
     },
     security: [{ bearer: [] }],
     paths: {
+      '/api/projects/erebor/cannon-sites/materialpuffer': {
+        get:{summary:'Stein- und Schießpulverpuffer für K01 bis K37 lesen. Erfordert erebor_supply oder eine Admin-Sitzung.',responses:ok},
+        post:{summary:'Erebor-Materialpuffer speichern und prüfen. Erfordert erebor_supply oder eine Admin-Sitzung.',
+          description:'Ohne sites gilt die Auswahl für alle 37 Standorte. Bei einem JSON-Objekt bleiben ausgelassene Pufferwerte erhalten. Ohne Request-Body gilt die Voreinstellung 16 Stacks und 64 Schießpulver.',
+          requestBody:json({type:'object',additionalProperties:false,anyOf:[{required:['bufferStacks']},{required:['gunpowder']}],
+            properties:{sites:{type:'array',minItems:1,maxItems:37,uniqueItems:true,items:{type:'string',pattern:'^K(0[1-9]|[12][0-9]|3[0-7])$'}},
+              bufferStacks:{type:'integer',minimum:1,maximum:16},gunpowder:{type:'integer',minimum:0,maximum:64}}}),responses:ok}
+      },
       '/api/projects': { get: { summary: 'Bauprojekte auflisten: Masterpläne und bestehende Anlagen mit verknüpften Bauplänen', responses: ok } },
       '/api/projects/{id}/architecture': {get:{summary:'Veröffentlichte Erebor-Architekturpakete mit einzelnen BAU-/AUSHUB-Dateien, Koordinaten, Kanonenstandort, Materialien und Bestandsaussparungen. Kein Nachweis eines Weltbaus.',parameters:[id],responses:ok}},
       '/api/projects/{id}/architecture/manifest': {get:{summary:'Vollständige Paketliste der blockgenauen Architekturrevision. Welt-Schutz-Aussparungen werden beim Vorbereiten berechnet.',parameters:[id],responses:ok}},

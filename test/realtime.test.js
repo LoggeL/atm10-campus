@@ -132,6 +132,11 @@ test('revoked token and expired session lose their open stream before receiving 
   const cookieStream=await subscribe(origin,headers),tokenStream=await subscribe(origin,{authorization:'Bearer '+read});
   t.after(()=>{cookieStream.abort();tokenStream.abort();});
   await cookieStream.next('sync');await tokenStream.next('sync');
+  // Registration can publish activity while the two streams are opening.
+  // Drain earlier events on both streams before testing post-revocation delivery.
+  app.updates.publish('stock');
+  await Promise.all([cookieStream,tokenStream].map(s=>s.next('change',d=>d.topics.includes('stock'))));
+  cookieStream.events.length=0;tokenStream.events.length=0;
   app.campus.db.prepare("UPDATE sessions SET expires_at='2000-01-01T00:00:00Z' WHERE token_hash=?").run(sha256(session));
   app.campus.db.prepare("UPDATE api_tokens SET revoked_at='2026-01-01T00:00:00Z' WHERE token_hash=?").run(sha256(read));
   app.updates.publish('cannons','alpha');

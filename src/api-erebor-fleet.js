@@ -27,13 +27,14 @@ function linkPage(report) {
     '<p>Gespeicherte Kopplungen aus der Welt. Abgerufen am '+new Date(report.surveyedAt).toLocaleString('de-DE',{timeZone:'Europe/Berlin'})+' Uhr (Berlin).</p>'+
     '<div class="table-wrap"><table><thead><tr><th>Hub</th><th>X / Y / Z</th><th>Vorgesehene Partner</th><th>Gespeicherte Ports</th><th>Zu prüfen</th></tr></thead><tbody>'+rows+'</tbody></table></div></main></html>';
 }
-function checkedLayout(req,campus) {
-  requireActor(req,'read');
+function checkedLayout(req,campus,permission='read') {
+  const actor=requireActor(req,permission);
   const row=campus.db.prepare('SELECT plan_json FROM build_projects WHERE id=?').get('erebor');
   const live=row && JSON.parse(row.plan_json).cannonLayout?.stations;
   if(!Array.isArray(live)||live.length!==layout.sites.length||layout.sites.some(s=>
     !live.some(r=>r.id===s.site&&JSON.stringify(r.position)===JSON.stringify(s.planned))))
     throw new HttpError(409,'Der Erebor-Standortplan hat sich geändert. Installer-Zuordnung neu prüfen.');
+  return actor;
 }
 export function registerEreborFleet(app,campus) {
   campus.ereborNetworkView=async name=>{
@@ -45,28 +46,43 @@ export function registerEreborFleet(app,campus) {
   const prefix='/api/projects/erebor/cannon-sites';
   const profile={bufferStacks:16,gunpowder:64};
   const stationOptions=campus.db.prepare('SELECT options_json FROM cannons WHERE name=?');
-  function supplySettings(){
-    return layout.sites.map(({site})=>{
+  const fleetSites=layout.sites.map(s=>s.site);
+  function supplySettings(sites=fleetSites){
+    return sites.map(site=>{
       const row=stationOptions.get('erebor-'+site);
       const opts=row&&normalizeOptions(JSON.parse(row.options_json));
-      return {site,configured:opts?.bufferStacks===profile.bufferStacks&&opts?.gunpowder===profile.gunpowder};
+      return {site,bufferStacks:opts?.bufferStacks??null,gunpowder:opts?.gunpowder??null,configured:opts?.bufferStacks===profile.bufferStacks&&opts?.gunpowder===profile.gunpowder};
     });
   }
+  app.get(prefix+'/materialpuffer',async(req,reply)=>{
+    checkedLayout(req,campus,'erebor_supply');
+    return reply.header('Cache-Control','private, no-store').send({stations:supplySettings()});
+  });
   app.post(prefix+'/materialpuffer',async req=>{
-    const actor=requireActor(req,'admin');
+    const actor=checkedLayout(req,campus,'erebor_supply');
     if(req.headers.origin&&req.headers.origin!==campus.config.publicUrl)throw new HttpError(403,'Fremder Origin.');
-    checkedLayout(req,campus);
-    const update=campus.db.prepare("UPDATE cannons SET options_json=json_set(options_json,'$.bufferStacks',?,'$.gunpowder',?),updated_at=? WHERE name=?");
+    const body=req.body===undefined?profile:req.body;
+    if(!body||typeof body!=='object'||Array.isArray(body)||Object.keys(body).some(k=>!['sites','bufferStacks','gunpowder'].includes(k)))
+      throw new HttpError(400,'Erlaubt sind sites, bufferStacks und gunpowder.');
+    const sites=body.sites===undefined?fleetSites:body.sites;
+    if(!Array.isArray(sites)||!sites.length||sites.length>fleetSites.length||new Set(sites).size!==sites.length||sites.some(s=>!fleetSites.includes(s)))
+      throw new HttpError(400,'Standorte aus K01 bis K37 einmalig angeben.');
+    const changes=Object.fromEntries(Object.entries(body).filter(([k])=>k!=='sites'));
+    if(!Object.keys(changes).length||!Object.values(changes).every(Number.isSafeInteger))
+      throw new HttpError(400,'Mindestens einen Puffer als ganze Zahl angeben.');
+    normalizeOptions(changes); // Uses the same limits as the individual station editor.
+    const matches=row=>Object.entries(changes).every(([key,value])=>row[key]===value);
+    const update=campus.db.prepare('UPDATE cannons SET options_json=json_patch(options_json,?),updated_at=? WHERE name=?');
     return tx(campus.db,()=>{
-      const pending=supplySettings().filter(s=>!s.configured);
+      const pending=supplySettings(sites).filter(row=>!matches(row));
       for(const {site} of pending){
-        if(update.run(profile.bufferStacks,profile.gunpowder,now(),'erebor-'+site).changes!==1)
+        if(update.run(JSON.stringify(changes),now(),'erebor-'+site).changes!==1)
           throw new HttpError(409,'Stationscomputer '+site+' ist noch nicht registriert.');
       }
-      const verified=supplySettings().filter(s=>s.configured).length;
-      if(verified!==layout.sites.length)throw new HttpError(409,'Die gespeicherten Puffer konnten nicht vollständig bestätigt werden.');
-      if(pending.length)logActivity(campus.db,actor,'erebor.supply.settings','erebor',{...profile,sites:pending.map(s=>s.site)});
-      return {verified,total:layout.sites.length};
+      const verified=supplySettings(sites).filter(matches).length;
+      if(verified!==sites.length)throw new HttpError(409,'Die gespeicherten Puffer konnten nicht vollständig bestätigt werden.');
+      if(pending.length)logActivity(campus.db,actor,'erebor.supply.settings','erebor',{...changes,sites:pending.map(s=>s.site)});
+      return {verified,total:sites.length};
     });
   });
   app.get(prefix+'/dreierbetrieb',async(req,reply)=>{

@@ -2,14 +2,14 @@ import { DatabaseSync } from 'node:sqlite';
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 
-// read: status + downloads · write: also uploads/edits · station: read + report ME stock and cannon status (CC computers)
+// erebor_supply authorizes only the dedicated Erebor buffer endpoint.
 const TOKENS_TABLE = name => `CREATE TABLE IF NOT EXISTS ${name} (
   id INTEGER PRIMARY KEY,
   user_id INTEGER NOT NULL REFERENCES users(id),
   name TEXT NOT NULL,
   token_hash TEXT NOT NULL UNIQUE,
   prefix TEXT NOT NULL,
-  scope TEXT NOT NULL CHECK (scope IN ('read','write','station')),
+  scope TEXT NOT NULL CHECK (scope IN ('read','write','station','erebor_supply')),
   created_at TEXT NOT NULL,
   last_used_at TEXT,
   revoked_at TEXT
@@ -176,10 +176,10 @@ export function openDb(dataDir) {
   return db;
 }
 
-// Older databases only allowed read/write tokens; SQLite cannot alter a CHECK, so the table is rebuilt once.
+// SQLite cannot extend a CHECK in place. Preserve all issued and revoked tokens.
 function migrateTokenScopes(db) {
   const t = db.prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'api_tokens'").get();
-  if (!t || t.sql.includes("'station'")) return;
+  if (!t || t.sql.includes("'erebor_supply'")) return;
   db.exec('PRAGMA foreign_keys = OFF');
   try {
     tx(db, () => {

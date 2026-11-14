@@ -131,7 +131,9 @@ export async function buildServer(config = defaultConfig) {
   });
   app.post('/api/tokens', async req => {
     const a = requireActor(req, 'session');
-    const name = String(req.body?.name || '').trim().slice(0, 60), scope = ['read', 'station'].includes(req.body?.scope) ? req.body.scope : 'write';
+    const name = String(req.body?.name || '').trim().slice(0, 60), scope = req.body?.scope ?? 'write';
+    if (!['read','station','write','erebor_supply'].includes(scope)) throw new HttpError(400, 'Unbekannte Token-Berechtigung.');
+    if (scope === 'erebor_supply') requireActor(req,'admin');
     if (!name) throw new HttpError(400, 'Name für den Token fehlt.');
     const t = createApiToken(db, a.user.id, name, scope);
     logActivity(db, a, 'token.create', name, { scope });

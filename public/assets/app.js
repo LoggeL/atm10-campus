@@ -561,7 +561,7 @@ $('cannonList').addEventListener('click', guard(async e => {
 document.querySelectorAll('[data-goto]').forEach(a => a.addEventListener('click', e => { e.preventDefault(); showTab(a.dataset.goto); }));
 
 // ---------- tokens ----------
-const SCOPES = { write: 'Lesen + Schreiben', read: 'Nur lesen', station: 'Station (ME-Computer)' };
+const SCOPES = { write: 'Lesen + Schreiben', read: 'Nur lesen', station: 'Station (ME-Computer)', erebor_supply: 'Erebor-Materialpuffer' };
 async function loadTokens() {
   const list = await api('/api/tokens');
   $('tokRows').innerHTML = list.map(t => `<tr><td>${esc(t.name)}</td><td>${SCOPES[t.scope] || esc(t.scope)}</td><td class="mono">${esc(t.prefix)}…</td><td>${esc(when(t.createdAt))}</td><td>${esc(ago(t.lastUsedAt))}</td>
@@ -598,7 +598,14 @@ $('tokCreate').onclick = guard(async () => {
   $('tokNew').classList.remove('hide');
   $('tokNew').innerHTML = `<p>Neuer Token <strong>${esc(t.name)}</strong>. Jetzt kopieren, er wird nicht noch einmal angezeigt:</p><div class="secret" id="tokVal">${esc(t.token)}</div><div class="row"><button class="small" id="tokCopy">Kopieren</button><button class="small" id="tokCopySnippet">Agent-Anleitung mit Token kopieren</button></div>`;
   $('tokCopy').onclick = () => navigator.clipboard.writeText(t.token).then(() => toast('Kopiert.'));
-  $('tokCopySnippet').onclick = () => navigator.clipboard.writeText(agentSnippet(t.token)).then(() => toast('Kopiert.'));
+  if(t.scope==='erebor_supply'){
+    $('tokCopySnippet').remove();
+    const hint=document.createElement('p');
+    hint.textContent='Für Codex auf Windows: Kopiere den Token und speichere ihn in der Benutzervariable CAMPUS_SUPPLY_TOKEN. Über „Widerrufen“ kannst du den Zugriff jederzeit beenden.';
+    $('tokNew').append(hint);
+  }else{
+    $('tokCopySnippet').onclick = () => navigator.clipboard.writeText(agentSnippet(t.token)).then(() => toast('Kopiert.'));
+  }
   $('tokName').value = ''; loadTokens();
 });
 
@@ -706,7 +713,10 @@ window.addEventListener('hashchange', () => { if (me) routeFromHash(); });
     $('blueprintProject').querySelector('[value="campus"]').textContent=campusArchived?'Campus (Archiv)':'Campus';
     if(blueprintProject==='campus'&&campusArchived&&['','#overview'].includes(location.hash)){location.replace('/projects?id=campus');return;}
     $('who').textContent = me.user.username;
-    if (me.user.role === 'admin') $('adminTab').classList.remove('hide');
+    if (me.user.role === 'admin') {
+      $('adminTab').classList.remove('hide');
+      $('tokScope').add(new Option(SCOPES.erebor_supply,'erebor_supply'));
+    }
     polling=connectPolling({refresh:refreshVisible,onState:renderPollingState,immediate:false});
     routeFromHash();
     if (!['#overview','#coordinates'].includes(location.hash)) $('liveLine').textContent='Gespeicherter Weltbestand im Reiter Live-Bestand.';

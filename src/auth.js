@@ -73,6 +73,11 @@ export function requireActor(req, level) {
   if (a.via === 'session' && req.method !== 'GET' && req.method !== 'HEAD' && req.headers['x-campus-csrf'] !== '1') {
     throw new HttpError(403, 'CSRF-Header fehlt.');
   }
+  if (a.scope === 'erebor_supply') {
+    if (level === 'erebor_supply' && a.user.role === 'admin') return a;
+    throw new HttpError(403, 'Dieser Token ist auf die Erebor-Materialpuffer beschränkt.');
+  }
+  if (level === 'erebor_supply') level='admin';
   if (level === 'write' && a.scope !== 'write') {
     throw new HttpError(403, a.scope === 'station' ? 'Station-Tokens dürfen nur lesen und ME-Bestand/Kanonen-Status melden.' : 'Dieser Token darf nur lesen.');
   }
