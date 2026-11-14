@@ -1,6 +1,7 @@
 import {publishedPlan,selectionStore,unstarted} from './erebor-selection.js';
 import {productionStore} from './erebor-production.js';
-import {parallelFleet} from './erebor-parallel.js';
+import {parallelFleet,parallelLayout} from './erebor-parallel.js';
+import {Region} from './region.js';
 import {ereborFeeder,isStationStone} from './erebor-feeder.js';
 import {Worker} from 'node:worker_threads';
 import {createHash,randomUUID} from 'node:crypto';
@@ -384,6 +385,20 @@ export function registerEreborQueue(app,campus){
    const result={site,slot,file:job.desired.file,at:o.at,state:o.state,status:o.status,
     anchor:job.desired.anchor,size:job.size,position:o.printer.CurrentPos,stage:o.printer.PrintStage,entity:o.printer.EntityProgress,
     deferred:o.printer.DeferredCount??o.printer.DeferredBlocks?.length,placed:o.amountPlaced,total:o.amountToPlace,flights:o.flyingBlocks};
+   // V5's live bridge omits MissingItem. Only show the saved hint for the exact
+   // same upload, state, counter and cursor as the independent native inspection.
+   const coordinates=parallelLayout.sites.find(s=>s.site===site)[slot==='A'?'main':slot];
+   const [x,y,z]=coordinates;
+   try{
+    const region=config.worldSources.live&&Region.open(config.worldSources.live,x>>9,z>>9);
+    const chunk=region?.chunk(x>>4,z>>4);
+    const be=chunk?.block_entities?.find(b=>b.x===x&&b.y===y&&b.z===z&&b.id==='create:schematicannon');
+    const input=be?.Inventory?.Items?.find(i=>i.Slot===0);
+    if(input?.components?.['create:schematic_file']===signal.upload&&be.State===o.state&&be.Status===o.status&&
+       be.AmountPlaced===o.amountPlaced&&be.Printer?.CurrentPos&&same(Array.from(be.Printer.CurrentPos),result.position)){
+     result.savedMissingItem=be.MissingItem?.id??null;
+    }
+   }catch{/* A missing or concurrently saved region is inconclusive. */}
    inspections.set(key,result);return result;
   }finally{inspecting=false;}
  });
