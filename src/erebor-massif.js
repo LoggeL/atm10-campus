@@ -173,19 +173,19 @@ export function registerMassif(app,campus,stations){
    if(!r){
     r=db.prepare(`SELECT t.*,((x-:x)*(x-:x)+(y-:y)*(y-:y)+(z-:z)*(z-:z)) AS d FROM erebor_massif_tiles t
        WHERE v=:v AND site IS NULL AND done=0 AND special=0 AND x BETWEEN :x-255 AND :x+255 AND d<65536
-       AND (:primary OR home=:site)
        AND (:solids OR tile GLOB '*_LUFT')
        AND json_array(x,y,z) NOT IN (
         SELECT json_extract(state,'$.job.desired.anchor') FROM erebor_queue_sites WHERE json_type(state,'$.job.desired.anchor')='array' AND json_extract(state,'$.job.massif') IS NULL
         UNION ALL SELECT json_extract(job,'$.desired.anchor') FROM erebor_helpers WHERE version=:v AND json_type(job,'$.desired.anchor')='array' AND json_extract(job,'$.massif') IS NULL)
-       ORDER BY (:primary AND tile NOT GLOB '*_LUFT') DESC,priority,(home=:site) DESC,d,tile LIMIT 1`).get({x:pos[0],y:pos[1],z:pos[2],v,site,primary:Number(slot==='A'),solids:Number(allowSolids)});
+       ORDER BY (:primary AND tile NOT GLOB '*_LUFT') DESC,(home=:site) DESC,priority,d,tile LIMIT 1`).get({x:pos[0],y:pos[1],z:pos[2],v,site,primary:Number(slot==='A'),solids:Number(allowSolids)});
     if(!r)return null;
     db.prepare('UPDATE erebor_massif_tiles SET site=?,slot=? WHERE v=? AND tile=?').run(site,slot,v,r.tile);
    }
    return load(v,site,slot,r);
   });
  }
- return {enabled,reserve,restore(v,site,slot,tile){const r=rowFor.get(v,tile);if(!r||r.site!==site||r.slot!==slot||r.done)throw Error('Massiv-Auftrag nicht mehr reserviert.');return load(v,site,slot,r);},
+ const occupied=v=>new Set(db.prepare('SELECT DISTINCT x,y,z FROM erebor_massif_tiles WHERE v=? AND site IS NOT NULL AND done=0').all(v).map(r=>[r.x,r.y,r.z].join(',')));
+ return {enabled,reserve,occupied,restore(v,site,slot,tile){const r=rowFor.get(v,tile);if(!r||r.site!==site||r.slot!==slot||r.done)throw Error('Massiv-Auftrag nicht mehr reserviert.');return load(v,site,slot,r);},
   finish(v,tile,site,slot){
    const updated=db.prepare('UPDATE erebor_massif_tiles SET done=1 WHERE v=? AND tile=? AND site=? AND slot=? AND done=0').run(v,tile,site,slot);
    const m=/^X(\d+)_Z(\d+)_/.exec(tile);

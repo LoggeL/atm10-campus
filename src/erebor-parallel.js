@@ -55,7 +55,8 @@ export function parallelFleet(db,production,choices,request,recordedFinish,resum
       // The generator names the same geometry with the current version suffix.
       const geometry=name=>name.replace(/_V\d+$/,'');
       const occupied=new Set([...taken,...done.keys()].map(geometry));
-      const entry=open.find(f=>f.stage==='stone'&&!occupied.has(geometry(f.name))&&Array.isArray(f.origin)&&
+      const busyAnchors=massif?.occupied(v);
+      const entry=open.find(f=>f.stage==='stone'&&!occupied.has(geometry(f.name))&&Array.isArray(f.origin)&&!busyAnchors?.has(f.origin.join(','))&&
         Math.hypot(...f.origin.map((n,i)=>n-pair[slot][i]))<256);
       const mass=massif?.reserve(v,site,slot,same(signal.options,[2,false,false]));
       if(!entry&&!mass)return;

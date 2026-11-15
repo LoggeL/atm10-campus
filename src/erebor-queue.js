@@ -72,7 +72,8 @@ export function registerEreborQueue(app,campus){
   const geometry=name=>name.replace(/_V\d+$/,'');
   const taken=new Set([...busy,...done.keys()].map(geometry));
   const stoneOnly=busy.size||massif.enabled(p.current_version);
-  return open.filter(e=>!taken.has(geometry(e.name))&&(!stoneOnly||e.stage==='stone'));
+  const occupied=massif.occupied(p.current_version);
+  return open.filter(e=>!taken.has(geometry(e.name))&&!occupied.has(e.origin?.join(','))&&(!stoneOnly||e.stage==='stone'));
  }
  const cfg=()=>db.prepare('SELECT * FROM erebor_queue_config WHERE id=1').get();
  const project=()=>db.prepare("SELECT current_version,plan_json FROM build_projects WHERE id='erebor'").get();

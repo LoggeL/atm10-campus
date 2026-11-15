@@ -55,5 +55,9 @@ test('reservations survive retries, respect physical reach and helper capability
   assert.equal(mass.reserve(12,'K01','A'),null);
   assert.deepEqual(mass.restore(12,'K02','A','SOLID').job,j);
   mass.finish(12,'SOLID','K02','A');assert.equal(mass.reserve(12,'K02','A'),null);
+  add.run('OTHER_LUFT',12,0);
+  const borrowed=mass.reserve(12,'K02','B',false).job;
+  assert.equal(borrowed.massif,'OTHER_LUFT');assert.match(borrowed.desired.blueprint,/^EREBOR_STEIN_K02_/);
+  assert.equal(mass.reserve(12,'K01','C',false),null);
  }finally{for(const close of hooks)await close();db.close();}
 });
