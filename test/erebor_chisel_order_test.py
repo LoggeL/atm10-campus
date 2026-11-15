@@ -96,6 +96,21 @@ class EreborOrderTest(unittest.TestCase):
         self.lua.execute(PROGRAM)
         self.lua.execute("assert(stored[item]==2563884)")
 
+    def test_advanced_ae_task_list_failure_after_first_submission(self):
+        self.lua.execute("""
+          taskErrors=0
+          for k in pairs(stored) do stored[k]=stored[k]-4 end
+          bridge.getCraftingCPUs=function() return {{isBusy=true}} end
+          bridge.getCraftingTasks=function()
+            if #orders>0 then taskErrors=taskErrors+1
+              error("Java Exception Thrown: java.lang.ClassCastException: class net.pedroksl.advanced_ae.common.cluster.AdvCraftingCPU cannot be cast to class appeng.me.cluster.implementations.CraftingCPUCluster")
+            end
+            return {}
+          end
+        """)
+        self.lua.execute(PROGRAM)
+        self.lua.execute("assert(taskErrors==1 and stored[item]==2563884 and stored['rechiseled:gold_block_polished_connecting']==353739)")
+
     def test_uses_available_materials_then_automatically_resumes(self):
         self.lua.execute("""
           supply=11; credited=0; rejectedOneAt=nil; replenished=false
@@ -123,9 +138,16 @@ class EreborOrderTest(unittest.TestCase):
         self.lua.execute("crash=true")
         with self.assertRaisesRegex(Exception, "connection lost"):
             self.lua.execute(PROGRAM)
-        self.lua.execute("crash=false")
+        self.lua.execute("""
+          crash=false
+          local advance=sleep; sleep=function(n)
+            if ticks<60 then assert(#orders==1, "duplicated a pending job") end
+            advance(n)
+            if ticks==55 then stored[item]=stored[item]+orders[1] end
+          end
+        """)
         self.lua.execute(PROGRAM)
-        self.lua.execute("assert(#orders==1 and string.find(log[#log], 'unterbrochenen'))")
+        self.lua.execute("local n=0;for _,v in ipairs(orders) do n=n+v end;assert(n==9000 and stored[item]==2563884)")
 
 
 if __name__ == "__main__":

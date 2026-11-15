@@ -70,6 +70,7 @@ local function inventory()
   return totals
 end
 
+local bridgeTasksReadable = true
 local function active(item)
   -- AP 0.8.2a wraps isCrafting's MethodResult inside another MethodResult.
   -- Inspect all CPUs, including crafts submitted through other bridges or terminals.
@@ -88,8 +89,18 @@ local function active(item)
   -- Cross-check the bridge's own task list. Unidentified CPUs are not evidence
   -- that this specific output is being made. Our persisted pending receipt still
   -- guards against resubmitting a previous Campus order after any interruption.
-  if unknown then
-    local tasks, reason = bridge.getCraftingTasks()
+  if unknown and bridgeTasksReadable then
+    local ok, tasks, reason = pcall(bridge.getCraftingTasks)
+    if not ok then
+      local err = tostring(tasks)
+      -- AP 0.8.2a downcasts AdvancedAE CPUs when expanding bridge-created jobs.
+      -- The network-wide CPU list above remains valid, as do our job receipts.
+      if err:find("ClassCastException",1,true) and err:find("AdvCraftingCPU",1,true) then
+        bridgeTasksReadable = false
+        return false
+      end
+      error(err)
+    end
     assert(type(tasks) == "table", reason or "ME-Bridge-Auftragsliste nicht lesbar.")
     for _, task in pairs(tasks) do
       if type(task.resource) == "table" and task.resource.name == item then return true end
@@ -168,7 +179,8 @@ local function produce(item, target)
     -- A reboot may fall between submitting the job and receiving its receipt.
     -- Only accept this batch again if its output is demonstrably in storage.
     if have < r.before + r.pending then
-      return "offen: unterbrochenen Auftrag im ME pruefen"
+      return retry(item, r.credited, 30, "Eingereichten Auftrag mit ME-Bestand abgleichen: " ..
+        math.max(0,have-r.before) .. " von " .. r.pending .. " eingelagert")
     end
     r = {item = item, credited = r.credited + r.pending}
     save(r)
@@ -207,7 +219,15 @@ while true do
   for _, target in ipairs(targets) do
     local item = target[1]
     if not blocked[item] then
-      local result = produce(item, target[2])
+      local ok, result = pcall(produce, item, target[2])
+      if not ok then
+        local err = tostring(result)
+        if err:find("Java Exception",1,true) or err:find("NOT_CONNECTED",1,true) or err:find("peripheral is not attached",1,true) then
+          result = retry(item, (records[item] or {}).credited or 0, 30, err)
+        else
+          error(result, 0)
+        end
+      end
       if result ~= "done" then
         if result == "wait" or result == "more" then
           outstanding = true
