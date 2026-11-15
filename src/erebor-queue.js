@@ -3,12 +3,12 @@ import {productionStore} from './erebor-production.js';
 import {parallelFleet,parallelLayout} from './erebor-parallel.js';
 import {Region} from './region.js';
 import {zipStore} from './zip.js';
-import {ereborFeeder,isStationStone} from './erebor-feeder.js';
+import {ereborFeeder,isStationStone,observedEreborOptions,verifyEreborAlignment as verifyAlignment} from './erebor-feeder.js';
 import {Worker} from 'node:worker_threads';
 import {createHash,randomUUID} from 'node:crypto';
 import {readFileSync} from 'node:fs';
 import {isDeepStrictEqual as same} from 'node:util';
-import {bridgeClient,cannonReset,verifyAlignment} from './alignment.js';
+import {bridgeClient,cannonReset} from './alignment.js';
 import {DESIGN_REVISION} from './erebor-design.js';
 import {requireActor,HttpError} from './auth.js';
 import {logActivity,tx} from './db.js';
@@ -16,13 +16,13 @@ import {logActivity,tx} from './db.js';
 const layout=JSON.parse(readFileSync(new URL('./erebor-fleet/stations.json',import.meta.url)));
 const sites=layout.sites.map(s=>s.site);
 const base='/api/projects/erebor/planfolge';
-const modes={stone:0,clear:3,build:2};
+const modes={stone:2,clear:3,build:2};
 const stages={stone:'Steinfüllung',clear:'Aushub',build:'Bau'};
 const readyState=()=>({cursor:0,completed:0,exhausted:false,job:null,status:'Wartet auf Prüfung'});
 export function confirmedFinish(o,job,now=Date.now()/1000){
  return !job.tainted&&job.seen>0&&now-job.seen<90&&o.inputEmpty===true&&o.state==='STOPPED'&&o.status==='finished'&&cannonReset(o)&&
   o.outputItem==='create:empty_schematic'&&Number.isSafeInteger(job.baseline)&&o.outputCount===job.baseline+1&&
-  same(o.options,job.desired.options);
+  same(o.options,observedEreborOptions(job.desired,o.options));
 }
 export function recordedFinish(o,j,r,now=Date.now(),witness=null){
  // KubeJS retains only the most recent input -> finished transition at this
@@ -108,6 +108,7 @@ export function registerEreborQueue(app,campus){
   const j=s.job;
   s.inserted=false;
   if(!verifyAlignment(j.desired,o,j.desired)&&same(o.components['create:schematic_bounds'],j.size)){
+   j.desired.options=observedEreborOptions(j.desired,o.options);
    if(o.status==='skipping'||o.amountPlaced<(j.placed||0))j.tainted=true;
    if(o.state==='RUNNING'||o.amountPlaced>0)j.started=true;
    j.placed=o.amountPlaced;j.seen=o.at;j.loaded=true;s.inserted=true;
@@ -185,7 +186,7 @@ export function registerEreborQueue(app,campus){
    }
    if(isStationStone(tracked,site)&&signal.upload===tracked.desired.file&&signal.state==='RUNNING'&&signal.aligned&&
       signal.owner===tracked.desired.owner&&same(signal.anchor,tracked.desired.anchor)&&same(signal.size,tracked.size)&&
-      same(signal.options,[0,false,false])&&Number.isSafeInteger(signal.placed)&&report.at>=tracked.seen*1000){
+      (same(signal.options,[0,false,false])||same(signal.options,[2,false,false]))&&Number.isSafeInteger(signal.placed)&&report.at>=tracked.seen*1000){
     if(signal.status==='skipping'||signal.placed<(tracked.placed||0))tracked.tainted=true;
     tracked.placed=signal.placed;tracked.seen=report.at/1000;tracked.started=true;s.inserted=true;s.status='Baut';
     if(automatic()&&production.mode(c.version,site).started_upload!==signal.upload)production.started(c.version,site,signal.upload);

@@ -6,6 +6,22 @@ import {createHash} from 'node:crypto';
 
 export const isEreborStation=name=>/^erebor-K(?:0[1-9]|[12][0-9]|3[0-7])$/i.test(name);
 
+// Installed V5 controllers prepare stone in mode 0. V6 and manually
+// updated cannons use 2. All other options and identity checks stay exact.
+export function observedEreborOptions(desired,observed){
+ const options=desired.options;
+ if(desired.owner==='Erebor'&&/^EREBOR_STEIN_K\d{2}_/.test(desired.blueprint)&&
+    [0,2].includes(options?.replace_mode)&&[0,2].includes(observed?.replace_mode)&&
+    options.skip_missing===false&&options.replace_block_entities===false)
+   return {...options,replace_mode:observed.replace_mode};
+ return options;
+}
+export function verifyEreborAlignment(desired,observed,receipt){
+ if(!same(desired,receipt))return verifyAlignment(desired,observed,receipt);
+ const expected={...desired,options:observedEreborOptions(desired,observed?.options)};
+ return verifyAlignment(expected,observed,expected);
+}
+
 export function isStationStone(job,site){
  const d=job?.desired;
  return job?.phase==='stone' && d?.owner==='Erebor' && d.blueprint?.startsWith('EREBOR_STEIN_'+site+'_') &&
@@ -25,11 +41,17 @@ export function limitSupplyReads(request){
   }catch(e){entry.reject(e);}
   finally{
    active--;
-   if(waiting.length)void run(waiting.shift());
+   if(waiting.length){
+    // A waiting printer gets the next slot ahead of routine top-ups. Age
+    // the queue so a continuously busy group cannot starve the others.
+    const urgent=waiting.findIndex(entry=>entry.urgent);
+    const next=Date.now()-waiting[0].at<5000 && urgent>=0 ? urgent : 0;
+    void run(waiting.splice(next,1)[0]);
+   }
   }
  }
- return args=>new Promise((resolve,reject)=>{
-  const entry={args,at:Date.now(),resolve,reject};
+ return (args,urgent=false)=>new Promise((resolve,reject)=>{
+  const entry={args,urgent,at:Date.now(),resolve,reject};
   if(active<2)void run(entry);
   else if(waiting.length<37)waiting.push(entry);
   else reject(new Error('Materialprüfung wartet auf freie Controller-Kapazität.'));
@@ -111,7 +133,8 @@ export function ereborFeeder(db,request,version,liveReport){
    if(live?.sharedChest===4&&(group.B||group.C||live.stations?.[site+'B']?.state||live.stations?.[site+'C']?.state)){
     const targets=groupTargets(group,site,live);
     if(!Object.keys(targets).length)return held('Wartet auf den ersten eingelegten Bauplan.');
-    const result=await supplyRead({site,version,computerId:reported.computerId,chestSide:reported.chestSide,targets});
+    const waiting=Object.keys(targets).some(slot=>['missingBlock','missingItem','noGunpowder'].includes(live.stations?.[site+(slot==='A'?'':slot)]?.status));
+    const result=await supplyRead({site,version,computerId:reported.computerId,chestSide:reported.chestSide,targets},waiting);
     const station=stationAt.get(row.name),after=JSON.parse(station?.status_json||'null');
     if(!same(targets,groupTargets(groupJobs(site),site,live))||station?.options_json!==row.options_json||
        after?.computerId!==reported.computerId||after?.chestSide!==reported.chestSide||
@@ -152,7 +175,7 @@ export function ereborFeeder(db,request,version,liveReport){
        !Number.isFinite(confirmation.at)||Math.abs(Date.now()/1000-confirmation.at)>10)return held('Der aktuelle Materialauftrag wurde nicht bestätigt.');
    }else{
     if(o?.inputEmpty===true&&o.state==='STOPPED'&&o.status==='finished')return held('Kanone meldet fertig und der Eingabeslot ist leer. Wartet auf bestätigten Abschluss.');
-    const mismatch=verifyAlignment(j.desired,o,j.desired);
+    const mismatch=verifyEreborAlignment(j.desired,o,j.desired);
     if(mismatch||!same(o.components?.['create:schematic_bounds'],j.size))return held(mismatch||'Der eingelegte Bauplan hat sich geändert.');
     samples.set(site,o);
    }

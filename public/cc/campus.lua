@@ -3,7 +3,7 @@
 -- through an Advanced Peripherals ME Bridge. Which blueprint and the options are set in the web app (tab "Kanonen");
 -- this computer only knows URL, a station token and its cannon name (install: wget run <url>/cc/install.lua).
 -- Strings shown on screen use Latin-1 escapes (\228 = ae-umlaut ...), the CC font is ISO-8859-1.
-local VERSION = "1.4.2"
+local VERSION = "1.4.3"
 
 settings.define("campus.url", { description = "Campus-URL", type = "string" })
 settings.define("campus.token", { description = "API-Token mit Scope Station", type = "string" })
@@ -237,6 +237,7 @@ local function startAssignment(p)
   saveState()
 end
 
+local stoneOrderAt = -1e9
 local function shortage(it, missing, have, err)
   local inME = meAmount(it.item)
   local s = { item = it.item, missing = missing, inME = inME, craftable = false, crafting = false }
@@ -246,9 +247,13 @@ local function shortage(it, missing, have, err)
     if s.craftable then
       s.crafting = isCrafting(it.item)
       local last = state.craftAt[it.item] or 0
-      if not s.crafting and plan.options.autoCraft and now() - last > 60 and alignmentReady(plan, planReceivedAt, now()) then
-        local amount = math.max(1, math.min(plan.options.craftBatch, it.needed - have - inME))
+      local stoneOrder = NAME == "erebor-K02" and plan.options.stoneAutoCraft and it.item == "minecraft:stone"
+          and plan.alignment and plan.alignment.probeMode == "shared" and type(it.confirmedPlaced) == "number"
+      local canOrder = stoneOrder and now() - stoneOrderAt > 20 or plan.options.autoCraft and now() - last > 60
+      if not s.crafting and canOrder and alignmentReady(plan, planReceivedAt, now()) then
+        local amount = math.max(1, math.min(stoneOrder and 16384 or plan.options.craftBatch, it.needed - have - inME))
         local ok, cerr = call(bridge.craftItem, { name = it.item, count = amount })
+        if stoneOrder then stoneOrderAt = now() end
         state.craftAt[it.item] = now()
         if ok then s.crafting = true else s.error = errText(cerr) or "Crafting abgelehnt" end
       end
@@ -481,6 +486,9 @@ end
 
 -- ---------- main ----------
 local planAt, stockAt = -1e9, -1e9
+-- Spread routine checks across the fleet while the physical chest is full.
+-- A low chest still requests fresh permission immediately at the next poll.
+local stockedRefresh = 60 + os.getComputerID() % 23
 local wakeRequested = false
 local function wake()
   if wakeRequested then return end
@@ -494,10 +502,10 @@ local function tick()
   local iv = plan and plan.intervals or { plan = 60, status = 30, stock = 300 }
   local stocked = false
   if ok and plan and not plan.options.paused and plan.alignment and plan.alignment.probeMode == "shared"
-      and plan.items and #plan.items == 1 and plan.items[1].confirmedPlaced and now() - planAt < 25 then
+      and plan.items and #plan.items == 1 and plan.items[1].confirmedPlaced and now() - planAt < stockedRefresh then
     local item = plan.items[1]
     local counts, used, slots = chestContents()
-    local low = math.ceil(math.min(item.needed, plan.options.bufferStacks * item.stack) * 0.65)
+    local low = math.ceil(math.min(item.needed, plan.options.bufferStacks * item.stack) * 0.75)
     stocked = low > 0 and (counts[item.item] or 0) >= low
       and (counts[GUNPOWDER] or 0) >= math.ceil(plan.options.gunpowder / 2)
     if stocked then view.chest = {slots=slots,used=used,name=chestName} end

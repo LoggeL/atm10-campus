@@ -1,3 +1,4 @@
+import {supportsAlignment} from './feeder-version.js';
 // ME stock and Schematicannon feeders: CC:Tweaked computers with an Advanced Peripherals ME Bridge
 // report AE2 stock and fetch per cannon what still has to go into the chest next to it.
 import { readFileSync } from 'node:fs';
@@ -23,6 +24,7 @@ export function normalizeOptions(input, base = DEFAULT_OPTIONS) {
   const o = { ...DEFAULT_OPTIONS, ...base };
   if (!input || typeof input !== 'object') return o;
   for (const k of ['paused', 'autoCraft', 'returnLeftovers', 'skipBlocked']) if (input[k] !== undefined) o[k] = !!input[k];
+  if (typeof input.stoneAutoCraft === 'boolean') o.stoneAutoCraft = input.stoneAutoCraft;
   for (const [k, [lo, hi]] of Object.entries(LIMITS)) {
     if (input[k] === undefined) continue;
     const n = Math.floor(Number(input[k]));
@@ -221,7 +223,7 @@ export function registerStationRoutes(app, campus, mat, alignment, schematics) {
       if (!bp || bp.version !== b.baseVersion) throw new HttpError(409, 'Bauplanversion wurde geändert. Bitte neu laden.');
       if (t.blueprint_id) throw new HttpError(409, 'Die Zielkanone hat bereits einen Auftrag.');
       const status = JSON.parse(t.status_json || 'null');
-      if (!Number.isFinite(Date.parse(t.last_seen_at)) || Date.now() - Date.parse(t.last_seen_at) >= ONLINE_MS || !['1.1.0','1.2.0','1.3.0','1.4.0'].includes(status?.script) || !Number.isFinite(Date.parse(status?.at)) || Date.now() - Date.parse(status.at) >= ONLINE_MS) throw new HttpError(409, 'Ziel-Computer ist offline oder sein Status ist veraltet.');
+      if (!Number.isFinite(Date.parse(t.last_seen_at)) || Date.now() - Date.parse(t.last_seen_at) >= ONLINE_MS || !supportsAlignment(status?.script) || !Number.isFinite(Date.parse(status?.at)) || Date.now() - Date.parse(status.at) >= ONLINE_MS) throw new HttpError(409, 'Ziel-Computer ist offline oder sein Status ist veraltet.');
       if (!alignment.binding(s.name) || cannonRange(alignment.binding(t.name), bp.origin).state !== 'inrange') throw new HttpError(409, 'Bestätigte Kanonen in der Oberwelt und ein Ziel in Reichweite sind erforderlich.');
       return { s, t, bp };
     };
@@ -312,6 +314,10 @@ export function registerStationRoutes(app, campus, mat, alignment, schematics) {
   app.put('/api/cannons/:name', async req => {
     const a = requireActor(req, 'write');
     const name = checkName(req.params.name), b = req.body || {};
+    if (b.options?.stoneAutoCraft !== undefined) {
+      alignment.admin(req);
+      if (name.toLowerCase() !== 'erebor-k02' || typeof b.options.stoneAutoCraft !== 'boolean') throw new HttpError(400, 'Die zentrale Steinbestellung gehört zu K02.');
+    }
     const row = getRow(name) || ensureRow(name);
     if (alignment.enabled(name) || alignment.managed(name)) alignment.admin(req);
     if (b.schematic !== undefined) {

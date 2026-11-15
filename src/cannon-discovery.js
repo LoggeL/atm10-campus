@@ -1,3 +1,4 @@
+import {reportsComputerId} from './feeder-version.js';
 // Match a reporting CC computer to the saved world, then require the signed host
 // to prove that exact computer/chest/cannon chain against the live game.
 import { isDeepStrictEqual } from 'node:util';
@@ -27,12 +28,12 @@ export function createCannonDiscovery({ app, campus, schematics, request, row, r
   const managed = name => {
     const stored = saved(name);
     if (stored) return !!stored.automatic;
-    return configured && statusOf(row(name))?.script === '1.4.0';
+    return configured && reportsComputerId(statusOf(row(name))?.script);
   };
   function eligibility(name, status) {
     if (!configured) return { state:'disabled', message:'Automatische Standorterkennung ist auf dem Server ausgeschaltet.' };
     if (!bridgeAvailable || !config.worldSources?.live) return {state:'unsupported',message:'Live-Brücke oder lesbare Welt für die automatische Erkennung fehlen.'};
-    if (status?.script !== '1.4.0' || !Number.isSafeInteger(status?.computerId) || status.computerId < 0) {
+    if (!reportsComputerId(status?.script) || !Number.isSafeInteger(status?.computerId) || status.computerId < 0) {
       return {state:'pending',message:'Warte auf die Computer-ID des aktuellen Versorgers.'};
     }
     if (!fresh(status)) return {state:'offline',message:'Computer meldet sich nicht mehr. Gespeicherte Position bleibt erhalten; Vorbereitung wartet.'};

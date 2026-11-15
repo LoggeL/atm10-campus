@@ -30,12 +30,14 @@ test('Erebor leases only native targets and in-flight blocks, never idle, foreig
  })};
  const poll=()=>{calls.length=0;for(let i=0;i<10;i++)tick({server:{overworld:()=>level}});};
  const a=machine('K01',new Pos(-214,-40,-10808),new Pos(-214,-40,-10808)),b=machine('K02',new Pos(-598,-40,-10808),new Pos(-592,-40,-10777));
+ let updates=0;a.replaceMode=0;a.blocksPlaced=777;a.setChanged=()=>{};a.sendData=()=>{updates++;};b.replaceMode=3;
  sites.set('-252,-11010',a);sites.set('-668,-10850',b);
  poll();assert.equal(ttl,200);assert.deepEqual(calls,[[-252,-14,-676],[-668,-37,-674]]);
+ assert.equal(a.replaceMode,2);assert.equal(a.blocksPlaced,777);assert.equal(updates,1);assert.equal(b.replaceMode,3);
  a.mode='RUNNING';a.target=new Pos(-189,-40,-10808);a.flights=[new Pos(-214,-40,-10808),a.target];
  b.statusMsg='ready';poll();assert.deepEqual(calls,[[-252,-12,-676],[-252,-14,-676]]);
  a.target=new Pos(-999,-40,-10808);a.flights=[];poll();assert.deepEqual(calls,[]);
- a.target=new Pos(-214,-40,-10808);a.parts.OWNER='Other';poll();assert.deepEqual(calls,[]);
+ a.target=new Pos(-214,-40,-10808);a.parts.OWNER='Other';a.replaceMode=0;poll();assert.deepEqual(calls,[]);assert.equal(a.replaceMode,0);
  a.parts.OWNER='Erebor';a.mode='STOPPED';poll();assert.deepEqual(calls,[]);
  const one=pairs.sites[0],helper=machine('K01B',a.parts.ANCHOR,a.parts.ANCHOR);
  sites.set(one.B[0]+','+one.B[2],helper);

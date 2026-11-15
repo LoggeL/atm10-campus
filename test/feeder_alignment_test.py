@@ -4,6 +4,38 @@ import unittest
 from lupa import LuaRuntime
 
 class FeederTests(unittest.TestCase):
+    def test_one_station_orders_only_missing_stone_with_a_live_lease(self):
+        code=(Path(__file__).resolve().parents[1]/'public/cc/campus.lua').read_text()
+        helper=code[code.index("local stoneOrderAt"):code.index("local function feed()")]
+        lua=LuaRuntime(unpack_returned_tuples=True)
+        run=lua.execute("""
+          local view={shortages={}}
+          local state={craftAt={}}
+          local plan={options={stoneAutoCraft=true,autoCraft=false},alignment={probeMode="shared"}}
+          local NAME, clock, pending, valid, ordered
+          local function now() return clock end
+          local function isCrafting() return pending end
+          local function isCraftable() return true end
+          local function meAmount() return 0 end
+          local function alignmentReady() return valid end
+          local bridge={craftItem=function(req) ordered=req.count;return true end}
+          local function call(f,req) return f(req) end
+        """+helper+"""
+          return function(site,item,t,running,aligned)
+            NAME,clock,pending,valid,ordered=site,t,running,aligned,0
+            shortage({item=item,needed=40000,confirmedPlaced=9},900,0,nil)
+            return ordered
+          end
+        """)
+        for site,item,running,aligned in [
+            ('erebor-K01','minecraft:stone',False,True),
+            ('erebor-K02','minecraft:stone_bricks',False,True),
+            ('erebor-K02','minecraft:stone',True,True),
+            ('erebor-K02','minecraft:stone',False,False)]:
+            self.assertEqual(run(site,item,100,running,aligned),0)
+        self.assertEqual(run('erebor-K02','minecraft:stone',100,False,True),16384)
+        self.assertEqual(run('erebor-K02','minecraft:stone',110,False,True),0)
+
     def test_shared_stone_limit_credits_only_confirmed_progress_after_upgrade(self):
         code=(Path(__file__).resolve().parents[1]/'public/cc/campus.lua').read_text()
         feed='local function feed()'+code.split('local function feed()',1)[1].split('-- ---------- reporting',1)[0]

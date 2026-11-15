@@ -101,6 +101,7 @@ export function registerEreborFleet(app,campus) {
     reply.header('Cache-Control','private, no-store');
     const enabled=campus.ereborHelpers.isEnabled(version);
     const settings=supplySettings();
+    const stoneOrders=JSON.parse(stationOptions.get('erebor-K02')?.options_json||'{}')?.stoneAutoCraft===true;
     const supplyLabel=settings.filter(s=>s.configured).length+' von '+settings.length+' Standorten auf 16 Stacks und 64 Schießpulver eingestellt.';
     const resume=campus.db.prepare('SELECT site,slot,result,expires FROM erebor_resume WHERE version=? ORDER BY site,slot').all(version);
     if(req.query.format==='json')return {version,enabled,at:report?.at||null,chestTracker:report?.chestTracker??null,chestController:report?.chestController??null,stations,diagnostics,power:report?.network?.power||[],supplySettings:settings,resume};
@@ -117,6 +118,8 @@ export function registerEreborFleet(app,campus) {
       '<p>'+esc(report?.chestController===5 && report?.chestTracker===5?'Oak Netherite Chest bereit – Homebox und Minecraft melden V5.':'Oak Netherite Chest wartet auf die V5-Weltmeldung von Homebox und Minecraft.')+'</p>'+
       '<p id="fortsetzen">'+(req.actor?.via==='session'&&req.actor.user?.role==='admin'?'<button id="resume-paused" data-version="'+version+'">Pausierte Cleanstone-Kanonen fortsetzen</button> <a href="/api/projects/erebor/planfolge/drucker-reparatur.zip">Reparatur für suchende Drucker herunterladen</a> ':'')+'<output id="resume-result"></output></p>'+
       '<p id="materialpuffer">'+(req.actor?.via==='session'&&req.actor.user?.role==='admin'?'<button id="set-supply">K01–K37 auf 16 Stacks und 64 Schießpulver stellen</button> ':'')+'<output id="supply-result">'+supplyLabel+'</output></p>'+
+      '<p id="steinproduktion">Stein über K02 im gemeinsamen ME nachbestellen · '+(stoneOrders?'aktiv':'aus')+' '+(req.actor?.via==='session'&&req.actor.user?.role==='admin'?'<button id="stone-orders" data-enable="'+(!stoneOrders)+'">'+(stoneOrders?'Steinbestellung ausschalten':'Stein automatisch nachbestellen')+'</button>':'')+' <output id="stone-result"></output></p>'+
+      '<p><a href="/assets/erebor-solid-v6.zip">Homebox V6 · Replace Solid with Any für A, B und C</a></p>'+
       '<section data-fleet-faults>'+renderFleetIssues(diagnostics)+'</section><div class="table-wrap"><table><thead><tr>'+['Platz','A (vorhanden)','B (neu)','C (neu)','Gemeinsame Kiste','Status'].map(t=>'<th>'+t+'</th>').join('')+'</tr></thead><tbody>'+
       stations.map(s=>'<tr><th>'+s.site+'</th>'+['main','B','C','chest'].map(k=>'<td>'+s[k].join(' / ')+'</td>').join('')+'<td><div data-site-fault="'+s.site+'">'+renderConnectionIssues(diagnostics.find(d=>d.name===s.site))+'</div>'+s.helpers.map(status).join('')+'</td></tr>').join('')+'</tbody></table></div></main></html>');
   });

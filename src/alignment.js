@@ -1,3 +1,4 @@
+import {supportsAlignment} from './feeder-version.js';
 // All privileged requests originate here, never in the browser or CC computer.
 import { createHmac, randomBytes } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
@@ -228,7 +229,7 @@ export function registerAlignment(app, campus, schematics) {
     const a=admin(req);const r=check(req.params.name);
     if(req.body?.confirm!==true)throw new HttpError(400,'Block und Aktivierung ausdrücklich bestätigen.');
     const status=JSON.parse(r.status_json||'null');
-    if(!['1.1.0','1.2.0','1.3.0','1.4.0'].includes(status?.script) || !Number.isFinite(Date.parse(status.at)) || Date.now()-Date.parse(status.at)>180000)throw new HttpError(409,'Vor Aktivierung Feeder aktualisieren und frische Statusmeldung abwarten. Legacy-Feeder können alte Materialpläne weiterverwenden.');
+    if(!supportsAlignment(status?.script) || !Number.isFinite(Date.parse(status.at)) || Date.now()-Date.parse(status.at)>180000)throw new HttpError(409,'Vor Aktivierung Feeder aktualisieren und frische Statusmeldung abwarten. Legacy-Feeder können alte Materialpläne weiterverwenden.');
     return withStationsLocked([r.name],async()=>{
       const result=await request('bind',{station:r.name,binding:req.body.binding,nonce:req.body.nonce});
       db.prepare('INSERT INTO cannon_alignment(name,binding_json,updated_at) VALUES(?,?,?) ON CONFLICT(name) DO UPDATE SET binding_json=excluded.binding_json,applied_json=NULL,last_error=NULL,updated_at=excluded.updated_at').run(r.name,JSON.stringify(result.binding),now());

@@ -42,6 +42,16 @@ resumeButton?.addEventListener('click',async()=>{
   finally{resumeButton.disabled=false;}
 });
 const supplyButton=document.getElementById('set-supply');
+const stoneOrders=document.getElementById('stone-orders');
+stoneOrders?.addEventListener('click',async()=>{
+  stoneOrders.disabled=true;
+  try{
+    const response=await fetch('/api/cannons/erebor-K02',{method:'PUT',headers:{'content-type':'application/json','x-campus-csrf':'1'},
+      body:JSON.stringify({options:{stoneAutoCraft:stoneOrders.dataset.enable==='true'}})});
+    if(!response.ok)throw Error((await response.json()).error||'Speichern fehlgeschlagen.');
+    location.reload();
+  }catch(error){document.getElementById('stone-result').textContent=error.message;stoneOrders.disabled=false;}
+});
 supplyButton?.addEventListener('click',async()=>{
   supplyButton.disabled=true;
   const output=document.getElementById('supply-result');

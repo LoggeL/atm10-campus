@@ -1,7 +1,7 @@
 import {readFileSync} from 'node:fs';
 import {isDeepStrictEqual as same} from 'node:util';
-import {verifyAlignment,cannonReset,emptyStopped} from './alignment.js';
-import {isStationStone} from './erebor-feeder.js';
+import {cannonReset,emptyStopped} from './alignment.js';
+import {isStationStone,observedEreborOptions,verifyEreborAlignment as verifyAlignment} from './erebor-feeder.js';
 import {publishedPlan} from './erebor-selection.js';
 import {tx} from './db.js';
 
@@ -74,12 +74,13 @@ export function parallelFleet(db,production,choices,request,recordedFinish,resum
         job.lastWorldCheck=at;
         set('Prüft die Steinziele in der gespeicherten Welt');
         original=publishedPlan(db,p,published);
-        if(!same(original.job.desired,job.desired)||!same(original.job.size,job.size))throw Error('Auftrag stimmt nicht mit dem veröffentlichten Steinplan überein.');
+        const expected={...original.job.desired,options:observedEreborOptions(original.job.desired,job.desired.options)};
+        if(!same(expected,job.desired)||!same(original.job.size,job.size))throw Error('Auftrag stimmt nicht mit dem veröffentlichten Steinplan überein.');
         filled=await verifyStone(p,{bytes:original.bytes,anchor:desired.anchor,size:job.size,blocks:original.job.blocks});
       }
       let {observed}=await request('erebor-inspect',args);
       if(!current())return;
-      if(missingReceipt&&(!emptyStopped(observed)||observed.status!=='finished'||!same(observed.options,job.desired.options)))return;
+      if(missingReceipt&&(!emptyStopped(observed)||observed.status!=='finished'||!same(observed.options,observedEreborOptions(job.desired,observed.options))))return;
       if(job.loaded && (filled||recordedFinish(observed,job,signal.finish,Date.now(),{signal,at}))){
         tx(db,()=>{
           production.finish(v,site,desired.blueprint,new Date().toISOString());

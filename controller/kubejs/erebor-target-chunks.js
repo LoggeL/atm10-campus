@@ -48,6 +48,17 @@
     row.upload=String(item.get(Components.SCHEMATIC_FILE)||'')
     row.state=String(c.state.name()); row.status=String(c.statusMsg)
     row.empty=item.isEmpty()
+    // Mode 3 belongs to explicit excavation plans. Set the surveyed empty
+    // cannons and the legacy Campus build modes directly on the server tick.
+    var campusInput=String(item.id)==='create:schematic' &&
+      String(item.get(Components.SCHEMATIC_OWNER))==='Erebor' && /^campus_[0-9a-f-]{36}\.nbt$/.test(row.upload)
+    var preserveDigReceipt=Number(c.replaceMode)===3 && row.status==='finished'
+    if (((row.empty && !preserveDigReceipt) || (campusInput && [0,1].indexOf(Number(c.replaceMode))>=0)) && Number(c.replaceMode)!==2) {
+      c.replaceMode=2
+      c.setChanged()
+      c.sendData()
+    }
+    row.options=[Number(c.replaceMode),!!c.skipMissing,!!c.replaceBlockEntities]
     if (row.upload) {
       var origin=item.get(Components.SCHEMATIC_ANCHOR), size=item.get(Components.SCHEMATIC_BOUNDS)
       row.owner=String(item.get(Components.SCHEMATIC_OWNER)||'')
@@ -56,7 +67,6 @@
       row.aligned=String(item.id)==='create:schematic' && String(item.get(Components.SCHEMATIC_DEPLOYED))==='true' &&
         String(item.get(Components.SCHEMATIC_ROTATION)).toLowerCase()==='none' && String(item.get(Components.SCHEMATIC_MIRROR)).toLowerCase()==='none' &&
         !!origin && c.printer.isLoaded() && !c.printer.isErrored() && origin.equals(c.printer.getAnchor())
-      row.options=[Number(c.replaceMode),!!c.skipMissing,!!c.replaceBlockEntities]
     }
     row.placed=Number(c.blocksPlaced); row.total=Number(c.blocksToPlace); row.fuel=Number(c.remainingFuel)
     row.chunks=[]; row.target=null

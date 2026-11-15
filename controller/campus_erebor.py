@@ -143,7 +143,7 @@ def handle(bridge, action, obj):
             return timed_read(proof+command[len(prefix):])
         return {'observed':CannonBridge(bridge.base,checked).inspect(b)}
     kind = obj['kind']
-    mode = {'stone':0, 'build':2, 'clear':3}.get(kind)
+    mode = {'stone':2, 'build':2, 'clear':3}.get(kind)
     desired = obj['desired']
     if mode is None or desired['version'] != layout['version'] or not re.fullmatch(r'EREBOR_[A-Za-z0-9_-]+',desired['blueprint']):
         raise ValueError('Unbekannter Erebor-Bauplan.')
