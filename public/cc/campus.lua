@@ -3,7 +3,7 @@
 -- through an Advanced Peripherals ME Bridge. Which blueprint and the options are set in the web app (tab "Kanonen");
 -- this computer only knows URL, a station token and its cannon name (install: wget run <url>/cc/install.lua).
 -- Strings shown on screen use Latin-1 escapes (\228 = ae-umlaut ...), the CC font is ISO-8859-1.
-local VERSION = "1.4.1"
+local VERSION = "1.4.2"
 
 settings.define("campus.url", { description = "Campus-URL", type = "string" })
 settings.define("campus.token", { description = "API-Token mit Scope Station", type = "string" })
@@ -305,6 +305,16 @@ local function feed()
       if want > room then want = room; view.full = true end
       if want > 0 then
         local n, err = export(it.item, want)
+        if it.item == "minecraft:stone" and plan.alignment and plan.alignment.probeMode == "shared" then
+          -- Some bridges transfer only part of the requested stack batch.
+          -- Each export rechecks the lease. Stop as soon as the bridge stalls.
+          for attempt = 2, 8 do
+            if n <= 0 or n >= want or err then break end
+            local extra, problem = export(it.item, want - n)
+            n, err = n + extra, problem
+            if extra == 0 then break end
+          end
+        end
         if n > 0 then
           state.delivered[it.item] = (state.delivered[it.item] or 0) + n
           free = free - (math.ceil((have + n) / it.stack) - math.ceil(have / it.stack))
@@ -549,7 +559,8 @@ local function mainLoop()
     -- Events received during an HTTP/peripheral call leave a pending wake, so they
     -- cannot be lost by its filtered event wait. The next iteration stays sequential.
     if not wakeRequested then
-      local timer = os.startTimer(5)
+      local refilling = plan and plan.alignment and plan.alignment.probeMode == "shared" and view.state == "waiting"
+      local timer = os.startTimer(refilling and 1 or 5)
       while not wakeRequested do
         local ev, id = os.pullEvent()
         if ev == "timer" and id == timer then break end

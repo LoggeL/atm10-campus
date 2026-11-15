@@ -9,7 +9,7 @@ export const isEreborStation=name=>/^erebor-K(?:0[1-9]|[12][0-9]|3[0-7])$/i.test
 export function isStationStone(job,site){
  const d=job?.desired;
  return job?.phase==='stone' && d?.owner==='Erebor' && d.blueprint?.startsWith('EREBOR_STEIN_'+site+'_') &&
-  d.options?.replace_mode===0 && d.options.skip_missing===false && d.options.replace_block_entities===false;
+  [0,2].includes(d.options?.replace_mode) && d.options.skip_missing===false && d.options.replace_block_entities===false;
 }
 
 // The host serializes Minecraft commands. Queue at the caller, before the
@@ -56,10 +56,13 @@ export function ereborFeeder(db,request,version,liveReport){
   }
   return jobs;
  }
- function groupTargets(jobs){
+ function groupTargets(jobs,site,live){
   return Object.fromEntries(Object.entries(jobs).map(([slot,j])=>{
    const {file,sha256,anchor,options}=j.desired;
-   return [slot,{file,sha256,anchor,size:j.size,options:[options.replace_mode,options.skip_missing,options.replace_block_entities]}];
+   const native=live.stations?.[site+(slot==='A'?'':slot)];
+   const mode=isStationStone(j,site)&&native?.upload===file&&[0,2].includes(native.options?.[0])
+     ?native.options[0]:options.replace_mode;
+   return [slot,{file,sha256,anchor,size:j.size,options:[mode,options.skip_missing,options.replace_block_entities]}];
   }));
  }
  async function readSupply(site,reported,job){
@@ -106,11 +109,11 @@ export function ereborFeeder(db,request,version,liveReport){
    const live=await liveReport(version);
    const group=groupJobs(site);
    if(live?.sharedChest===4&&(group.B||group.C||live.stations?.[site+'B']?.state||live.stations?.[site+'C']?.state)){
-    const targets=groupTargets(group);
+    const targets=groupTargets(group,site,live);
     if(!Object.keys(targets).length)return held('Wartet auf den ersten eingelegten Bauplan.');
     const result=await supplyRead({site,version,computerId:reported.computerId,chestSide:reported.chestSide,targets});
     const station=stationAt.get(row.name),after=JSON.parse(station?.status_json||'null');
-    if(!same(targets,groupTargets(groupJobs(site)))||station?.options_json!==row.options_json||
+    if(!same(targets,groupTargets(groupJobs(site),site,live))||station?.options_json!==row.options_json||
        after?.computerId!==reported.computerId||after?.chestSide!==reported.chestSide||
        !Number.isFinite(result.at)||Math.abs(Date.now()/1000-result.at)>10)
      return held('Aufträge oder Standort während der Materialprüfung geändert.');
