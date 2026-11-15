@@ -1,4 +1,5 @@
 import {readFileSync} from 'node:fs';
+import {stationSource} from './erebor-me-order.js';
 import {Worker} from 'node:worker_threads';
 import {HttpError,requireActor} from './auth.js';
 import {tx,now,logActivity} from './db.js';
@@ -126,7 +127,7 @@ export function registerEreborFleet(app,campus) {
   app.get(prefix+'/installer.zip',async(req,reply)=>{
     checkedLayout(req,campus);
     const entries=['ANLEITUNG.txt','install.py','stations.json'].map(name=>({name,data:file(name)}));
-    entries.push({name:'campus.lua',data:readFileSync(new URL('../public/cc/campus.lua',import.meta.url))});
+    entries.push({name:'campus.lua',data:Buffer.from(stationSource())});
     const csv=['Kanone;Connector X;Connector Y;Connector Z;Hub;Hub X;Hub Y;Hub Z',
       ...layout.sites.map(s=>[s.site,...s.connector,hubNames[s.hub],...layout.hubs[s.hub]].join(';'))].join('\r\n');
     entries.push({name:'Funkverbindungen.csv',data:Buffer.from('\uFEFF'+csv+'\r\n')});

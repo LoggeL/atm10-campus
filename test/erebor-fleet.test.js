@@ -57,7 +57,9 @@ test('operator ZIP contains current feeder and all station mappings, only for th
       files.set(data.subarray(i+30,i+30+n).toString(),data.subarray(start,start+len));i=start+len;
     }
     assert.deepEqual([...files.keys()].sort(),['ANLEITUNG.txt','Funkverbindungen.csv','campus.lua','install.py','stations.json']);
-    assert.deepEqual(files.get('campus.lua'),readFileSync(new URL('../public/cc/campus.lua',import.meta.url)));
+    const feeder = await app.inject({method:'GET',url:'/cc/campus.lua'});
+    assert.deepEqual(files.get('campus.lua'),feeder.rawPayload);
+    assert.match(feeder.body,/local function produce\(item, target\)/);
     assert.equal(JSON.parse(files.get('stations.json')).sites.length,37);
     assert.equal(files.get('Funkverbindungen.csv').toString().trim().split('\r\n').length,38);
     const db=app.campus.db;

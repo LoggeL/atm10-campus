@@ -3,7 +3,7 @@
 -- through an Advanced Peripherals ME Bridge. Which blueprint and the options are set in the web app (tab "Kanonen");
 -- this computer only knows URL, a station token and its cannon name (install: wget run <url>/cc/install.lua).
 -- Strings shown on screen use Latin-1 escapes (\228 = ae-umlaut ...), the CC font is ISO-8859-1.
-local VERSION = "1.4.3"
+local VERSION = "1.4.4"
 
 settings.define("campus.url", { description = "Campus-URL", type = "string" })
 settings.define("campus.token", { description = "API-Token mit Scope Station", type = "string" })
@@ -593,10 +593,53 @@ local function eventLoop()
   end
 end
 
+local function runConnectingOrder(...)
+-- EMBED_EREBOR_ME_WORKER
+end
+
+local function orderLoop()
+  local handled
+  local path = "/api/projects/erebor/connecting-auftrag/station"
+  while true do
+    local attempt = NAME == "erebor-K02" and plan and plan.connectingOrder
+    if type(attempt) == "number" and attempt ~= handled and bridge then
+      local function post(event, fields)
+        local body = fields or {}
+        body.event, body.computer, body.attempt = event, os.getComputerID(), attempt
+        while true do
+          local reply, err = request("POST", path, body)
+          if reply then return reply.accepted end
+          if err and err:match("^HTTP 4%d%d") then return false end
+          sleep(10)
+        end
+      end
+      if post("claim") then
+        local sent = {}
+        local function progress(item, stage, quantity, message)
+          local signature = stage .. ":" .. quantity .. ":" .. (message or "")
+          if sent[item] == signature then return end
+          assert(post("progress", {item=item, stage=stage, quantity=quantity, message=message}),
+            "Campus hat die Auftragsmeldung abgelehnt")
+          sent[item] = signature
+        end
+        local tab = multishell and multishell.getCurrent()
+        local title = tab and multishell.getTitle(tab)
+        local ok, complete, reason = pcall(runConnectingOrder, {bridge=bridge, progress=progress, log=function() end})
+        if title then multishell.setTitle(tab, title) end
+        if ok and complete then post("done")
+        else post("blocked", {message=tostring(ok and reason or complete)}) end
+      end
+      handled = attempt
+    end
+    sleep(3)
+  end
+end
+
 loadState()
 term.clear()
 term.setCursorPos(1, 1)
 print("ATM10 Campus Kanonen-Versorger " .. VERSION)
-parallel.waitForAny(mainLoop, eventLoop)
+if NAME == "erebor-K02" then parallel.waitForAny(mainLoop, eventLoop, orderLoop)
+else parallel.waitForAny(mainLoop, eventLoop) end
 term.setCursorPos(1, select(2, term.getSize()))
 print("Beendet.")

@@ -39,6 +39,11 @@ export function openapi(baseUrl) {
     },
     security: [{ bearer: [] }],
     paths: {
+      '/api/projects/erebor/connecting-auftrag': {
+        get:{summary:'Bestellstatus und AE2-Bestätigungen für die vier Erebor-Connecting-Blöcke.',responses:ok},
+        post:{summary:'Einmalauftrag über die ME Bridge an K02 starten. Admin-Sitzung mit CSRF-Header erforderlich.',
+          requestBody:{required:true,content:{'application/json':{schema:{type:'object',required:['attempt'],properties:{attempt:{type:'integer',minimum:0}}}}}},responses:ok},
+      },
       '/api/projects/erebor/cannon-sites/materialpuffer': {
         get:{summary:'Stein- und Schießpulverpuffer für K01 bis K37 lesen. Erfordert erebor_supply oder eine Admin-Sitzung.',responses:ok},
         post:{summary:'Erebor-Materialpuffer speichern und prüfen. Erfordert erebor_supply oder eine Admin-Sitzung.',

@@ -11,6 +11,7 @@ import { cannonRange, cannonTarget, reachableCannons } from './cannon-range.js';
 import { createCannonBlueprints } from './cannon-blueprints.js';
 import { isEreborStation } from './erebor-feeder.js';
 import { DESIGN_REVISION } from './erebor-design.js';
+import { registerEreborMeOrder, stationSource } from './erebor-me-order.js';
 import { cannonReset, foreignInput } from './alignment.js';
 
 const ccDir = join(dirname(fileURLToPath(import.meta.url)), '..', 'public', 'cc');
@@ -41,7 +42,11 @@ const cannonItems = items => items.filter(i => !/_bucket$/.test(i.item));
 // Job numbers never repeat for a name, also after delete + recreate: the computer resets on any change.
 const nextAssignment = prev => Math.max((prev || 0) + 1, Math.floor(Date.now() / 1000));
 
-const scriptVersion = () => /local VERSION = "([^"]+)"/.exec(readFileSync(join(ccDir, 'campus.lua'), 'utf8'))?.[1] ?? '0';
+const currentVersion = /local VERSION = "([^"]+)"/.exec(stationSource())?.[1] ?? '0';
+// The connecting-order release is needed only on K02. Existing 1.4.3 feeders
+// at other sites keep supplying their cannons without a fleet-wide reboot.
+const scriptVersion = row => currentVersion === '1.4.4' && row.name !== 'erebor-K02' &&
+  JSON.parse(row.status_json || '{}').script === '1.4.3' ? '1.4.3' : currentVersion;
 const clip = (v, n) => (v == null ? null : String(v).slice(0, n));
 const int = v => Math.max(0, Math.floor(Number(v) || 0));
 const asList = v => (Array.isArray(v) ? v : v && typeof v === 'object' ? Object.values(v) : []);
@@ -74,6 +79,7 @@ export function endCannonJobs(db, bpId, actor) {
 
 export function registerStationRoutes(app, campus, mat, alignment, schematics) {
   const db = campus.db;
+  const meOrder = registerEreborMeOrder(app,campus);
   const blueprintChoices = createCannonBlueprints(campus, alignment, schematics, app);
   const getRow = name => db.prepare('SELECT * FROM cannons WHERE name = ?').get(name);
   const checkName = name => {
@@ -108,7 +114,7 @@ export function registerStationRoutes(app, campus, mat, alignment, schematics) {
     const range = rangeFor(row);
     const options = normalizeOptions(JSON.parse(row.options_json || '{}'));
     const base = {
-      cannon: row.name, assignment: row.assignment, options, schematic, range, script: scriptVersion(), intervals: INTERVALS,
+      cannon: row.name, assignment: row.assignment, options, schematic, range, script: scriptVersion(row), intervals: INTERVALS,
       snapshot: snap ? { id: snap.id, capturedAt: snap.capturedAt, worldTime: snap.worldTime } : null,
     };
     const idle = (state, message) => ({ ...base, state, message, blueprint: null, items: [], totals: { needed: 0, kinds: 0, start: 0 }, done: false });
@@ -378,10 +384,13 @@ export function registerStationRoutes(app, campus, mat, alignment, schematics) {
 
   // Polled by the computer.
   app.get('/api/cannons/:name/plan', async req => {
-    requireActor(req, 'station');
+    const actor = requireActor(req, 'station');
     const row = ensureRow(req.params.name);
     seen(row.name);
-    if (isEreborStation(row.name)) return campus.ereborFeeder(row,{options:normalizeOptions(JSON.parse(row.options_json || '{}')),script:scriptVersion(),intervals:INTERVALS});
+    if (isEreborStation(row.name)) {
+      const plan = await campus.ereborFeeder(row,{options:normalizeOptions(JSON.parse(row.options_json || '{}')),script:scriptVersion(row),intervals:INTERVALS});
+      return {...plan, connectingOrder:meOrder.attemptFor(row.name,actor)};
+    }
     return alignment.gate(row.name, planFor(row, liveSnap()));
   });
 
@@ -439,6 +448,6 @@ export function registerStationRoutes(app, campus, mat, alignment, schematics) {
 
   // ---------- scripts for the computers (no secrets inside, the token is entered on the computer) ----------
   const lua = (reply, body) => reply.type('text/plain; charset=utf-8').header('Cache-Control', 'no-cache').send(body);
-  app.get('/cc/campus.lua', async (req, reply) => lua(reply, readFileSync(join(ccDir, 'campus.lua'), 'utf8')));
+  app.get('/cc/campus.lua', async (req, reply) => lua(reply, stationSource()));
   app.get('/cc/install.lua', async (req, reply) => lua(reply, readFileSync(join(ccDir, 'install.lua'), 'utf8').replaceAll('{{URL}}', campus.config.publicUrl)));
 }

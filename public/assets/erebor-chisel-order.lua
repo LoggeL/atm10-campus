@@ -1,12 +1,16 @@
 -- One production run for Erebor architecture v12, revision 5.
 -- Run on ONE loaded CC computer attached to an Advanced Peripherals ME Bridge.
+local remote = ...
+if type(remote) ~= "table" then remote = nil end
+local progress = remote and remote.progress or function() end
+local print = remote and remote.log or print
 local targets = {
   {"rechiseled:blackstone_tiles_connecting", 2563884},
   {"rechiseledcreate:veridium_cut_polished_connecting", 419037},
   {"rechiseled:gold_block_polished_connecting", 353739},
   {"rechiseled:dark_prismarine_large_tiles_connecting", 126722},
 }
-local bridge = assert(peripheral.find("me_bridge"), "Keine ME Bridge am Computer gefunden.")
+local bridge = assert(remote and remote.bridge or peripheral.find("me_bridge"), "Keine ME Bridge am Computer gefunden.")
 local journal = "/.erebor-chisel-v12-r5"
 local title = "Erebor-ME"
 if multishell then
@@ -56,8 +60,8 @@ end
 
 local function produce(item, target)
   local r = records[item] or {item = item, credited = 0}
-  if r.credited >= target then return "done" end
-  if active(item) then return "wait" end
+  if r.credited >= target then progress(item, "credited", target); return "done" end
+  if active(item) then progress(item, "waiting", r.credited); return "wait" end
   local have = stock(item)
   if r.pending then
     -- A reboot may fall between submitting the job and receiving its receipt.
@@ -71,6 +75,7 @@ local function produce(item, target)
   local credited = math.max(have, r.credited)
   if credited >= target then
     save({item = item, credited = target})
+    progress(item, "credited", target)
     return "done"
   end
   if bridge.isCraftable({name = item}) ~= true then return "offen: kein Pattern erreichbar" end
@@ -84,6 +89,7 @@ local function produce(item, target)
     return "offen: " .. tostring(why or "ME hat den Auftrag abgelehnt")
   end
   print(item .. " +" .. amount .. " (AE2 berechnet)")
+  progress(item, "calculating", amount)
   local started = false
   while true do
     if job.hasErrorOccurred() or job.isCalculationNotSuccessful() or job.isCanceled() then
@@ -92,11 +98,15 @@ local function produce(item, target)
       save({item = item, credited = math.min(target, credited + math.max(0, stock(item) - have))})
       return "offen: " .. tostring(detail)
     end
-    started = started or job.isCraftingStarted()
+    if not started and job.isCraftingStarted() then
+      started = true
+      progress(item, "crafting", amount)
+    end
     if job.isDone() and (started or stock(item) >= have + amount) then break end
     sleep(5)
   end
   save({item = item, credited = credited + amount})
+  progress(item, "credited", credited + amount)
   print(item .. " " .. (credited + amount) .. "/" .. target)
   return credited + amount >= target and "done" or "more"
 end
@@ -114,6 +124,7 @@ while true do
           outstanding = true
         else
           blocked[item] = result
+          progress(item, "blocked", (records[item] or {}).credited or 0, result)
           print(item .. " " .. result)
         end
       end
@@ -128,3 +139,5 @@ if next(blocked) then
 else
   print("Alle vier Mengen gedeckt. Einmalauftrag abgeschlossen.")
 end
+if next(blocked) then return false, "Siehe Meldung bei der jeweiligen Variante." end
+return true

@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Erebor · ME-Auftrag</title><link rel="stylesheet" href="/assets/app.css">
+<style>main{max-width:56rem;margin:3rem auto;padding:0 1.25rem}h1{margin:1.5rem 0 .75rem}
+table{width:100%;margin:1.5rem 0}td,th{text-align:left;padding:.6rem}output{display:block;margin:.8rem 0}</style></head>
+<body><main><a href="/app?project=erebor#overview">← Erebor-Baupläne</a>
+<h1>Connecting-Blöcke für Erebor</h1><p>Der ME-Computer an K02 fertigt die vier Varianten in Chargen von bis zu 8.192 Stück. Vorhandene Blöcke werden angerechnet. Die fertigen Blöcke bleiben im ME-Lager.</p>
+<button id="start" class="primary" disabled>Vier Blöcke im ME anfordern</button>
+<output id="status" role="status">Campus wird abgefragt …</output><p id="error" role="alert"></p>
+<a id="login" href="/login" hidden>Beim Campus anmelden</a>
+<div class="table-wrap"><table><thead><tr><th>Connecting-Variante</th><th>Gesamtbedarf</th><th>Rückmeldung von K02</th></tr></thead><tbody></tbody></table></div>
+</main><script type="module">
+const url='/api/projects/erebor/connecting-auftrag', status=document.querySelector('#status'),
+  error=document.querySelector('#error'), button=document.querySelector('#start'), list=document.querySelector('tbody');
+const labels={'rechiseled:blackstone_tiles_connecting':'Blackstone Tiles','rechiseledcreate:veridium_cut_polished_connecting':'Polished Cut Veridium',
+  'rechiseled:gold_block_polished_connecting':'Polished Block of Gold','rechiseled:dark_prismarine_large_tiles_connecting':'Large Dark Prismarine Tiles'};
+const states={idle:'Bereit zur Bestellung',queued:'Auf dem Campus vorgemerkt. K02 hat den Auftrag noch nicht übernommen.',
+  running:'K02 hat den Auftrag übernommen.',done:'Alle vier Zielmengen sind bestätigt.',blocked:'Der Auftrag braucht Aufmerksamkeit.'};
+const qty=n=>n.toLocaleString('de-DE');
+let current, busy=false;
+function progress(d) {
+  if(!d)return 'Noch keine Meldung';
+  if(d.stage==='waiting')return 'Wartet auf einen bereits laufenden Craft';
+  if(d.stage==='calculating')return 'AE2 berechnet '+qty(d.quantity)+' Stück';
+  if(d.stage==='crafting')return 'AE2 hat die Charge von '+qty(d.quantity)+' Stück gestartet';
+  if(d.stage==='credited')return qty(d.quantity)+' Stück gedeckt';
+  return d.message||'Blockiert';
+}
+async function refresh(){
+  const r=await fetch(url,{cache:'no-store'});
+  if(!r.ok){document.querySelector('#login').hidden=r.status!==401;throw Error((await r.json()).error)}
+  current=await r.json();
+  const d=current;
+  status.textContent=states[d.state]+(d.updated?' · '+new Date(d.updated).toLocaleString('de-DE'):'');
+  error.textContent=d.detail.error||'';
+  button.textContent=d.state==='blocked'?'Offene Varianten erneut anfordern':'Vier Blöcke im ME anfordern';
+  button.disabled=busy||!d.canStart||!['idle','blocked'].includes(d.state);
+  if(!d.canStart && ['idle','blocked'].includes(d.state))status.textContent+=' · Zum Starten mit einem Campus-Admin anmelden.';
+  list.replaceChildren();
+  for(const [item,n] of Object.entries(d.targets)){
+    const row=list.insertRow();
+    for(const value of [labels[item]||item,qty(n),progress(d.detail[item])])row.insertCell().textContent=value;
+  }
+}
+async function update(){try{await refresh()}catch(e){button.disabled=true;error.textContent=e.message}}
+button.onclick=async()=>{
+  if(busy||!current)return;
+  busy=true;button.disabled=true;let problem='';
+  try{const r=await fetch(url,{method:'POST',headers:{'content-type':'application/json','x-campus-csrf':'1'},
+    body:JSON.stringify({attempt:current.attempt})});if(!r.ok)problem=(await r.json()).error}
+  catch(e){problem=e.message}
+  finally{busy=false;await update();if(problem)error.textContent=problem}
+};
+await update();
+setInterval(()=>{if(!busy && !document.hidden)void update()},8000);
+</script></body></html>

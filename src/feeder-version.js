@@ -1,2 +1,2 @@
-export const reportsComputerId=version=>['1.4.0','1.4.1','1.4.2','1.4.3'].includes(version);
+export const reportsComputerId=version=>['1.4.0','1.4.1','1.4.2','1.4.3','1.4.4'].includes(version);
 export const supportsAlignment=version=>reportsComputerId(version)||['1.1.0','1.2.0','1.3.0'].includes(version);
