@@ -3,7 +3,7 @@
 -- through an Advanced Peripherals ME Bridge. Which blueprint and the options are set in the web app (tab "Kanonen");
 -- this computer only knows URL, a station token and its cannon name (install: wget run <url>/cc/install.lua).
 -- Strings shown on screen use Latin-1 escapes (\228 = ae-umlaut ...), the CC font is ISO-8859-1.
-local VERSION = "1.4.6"
+local VERSION = "1.4.7"
 
 settings.define("campus.url", { description = "Campus-URL", type = "string" })
 settings.define("campus.token", { description = "API-Token mit Scope Station", type = "string" })
@@ -615,10 +615,11 @@ local function orderLoop()
       end
       if post("claim") then
         local sent = {}
-        local function progress(item, stage, quantity, message)
-          local signature = stage .. ":" .. quantity .. ":" .. (message or "")
+        local function progress(item, stage, quantity, message, covered)
+          covered = covered or quantity
+          local signature = stage .. ":" .. quantity .. ":" .. covered .. ":" .. (message or "")
           if sent[item] == signature then return end
-          assert(post("progress", {item=item, stage=stage, quantity=quantity, message=message}),
+          assert(post("progress", {item=item, stage=stage, quantity=quantity, message=message, covered=covered}),
             "Campus hat die Auftragsmeldung abgelehnt")
           sent[item] = signature
         end

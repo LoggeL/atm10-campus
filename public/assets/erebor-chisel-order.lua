@@ -10,6 +10,12 @@ local targets = {
   {"rechiseled:gold_block_polished_connecting", 353739},
   {"rechiseled:dark_prismarine_large_tiles_connecting", 126722},
 }
+local baseItems = {
+  ["rechiseled:blackstone_tiles_connecting"]="minecraft:blackstone",
+  ["rechiseledcreate:veridium_cut_polished_connecting"]="create:veridium",
+  ["rechiseled:gold_block_polished_connecting"]="minecraft:gold_block",
+  ["rechiseled:dark_prismarine_large_tiles_connecting"]="minecraft:dark_prismarine",
+}
 local bridge = assert(remote and remote.bridge or peripheral.find("me_bridge"), "Keine ME Bridge am Computer gefunden.")
 local journal = "/.erebor-chisel-v12-r5"
 local title = "Erebor-ME"
@@ -22,6 +28,10 @@ if multishell then
   multishell.setTitle(multishell.getCurrent(), title)
 end
 local records = {}
+local backup = journal .. ".bak"
+if fs.exists(backup) then
+  if fs.exists(journal) then fs.delete(backup) else fs.move(backup, journal) end
+end
 if fs.exists(journal) then
   local file = assert(fs.open(journal, "r"))
   while true do
@@ -38,18 +48,26 @@ local function save(r)
   file.writeLine(textutils.serialize(r, {compact = true}))
   file.close()
   records[r.item] = r
+  -- Keep a long-running supply order within the computer's disk quota.
+  if fs.getSize(journal) >= 32768 then
+    local tmp = journal .. ".tmp"
+    local compact = assert(fs.open(tmp, "w"))
+    for _, entry in pairs(records) do compact.writeLine(textutils.serialize(entry, {compact=true})) end
+    compact.close()
+    fs.move(journal, backup)
+    fs.move(tmp, journal)
+    fs.delete(backup)
+  end
 end
 
-local function stock(item)
+local function inventory()
   local items, why = bridge.getItems()
   assert(type(items) == "table", why or "ME-Bestand nicht lesbar.")
-  local total = 0
+  local totals = {}
   for _, entry in pairs(items) do
-    if entry.name == item then
-      total = total + assert(tonumber(entry.count or entry.amount), "ME-Menge fehlt.")
-    end
+    totals[entry.name] = (totals[entry.name] or 0) + assert(tonumber(entry.count or entry.amount), "ME-Menge fehlt.")
   end
-  return total
+  return totals
 end
 
 local function active(item)
@@ -80,31 +98,59 @@ local function active(item)
   return false
 end
 
-local submitted = {}
+local submitted, sizes, retryAt = {}, {}, {}
+local function clock() return os.epoch("utc") / 1000 end
+local function retry(item, credited, delay, message)
+  retryAt[item] = clock() + delay
+  progress(item, "retrying", credited, message, credited)
+  return "wait"
+end
+
 local function observe(item, target, record, job)
   if job.hasErrorOccurred() or job.isCalculationNotSuccessful() or job.isCanceled() then
-    local detail = job.getDebugMessage() or "Auftrag abgebrochen"
+    local code = job.getDebugMessage() or "Auftrag abgebrochen"
+    local detail = code
     local missing = job.getMissingItems and job.getMissingItems()
+    local lackingBase = 0
     if type(missing) == "table" then
       local lines = {}
       for _, stack in pairs(missing) do
         if type(stack) == "table" and stack.name then
           lines[#lines+1] = tostring(stack.count or stack.amount or "?") .. "x " .. stack.name
+          if stack.name == baseItems[item] then lackingBase = tonumber(stack.count or stack.amount) or 0 end
         end
       end
       table.sort(lines)
       if #lines > 0 then detail = detail .. ": " .. table.concat(lines, ", ") end
     end
-    save({item=item, credited=math.min(target, record.credited + math.max(0, stock(item) - record.before))})
+    local credited = record.credited
+    if job.isCraftingStarted() then
+      credited = math.min(target, credited + math.max(0, (inventory()[item] or 0) - record.before))
+    end
+    save({item=item, credited=credited})
     submitted[item] = nil
+    if code == "MISSING_ITEMS" or code == "MISSING_INGREDIENT" or code == "CPU_TOO_SMALL" or code == "NO_SUITABLE_CPU_FOUND" then
+      if record.pending > 1 then
+        local smaller = math.floor(record.pending / 2)
+        if lackingBase > 0 and lackingBase < record.pending then smaller = record.pending - lackingBase end
+        sizes[item] = math.max(1, smaller)
+        return retry(item, credited, 0, detail)
+      end
+      sizes[item] = 1
+      return retry(item, credited, 60, detail)
+    end
+    if code == "NO_CPU_FOUND" or code == "CPU_BUSY" or code == "CPU_OFFLINE" then
+      return retry(item, credited, 30, code)
+    end
     return "offen: " .. detail
   end
   local started = job.isCraftingStarted()
-  if started then progress(item, "crafting", record.pending) end
-  if not job.isDone() or (not started and stock(item) < record.before + record.pending) then return "wait" end
+  if started then progress(item, "crafting", record.pending, nil, record.credited) end
+  if not job.isDone() or (not started and (inventory()[item] or 0) < record.before + record.pending) then return "wait" end
   local credited = record.credited + record.pending
   save({item=item, credited=credited})
   submitted[item] = nil
+  sizes[item] = record.pending * 2
   progress(item, "credited", credited)
   return credited >= target and "done" or "more"
 end
@@ -113,8 +159,11 @@ local function produce(item, target)
   local r = records[item] or {item = item, credited = 0}
   if submitted[item] then return observe(item, target, r, submitted[item]) end
   if r.credited >= target then progress(item, "credited", target); return "done" end
+  if (retryAt[item] or 0) > clock() then return "wait" end
+  if bridge.isOnline and not bridge.isOnline() then return retry(item, r.credited, 30, "ME Bridge offline") end
   if active(item) then progress(item, "waiting", r.credited); return "wait" end
-  local have = stock(item)
+  local amounts = inventory()
+  local have = amounts[item] or 0
   if r.pending then
     -- A reboot may fall between submitting the job and receiving its receipt.
     -- Only accept this batch again if its output is demonstrably in storage.
@@ -134,18 +183,19 @@ local function produce(item, target)
   assert(type(craftables) == "table", why or "ME-Patterns nicht lesbar.")
   local found = false
   for _, entry in pairs(craftables) do if entry.name == item then found = true; break end end
-  if not found then return "offen: kein Pattern erreichbar" end
-  local amount = target - credited
+  if not found then return retry(item, credited, 60, "Kein Pattern erreichbar") end
+  local availableBase = amounts[baseItems[item]] or 0
+  local amount = math.min(target - credited, sizes[item] or (availableBase > 0 and availableBase or 1024))
   save({item = item, credited = credited, before = have, pending = amount})
   local job, why = bridge.craftItem({name = item, count = amount})
   if not job then
     -- The documented nil return is a rejection before job creation.
     save({item = item, credited = credited})
-    return "offen: " .. tostring(why or "ME hat den Auftrag abgelehnt")
+    return retry(item, credited, 60, tostring(why or "ME hat den Auftrag abgelehnt"))
   end
   submitted[item] = job
   print(item .. " +" .. amount .. " (AE2 berechnet)")
-  progress(item, "calculating", amount)
+  progress(item, "calculating", amount, nil, credited)
   -- Poll this receipt after the other three variants have had a chance to submit.
   return "wait"
 end

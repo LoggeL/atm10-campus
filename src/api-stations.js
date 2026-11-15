@@ -47,7 +47,7 @@ const currentVersion = /local VERSION = "([^"]+)"/.exec(stationSource())?.[1] ??
 // at other sites keep supplying their cannons without a fleet-wide reboot.
 const scriptVersion = row => {
   const installed = JSON.parse(row.status_json || '{}').script;
-  return currentVersion === '1.4.6' && row.name !== 'erebor-K02' && ['1.4.3','1.4.4','1.4.5'].includes(installed)
+  return currentVersion === '1.4.7' && row.name !== 'erebor-K02' && ['1.4.3','1.4.4','1.4.5','1.4.6'].includes(installed)
     ? installed : currentVersion;
 };
 const clip = (v, n) => (v == null ? null : String(v).slice(0, n));

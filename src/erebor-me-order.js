@@ -53,7 +53,7 @@ export function registerEreborMeOrder(app, campus) {
         throw new HttpError(409,'Der bisherige K02-Computer muss sich beim Campus melden.');
       const attempt = (r?.attempt ?? 0) + 1;
       db.prepare(`INSERT INTO erebor_connecting_order VALUES(1,?,?,NULL,'queued',?,'{}')
-        ON CONFLICT(id) DO UPDATE SET attempt=excluded.attempt,state='queued',updated=excluded.updated`).run(attempt, computer, now());
+        ON CONFLICT(id) DO UPDATE SET attempt=excluded.attempt,state='queued',updated=excluded.updated,detail='{}'`).run(attempt, computer, now());
       logActivity(db, actor, 'erebor.me-order.start', station, {attempt, computer, version, revision});
       return view();
     });
@@ -75,9 +75,12 @@ export function registerEreborMeOrder(app, campus) {
       throw new HttpError(400,'Zuerst Auftrag übernehmen.');
     const detail = JSON.parse(r.detail);
     if (b.event === 'progress') {
-      if (!Object.hasOwn(targets,b.item) || !['waiting','calculating','crafting','credited','blocked'].includes(b.stage)
+      if (!Object.hasOwn(targets,b.item) || !['waiting','calculating','crafting','credited','retrying','blocked'].includes(b.stage)
         || !Number.isSafeInteger(b.quantity) || b.quantity<0 || b.quantity>targets[b.item]) throw new HttpError(400,'Ungültige ME-Meldung.');
-      detail[b.item] = {stage:b.stage,quantity:b.quantity,message:String(b.message||'').slice(0,300),at:now()};
+      const covered=b.covered ?? (['calculating','crafting'].includes(b.stage) ? 0 : b.quantity);
+      if(!Number.isSafeInteger(covered) || covered<0 || covered>targets[b.item] ||
+        (['calculating','crafting'].includes(b.stage) && covered+b.quantity>targets[b.item])) throw new HttpError(400,'Ungültige gedeckte Menge.');
+      detail[b.item] = {stage:b.stage,quantity:b.quantity,covered,message:String(b.message||'').slice(0,300),at:now()};
     }
     if (b.event === 'blocked') detail.error = String(b.message||'Auftrag prüfen.').slice(0,600);
     else if (b.event === 'claim') delete detail.error;

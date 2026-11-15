@@ -40,6 +40,11 @@ test('admin starts one versioned order, a bound station confirms batches and oth
     assert.equal((await post(base,admin,{attempt:1})).json().attempt,2);
     assert.equal((await event('claim')).statusCode,409);
     await event('claim',{attempt:2});
+    const material='rechiseled:blackstone_tiles_connecting';
+    const waiting=await event('progress',{attempt:2,item:material,stage:'retrying',quantity:11,covered:11,message:'MISSING_ITEMS'});
+    assert.equal(waiting.json().state,'running');
+    assert.equal((await app.inject({url:base,headers:write})).json().detail[material].covered,11);
+    assert.equal((await event('progress',{attempt:2,item:material,stage:'crafting',quantity:initial.targets[material],covered:11})).statusCode,400);
     for(const [item,quantity] of Object.entries(initial.targets)){
       assert.equal((await event('progress',{attempt:2,item,quantity,stage:'credited'})).statusCode,200);
     }

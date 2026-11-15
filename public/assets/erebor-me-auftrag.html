@@ -4,11 +4,11 @@
 <style>main{max-width:56rem;margin:3rem auto;padding:0 1.25rem}h1{margin:1.5rem 0 .75rem}
 table{width:100%;margin:1.5rem 0}td,th{text-align:left;padding:.6rem}output{display:block;margin:.8rem 0}</style></head>
 <body><main><a href="/app?project=erebor#overview">← Erebor-Baupläne</a>
-<h1>Connecting-Blöcke für Erebor</h1><p>K02 bestellt die gesamte offene Menge jeder Variante in einem Durchgang. AE2 prüft Zutaten und Crafting-CPU für jeden der vier Aufträge. Vorhandene Blöcke werden angerechnet. Die fertigen Blöcke bleiben im ME-Lager.</p>
+<h1>Connecting-Blöcke für Erebor</h1><p>K02 bestellt alle vier Varianten in Teilmengen. Fehlen Zutaten, versucht K02 kleinere Mengen bis zu einem Block und prüft anschließend jede Minute auf Nachschub. Vorhandene Blöcke zählen mit. Der Auftrag endet, sobald der Gesamtbedarf gedeckt ist.</p>
 <button id="start" class="primary" disabled>Vier Blöcke im ME anfordern</button>
 <output id="status" role="status">Campus wird abgefragt …</output><p id="error" role="alert"></p>
 <a id="login" href="/login" hidden>Beim Campus anmelden</a>
-<div class="table-wrap"><table><thead><tr><th>Connecting-Variante</th><th>Gesamtbedarf</th><th>Rückmeldung von K02</th></tr></thead><tbody></tbody></table></div>
+<div class="table-wrap"><table><thead><tr><th>Connecting-Variante</th><th>Gesamtbedarf</th><th>Gedeckt</th><th>Rückmeldung von K02</th></tr></thead><tbody></tbody></table></div>
 </main><script type="module">
 const url='/api/projects/erebor/connecting-auftrag', status=document.querySelector('#status'),
   error=document.querySelector('#error'), button=document.querySelector('#start'), list=document.querySelector('tbody');
@@ -21,6 +21,7 @@ let current, busy=false;
 function progress(d) {
   if(!d)return 'Noch keine Meldung';
   if(d.stage==='waiting')return 'Wartet auf einen bereits laufenden Craft';
+  if(d.stage==='retrying')return 'K02 prüft automatisch erneut · '+d.message;
   if(d.stage==='calculating')return 'AE2 berechnet '+qty(d.quantity)+' Stück';
   if(d.stage==='crafting')return 'AE2 fertigt '+qty(d.quantity)+' Stück';
   if(d.stage==='credited')return qty(d.quantity)+' Stück gedeckt';
@@ -39,7 +40,9 @@ async function refresh(){
   list.replaceChildren();
   for(const [item,n] of Object.entries(d.targets)){
     const row=list.insertRow();
-    for(const value of [labels[item]||item,qty(n),progress(d.detail[item])])row.insertCell().textContent=value;
+    const itemStatus=d.detail[item];
+    const covered=itemStatus?.covered ?? (itemStatus?.stage==='credited'?itemStatus.quantity:null);
+    for(const value of [labels[item]||item,qty(n),covered==null?'–':qty(covered),progress(itemStatus)])row.insertCell().textContent=value;
   }
 }
 async function update(){try{await refresh()}catch(e){button.disabled=true;error.textContent=e.message}}
