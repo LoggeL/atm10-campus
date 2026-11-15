@@ -5,12 +5,13 @@ import {setTimeout as delay} from 'node:timers/promises';
 import {createHash} from 'node:crypto';
 
 export const isEreborStation=name=>/^erebor-K(?:0[1-9]|[12][0-9]|3[0-7])$/i.test(name);
+export const needsSolidReplacement=desired=>desired?.blueprint?.includes('_MASSIV_')&&!desired.blueprint.includes('_LUFT_');
 
 // Installed V5 controllers prepare stone in mode 0. V6 and manually
 // updated cannons use 2. All other options and identity checks stay exact.
 export function observedEreborOptions(desired,observed){
  const options=desired.options;
- if(desired.owner==='Erebor'&&/^EREBOR_STEIN_K\d{2}_/.test(desired.blueprint)&&
+ if(!needsSolidReplacement(desired)&&desired.owner==='Erebor'&&/^EREBOR_STEIN_K\d{2}_/.test(desired.blueprint)&&
     [0,2].includes(options?.replace_mode)&&[0,2].includes(observed?.replace_mode)&&
     options.skip_missing===false&&options.replace_block_entities===false)
    return {...options,replace_mode:observed.replace_mode};
@@ -24,7 +25,7 @@ export function verifyEreborAlignment(desired,observed,receipt){
 
 export function isStationStone(job,site){
  const d=job?.desired;
- return job?.phase==='stone' && d?.owner==='Erebor' && d.blueprint?.startsWith('EREBOR_STEIN_'+site+'_') &&
+ return (job?.phase==='stone'||job?.phase==='build'&&job.massif&&needsSolidReplacement(d)) && d?.owner==='Erebor' && d.blueprint?.startsWith('EREBOR_STEIN_'+site+'_') &&
   [0,2].includes(d.options?.replace_mode) && d.options.skip_missing===false && d.options.replace_block_entities===false;
 }
 
@@ -82,7 +83,7 @@ export function ereborFeeder(db,request,version,liveReport){
   return Object.fromEntries(Object.entries(jobs).map(([slot,j])=>{
    const {file,sha256,anchor,options}=j.desired;
    const native=live.stations?.[site+(slot==='A'?'':slot)];
-   const mode=isStationStone(j,site)&&native?.upload===file&&[0,2].includes(native.options?.[0])
+   const mode=isStationStone(j,site)&&!needsSolidReplacement(j.desired)&&native?.upload===file&&[0,2].includes(native.options?.[0])
      ?native.options[0]:options.replace_mode;
    return [slot,{file,sha256,anchor,size:j.size,options:[mode,options.skip_missing,options.replace_block_entities]}];
   }));
@@ -146,7 +147,7 @@ export function ereborFeeder(db,request,version,liveReport){
     const amounts=new Map();
     for(const [slot,r] of entries){
      const job=group[slot];
-     const materials=job.phase==='stone'?{'minecraft:stone':Math.max(0,job.blocks-r.placed)}:job.phase==='build'?job.materials:{};
+     const materials=isStationStone(job,site)||job.phase==='stone'?{'minecraft:stone':Math.max(0,job.blocks-r.placed)}:job.phase==='build'?job.materials:{};
      for(const [block,n] of Object.entries(materials||{}))for(const [item,count] of itemsFor(block))
       if(n>0&&!item.endsWith('_bucket'))amounts.set(item,(amounts.get(item)||0)+count*n);
     }

@@ -1,13 +1,13 @@
 import {readFileSync} from 'node:fs';
 import {isDeepStrictEqual as same} from 'node:util';
 import {cannonReset,emptyStopped} from './alignment.js';
-import {isStationStone,observedEreborOptions,verifyEreborAlignment as verifyAlignment} from './erebor-feeder.js';
+import {isStationStone,needsSolidReplacement,observedEreborOptions,verifyEreborAlignment as verifyAlignment} from './erebor-feeder.js';
 import {publishedPlan} from './erebor-selection.js';
 import {tx} from './db.js';
 
 export const parallelLayout=JSON.parse(readFileSync(new URL('./erebor-fleet/parallel.json',import.meta.url)));
 const slots=['B','C'];
-export function parallelFleet(db,production,choices,request,recordedFinish,resumePaused,verifyStone){
+export function parallelFleet(db,production,choices,request,recordedFinish,resumePaused,verifyStone,massif){
   db.exec(`CREATE TABLE IF NOT EXISTS erebor_helpers(
     version INTEGER NOT NULL, site TEXT NOT NULL, slot TEXT NOT NULL, name TEXT,
     job TEXT, completed INTEGER NOT NULL DEFAULT 0, message TEXT, PRIMARY KEY(version,site,slot),
@@ -34,7 +34,8 @@ export function parallelFleet(db,production,choices,request,recordedFinish,resum
       if(!job?.lastWorldCheck)save.run(JSON.stringify(job),'Wartet auf bestätigten Abschluss',v,site,slot);
       return;
     }
-    if(job?.loaded && !job.tainted && signal.upload===job.desired.file && signal.state==='RUNNING'){
+    if(job?.loaded && !job.tainted && signal.upload===job.desired.file && signal.state==='RUNNING'&&
+       (!needsSolidReplacement(job.desired)||same(signal.options,[2,false,false]))){
       if(at<job.seen*1000)return;
       if(signal.status==='skipping' || signal.placed<(job.placed||0))job.tainted=true;
       job.started=true;job.seen=at/1000;job.placed=signal.placed;
@@ -44,7 +45,7 @@ export function parallelFleet(db,production,choices,request,recordedFinish,resum
       // Reserve before the first network await. SQLite persists the exact job across restarts.
       const taken=reserved(v,site);
       if(main.job)taken.add(main.job.desired.blueprint);
-      if(main.job && main.job.phase!=='stone')return;
+      if(main.job && main.job.phase!=='stone'&&!main.job.massif)return;
       for(const entry of choices.waiting(v))if(entry.site===site){
         if(!entry.name.startsWith('EREBOR_STEIN_'))return;
         taken.add(entry.name);
@@ -56,11 +57,12 @@ export function parallelFleet(db,production,choices,request,recordedFinish,resum
       const occupied=new Set([...taken,...done.keys()].map(geometry));
       const entry=open.find(f=>f.stage==='stone'&&!occupied.has(geometry(f.name))&&Array.isArray(f.origin)&&
         Math.hypot(...f.origin.map((n,i)=>n-pair[slot][i]))<256);
-      if(!entry)return;
-      const result=publishedPlan(db,p,{...entry,version:v,site,file:entry.name+'.nbt'});
-      job={...result.job,source:entry};
+      const mass=massif?.reserve(v,site,slot,same(signal.options,[2,false,false]));
+      if(!entry&&!mass)return;
+      const result=mass??publishedPlan(db,p,{...entry,version:v,site,file:entry.name+'.nbt'});
+      job={...result.job,source:mass?{massif:result.job.massif}:entry};
       db.prepare(`INSERT INTO erebor_helpers(version,site,slot,name,job,message) VALUES(?,?,?,?,?,'Reserviert')
-        ON CONFLICT(version,site,slot) DO UPDATE SET name=excluded.name,job=excluded.job,message=excluded.message`).run(v,site,slot,entry.name,JSON.stringify(job));
+        ON CONFLICT(version,site,slot) DO UPDATE SET name=excluded.name,job=excluded.job,message=excluded.message`).run(v,site,slot,job.desired.blueprint,JSON.stringify(job));
     }
     const set=message=>save.run(JSON.stringify(job),message,v,site,slot);
     const args={site:key,version:v};
@@ -70,10 +72,11 @@ export function parallelFleet(db,production,choices,request,recordedFinish,resum
     try{
       let filled=false,original;
       const published={...job.source,version:v,site,file:desired.blueprint+'.nbt'};
+      const originalPlan=()=>job.massif?massif.restore(v,site,slot,job.massif):publishedPlan(db,p,published);
       if(missingReceipt){
         job.lastWorldCheck=at;
         set('Prüft die Steinziele in der gespeicherten Welt');
-        original=publishedPlan(db,p,published);
+        original=originalPlan();
         const expected={...original.job.desired,options:observedEreborOptions(original.job.desired,job.desired.options)};
         if(!same(expected,job.desired)||!same(original.job.size,job.size))throw Error('Auftrag stimmt nicht mit dem veröffentlichten Steinplan überein.');
         filled=await verifyStone(p,{bytes:original.bytes,anchor:desired.anchor,size:job.size,blocks:original.job.blocks});
@@ -84,6 +87,7 @@ export function parallelFleet(db,production,choices,request,recordedFinish,resum
       if(job.loaded && (filled||recordedFinish(observed,job,signal.finish,Date.now(),{signal,at}))){
         tx(db,()=>{
           production.finish(v,site,desired.blueprint,new Date().toISOString());
+          if(job.massif)massif.finish(v,job.massif,site,slot);
           db.prepare("UPDATE erebor_helpers SET name=NULL,job=NULL,completed=completed+1,message='Abschnitt fertig' WHERE version=? AND site=? AND slot=?").run(v,site,slot);
         });
         return true;
@@ -100,7 +104,7 @@ export function parallelFleet(db,production,choices,request,recordedFinish,resum
       if(!matches(observed)){
         if(job.loaded || !observed.inputEmpty || !cannonReset(observed)){set('Wartet auf passenden Bauplan oder bestätigten Abschluss');return;}
         if(!enabled()||!signal.ready)return;
-        const {bytes}=original??publishedPlan(db,p,published);
+        const {bytes}=original??originalPlan();
         const result=await request('erebor-prepare',{...operation,nbtBase64:bytes.toString('base64')});
         if(!current())return;
         observed=result.observed;

@@ -1,14 +1,15 @@
 import {publishedPlan,selectionStore,unstarted} from './erebor-selection.js';
 import {productionStore} from './erebor-production.js';
+import {registerMassif} from './erebor-massif.js';
 import {parallelFleet,parallelLayout} from './erebor-parallel.js';
 import {Region} from './region.js';
 import {zipStore} from './zip.js';
-import {ereborFeeder,isStationStone,observedEreborOptions,verifyEreborAlignment as verifyAlignment} from './erebor-feeder.js';
+import {ereborFeeder,isStationStone,needsSolidReplacement,observedEreborOptions,verifyEreborAlignment as verifyAlignment} from './erebor-feeder.js';
 import {Worker} from 'node:worker_threads';
 import {createHash,randomUUID} from 'node:crypto';
 import {readFileSync} from 'node:fs';
 import {isDeepStrictEqual as same} from 'node:util';
-import {bridgeClient,cannonReset} from './alignment.js';
+import {bridgeClient,cannonReset,emptyStopped} from './alignment.js';
 import {DESIGN_REVISION} from './erebor-design.js';
 import {requireActor,HttpError} from './auth.js';
 import {logActivity,tx} from './db.js';
@@ -60,16 +61,18 @@ export function registerEreborQueue(app,campus){
  CREATE TABLE IF NOT EXISTS erebor_queue_sites(site TEXT PRIMARY KEY,state TEXT NOT NULL,payload BLOB);`);
  const choices=selectionStore(db);
  const production=productionStore(db);
+ const massif=registerMassif(app,campus,parallelLayout.sites);
  db.exec('CREATE TABLE IF NOT EXISTS erebor_resume(version INTEGER,site TEXT,slot TEXT,upload TEXT,expires INTEGER,result TEXT,PRIMARY KEY(version,site,slot))');
  const verifyStone=config.worldSources.live?(p,verifyStone)=>generate(p,{verifyStone}):null;
- const helpers=parallelFleet(db,production,choices,request,recordedFinish,resumePaused,verifyStone);
+ const helpers=parallelFleet(db,production,choices,request,recordedFinish,resumePaused,verifyStone,massif);
  campus.ereborHelpers=helpers;
  function available(p,site){
   const busy=helpers.reserved(p.current_version,site);
   const {open,done}=production.ordered(p,site);
   const geometry=name=>name.replace(/_V\d+$/,'');
   const taken=new Set([...busy,...done.keys()].map(geometry));
-  return open.filter(e=>!taken.has(geometry(e.name))&&(!busy.size||e.stage==='stone'));
+  const stoneOnly=busy.size||massif.enabled(p.current_version);
+  return open.filter(e=>!taken.has(geometry(e.name))&&(!stoneOnly||e.stage==='stone'));
  }
  const cfg=()=>db.prepare('SELECT * FROM erebor_queue_config WHERE id=1').get();
  const project=()=>db.prepare("SELECT current_version,plan_json FROM build_projects WHERE id='erebor'").get();
@@ -124,6 +127,7 @@ export function registerEreborQueue(app,campus){
    s.cursor=j.next;s.completed++;s.job=null;s.status='Fertig, nächster Plan folgt';
    tx(db,()=>{
     production.finish(j.desired.version??cfg().version,site,j.desired.blueprint,new Date().toISOString());
+    if(j.massif)massif.finish(j.desired.version,j.massif,site,'A');
     choices.mark(j.selection,'finished');persist(site,s);
    });return true;
   }
@@ -162,7 +166,7 @@ export function registerEreborQueue(app,campus){
  }
  async function startAutomatic(site,s,version,observed){
   const mode=production.mode(version,site),job=s.job;
-  if(!mode.enabled||!job||job.tainted)return;
+  if(!mode.enabled||!job||job.tainted||(massif.enabled(version)&&!job.massif&&job.phase!=='stone'))return;
   if(observed.state==='RUNNING'){
    if(mode.started_upload!==job.desired.file)production.started(version,site,job.desired.file);
    return;
@@ -176,17 +180,43 @@ export function registerEreborQueue(app,campus){
  }
  async function station(site,s,c,p,archive,report){
   let choice=choices.next(c.version,site);
+  if(choice&&massif.enabled(c.version)&&JSON.parse(choice.job).phase!=='stone')choice=null;
   const automatic=()=>!!production.mode(c.version,site).enabled;
   if(!automatic()&&!choice&&(s.exhausted||!c.enabled)&&!s.job?.loaded&&!s.job?.selection)return;
   const data={site,version:c.version};
   const signal=report?.stations?.[site],tracked=s.job;
   if(!choice&&tracked?.loaded&&signal&&Date.now()-report.at<15000){
-   if(signal.state==='STOPPED'&&signal.status==='finished'&&signal.empty&&!signal.finish&&Date.now()/1000-tracked.seen>=90){
-    s.inserted=false;s.status='Wartet auf bestätigten Abschluss';return;
+   if(signal.state==='STOPPED'&&signal.status==='finished'&&signal.empty&&(!signal.finish||tracked.tainted)&&Date.now()/1000-tracked.seen>=90){
+    s.inserted=false;s.status='Wartet auf bestätigten Abschluss';
+    if(!automatic()||!massif.enabled(c.version)||!verifyStone||!isStationStone(tracked,site)||signal.upload||
+       Date.now()-(tracked.lastWorldCheck||0)<120000)return;
+    tracked.lastWorldCheck=Date.now();
+    const entry=tracked.massif?null:production.ordered(p,site).open.find(e=>e.name===tracked.desired.blueprint&&e.sha256===tracked.desired.sha256);
+    if(!entry&&!tracked.massif)return;
+    const original=tracked.massif?massif.restore(c.version,site,'A',tracked.massif):published(p,site,entry);
+    if(!same(tracked.desired.anchor,original.job.desired.anchor)||!same(tracked.size,original.job.size)||tracked.desired.sha256!==original.job.desired.sha256)return;
+    const filled=await verifyStone(p,{bytes:original.bytes,anchor:tracked.desired.anchor,size:tracked.size,blocks:original.job.blocks});
+    const {observed}=await request('erebor-inspect',data);
+    if(!current(c.version)||!emptyStopped(observed)||observed.status!=='finished'||
+       !same(observed.options,observedEreborOptions(tracked.desired,observed.options)))return;
+    if(filled){
+     tx(db,()=>{
+      production.finish(c.version,site,tracked.desired.blueprint,new Date().toISOString());
+      if(tracked.massif)massif.finish(c.version,tracked.massif,site,'A');
+      choices.mark(tracked.selection,'finished');s.cursor=tracked.next;s.completed++;s.job=null;
+      s.status='Alle Steinziele im Weltstand bestätigt';persist(site,s);
+     });
+    }else{
+     s.job={...original.job,next:tracked.next,selection:tracked.selection,lastWorldCheck:Date.now()};
+     s.status='Offene Steinziele erneut eingeplant';
+     db.prepare('UPDATE erebor_queue_sites SET state=?,payload=? WHERE site=?').run(JSON.stringify(s),original.bytes,site);
+     production.started(c.version,site,null);
+    }
+    return;
    }
    if(isStationStone(tracked,site)&&signal.upload===tracked.desired.file&&signal.state==='RUNNING'&&signal.aligned&&
       signal.owner===tracked.desired.owner&&same(signal.anchor,tracked.desired.anchor)&&same(signal.size,tracked.size)&&
-      (same(signal.options,[0,false,false])||same(signal.options,[2,false,false]))&&Number.isSafeInteger(signal.placed)&&report.at>=tracked.seen*1000){
+      ((!needsSolidReplacement(tracked.desired)&&same(signal.options,[0,false,false]))||same(signal.options,[2,false,false]))&&Number.isSafeInteger(signal.placed)&&report.at>=tracked.seen*1000){
     if(signal.status==='skipping'||signal.placed<(tracked.placed||0))tracked.tainted=true;
     tracked.placed=signal.placed;tracked.seen=report.at/1000;tracked.started=true;s.inserted=true;s.status='Baut';
     if(automatic()&&production.mode(c.version,site).started_upload!==signal.upload)production.started(c.version,site,signal.upload);
@@ -256,14 +286,15 @@ export function registerEreborQueue(app,campus){
   if(!automatic()&&(!cfg().enabled||s.exhausted||c.phase==='finished'))return;
   if(o.inputEmpty!==true||!cannonReset(o)){s.status='Kanone belegt';return;}
   if(!s.job&&(automatic()||production.priority(c.version,site))){
-   const next=available(p,site)[0];
-   if(!next){s.status='Baufolge erledigt';s.exhausted=true;return;}
-   const {job,bytes}=published(p,site,next);
+   const mass=automatic()?massif.reserve(c.version,site,'A'):null;
+   const next=mass?null:available(p,site)[0];
+   if(!next&&!mass){s.status=massif.enabled(c.version)?'Wartet auf erreichbare Steinpläne':'Baufolge erledigt';s.exhausted=true;return;}
+   const {job,bytes}=mass??published(p,site,next);
    s.job={...job,next:s.cursor};
    db.prepare('UPDATE erebor_queue_sites SET state=?,payload=? WHERE site=?').run(JSON.stringify(s),bytes,site);
   }
   if(!s.job){
-   if(c.phase!=='stone'&&helpers.reserved(c.version,site).size)return;
+   if(c.phase!=='stone'&&(massif.enabled(c.version)||helpers.reserved(c.version,site).size))return;
    const selected=await generate(p,{site,phase:c.phase,cursor:s.cursor,architecture:archive?.[c.phase]?.[site]?.[s.cursor]});
    if(!current(c.version)||automatic()||production.priority(c.version,site)||choices.next(c.version,site))return;
    if(!selected.file){s.cursor=selected.next;s.exhausted=!!selected.exhausted;s.status=s.exhausted?'Phase erledigt':'Nächster Abschnitt wird geprüft';return;}
@@ -321,7 +352,7 @@ export function registerEreborQueue(app,campus){
     const report=await liveReport(c.version);
     await helpers.tick(p,report,()=>c.phase==='stone'&&helpers.isEnabled(c.version),read,renew,()=>liveReport(c.version));
    }
-   if(current(c.version)&&cfg().enabled&&c.phase!=='finished'&&!helpers.list(c.version).some(r=>r.name)&&sites.every(site=>{const s=read(site);return s.exhausted&&!s.job;})){
+   if(current(c.version)&&cfg().enabled&&!massif.enabled(c.version)&&c.phase!=='finished'&&!helpers.list(c.version).some(r=>r.name)&&sites.every(site=>{const s=read(site);return s.exhausted&&!s.job;})){
     const phase=({stone:'clear',clear:'build',build:'finished'})[c.phase];
     tx(db,()=>{
      const files=c.phase==='stone'?JSON.stringify(snapshotArchive(c.version)):c.archive;
@@ -361,7 +392,8 @@ export function registerEreborQueue(app,campus){
   return {queue,helpers:c?helpers.list(c.version):[],waiting:c?choices.waiting(c.version):[],enabled:!!c?.enabled,version:c?.version??v,stale:!!c&&c.version!==v,phase:c?(stages[c.phase]||'Fertig'):'Steinfüllung',stations:db.prepare('SELECT site,state FROM erebor_queue_sites ORDER BY site').all().map(r=>{
    const s=JSON.parse(r.state),j=s.job,signal=report?.stations?.[r.site];
    const live=j?.loaded&&signal?.upload===j.desired.file?{state:signal.state,status:signal.status,placed:signal.placed,total:signal.total,fuel:signal.fuel,target:signal.target,chunks:signal.chunks?.length||0,at:report.at}:null;
-   return {site:r.site,automatic:!!production.mode(c.version,r.site).enabled,status:s.status,live,nativeOptions:signal?.options??null,upload:j?.desired.file??null,kind:j?.phase??null,inserted:!!s.inserted,sha256:j?.desired.sha256||null,file:j?.desired.blueprint||null,anchor:j?.desired.anchor||null,blocks:j?.blocks??null,completed:s.completed,checked:s.checked||null};
+   const native=signal?.state?{state:signal.state,status:signal.status,empty:signal.empty,placed:signal.placed,at:report.at}:null;
+   return {site:r.site,automatic:!!production.mode(c.version,r.site).enabled,status:s.status,live,native,nativeOptions:signal?.options??null,upload:j?.desired.file??null,kind:j?.phase??null,inserted:!!s.inserted,sha256:j?.desired.sha256||null,file:j?.desired.blueprint||null,anchor:j?.desired.anchor||null,blocks:j?.blocks??null,completed:s.completed,checked:s.checked||null};
   })};
  }
  app.get(base,async(req,reply)=>{requireActor(req,'read');const report=await liveReport(cfg()?.version);return reply.header('Cache-Control','private, no-store').send(status(report,req.query.site));});
