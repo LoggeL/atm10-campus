@@ -10,6 +10,7 @@ import { normalizeStockItems, saveStock, latestStock } from './me-stock.js';
 import { cannonRange, cannonTarget, reachableCannons } from './cannon-range.js';
 import { createCannonBlueprints } from './cannon-blueprints.js';
 import { isEreborStation } from './erebor-feeder.js';
+import { DESIGN_REVISION } from './erebor-design.js';
 import { cannonReset, foreignInput } from './alignment.js';
 
 const ccDir = join(dirname(fileURLToPath(import.meta.url)), '..', 'public', 'cc');
@@ -395,14 +396,24 @@ export function registerStationRoutes(app, campus, mat, alignment, schematics) {
   // ---------- ME stock ----------
   // Item ids the campus still needs (plus gunpowder for the cannons): computers only report these.
   let wantedCache = null;
+  const ereborReports = `FROM project_architecture_packages a JOIN build_projects p
+    ON p.id=a.project_id AND p.current_version=a.base_version
+    WHERE p.id='erebor' AND a.revision=?`;
   app.get('/api/me/wanted', async req => {
     requireActor(req, 'read');
     const snap = mat.snapshotOf(req.query);
     const bps = mat.selection({});
-    const key = snap.id + ':' + bps.map(b => b.current?.id).join(',');
+    const revision=db.prepare('SELECT count(*) AS n,max(a.saved_at) AS latest,max(a.base_version) AS version '+ereborReports).get(DESIGN_REVISION);
+    const key = [snap.id,bps.map(b => b.current?.id).join(','),revision.n,revision.latest,revision.version].join(':');
     if (wantedCache?.key !== key) {
       const merged = mat.aggregate(bps, snap);
       const items = [...merged.items].filter(([, e]) => e.needed > 0).map(([item]) => item);
+      const chiseled=db.prepare(`SELECT DISTINCT material.key AS item
+        FROM project_architecture_packages a JOIN build_projects p ON p.id=a.project_id AND p.current_version=a.base_version,
+        json_each(a.report_json,'$.materials') material
+        WHERE p.id='erebor' AND a.revision=? AND material.value>0
+        AND (material.key GLOB 'rechiseled:*' OR material.key GLOB 'rechiseledcreate:*')`).all(DESIGN_REVISION);
+      for(const {item} of chiseled)if(!items.includes(item))items.push(item);
       if (!items.includes('minecraft:gunpowder')) items.push('minecraft:gunpowder');
       wantedCache = { key, items: items.sort() };
     }
