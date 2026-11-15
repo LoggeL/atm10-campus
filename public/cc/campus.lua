@@ -3,7 +3,7 @@
 -- through an Advanced Peripherals ME Bridge. Which blueprint and the options are set in the web app (tab "Kanonen");
 -- this computer only knows URL, a station token and its cannon name (install: wget run <url>/cc/install.lua).
 -- Strings shown on screen use Latin-1 escapes (\228 = ae-umlaut ...), the CC font is ISO-8859-1.
-local VERSION = "1.4.8"
+local VERSION = "1.4.9"
 
 settings.define("campus.url", { description = "Campus-URL", type = "string" })
 settings.define("campus.token", { description = "API-Token mit Scope Station", type = "string" })

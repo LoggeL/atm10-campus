@@ -44,6 +44,8 @@ if fs.exists(journal) then
 end
 
 local function save(r)
+  local prev=records[r.item]
+  if prev and r.reserved==nil then r.reserved, r.reviewAfter=prev.reserved, prev.reviewAfter end
   local file = assert(fs.open(journal, "a"))
   file.writeLine(textutils.serialize(r, {compact = true}))
   file.close()
@@ -70,8 +72,8 @@ local function inventory()
   return totals
 end
 
-local bridgeTasksReadable = true
-local function active(item)
+local checkTasksAfter = 0
+local function active(item, verifyReceipt)
   -- AP 0.8.2a wraps isCrafting's MethodResult inside another MethodResult.
   -- Inspect all CPUs, including crafts submitted through other bridges or terminals.
   local cpus, why = bridge.getCraftingCPUs()
@@ -89,15 +91,17 @@ local function active(item)
   -- Cross-check the bridge's own task list. Unidentified CPUs are not evidence
   -- that this specific output is being made. Our persisted pending receipt still
   -- guards against resubmitting a previous Campus order after any interruption.
-  if unknown and bridgeTasksReadable then
+  if unknown or verifyReceipt then
+    local now=os.epoch("utc")/1000
+    if now < checkTasksAfter then return false, false end
     local ok, tasks, reason = pcall(bridge.getCraftingTasks)
     if not ok then
       local err = tostring(tasks)
       -- AP 0.8.2a downcasts AdvancedAE CPUs when expanding bridge-created jobs.
       -- The network-wide CPU list above remains valid, as do our job receipts.
       if err:find("ClassCastException",1,true) and err:find("AdvCraftingCPU",1,true) then
-        bridgeTasksReadable = false
-        return false
+        checkTasksAfter = now + 30
+        return false, false
       end
       error(err)
     end
@@ -106,7 +110,7 @@ local function active(item)
       if type(task.resource) == "table" and task.resource.name == item then return true end
     end
   end
-  return false
+  return false, true
 end
 
 local submitted, sizes, retryAt = {}, {}, {}
@@ -172,24 +176,35 @@ local function produce(item, target)
   if r.credited >= target then progress(item, "credited", target); return "done" end
   if (retryAt[item] or 0) > clock() then return "wait" end
   if bridge.isOnline and not bridge.isOnline() then return retry(item, r.credited, 30, "ME Bridge offline") end
-  if active(item) then progress(item, "waiting", r.credited); return "wait" end
+  local running, inspected = active(item, (r.reserved or 0)>0)
+  if running then progress(item, "waiting", r.credited); return "wait" end
   local amounts = inventory()
   local have = amounts[item] or 0
   if r.pending then
-    -- A reboot may fall between submitting the job and receiving its receipt.
-    -- Only accept this batch again if its output is demonstrably in storage.
-    if have < r.before + r.pending then
-      return retry(item, r.credited, 30, "Eingereichten Auftrag mit ME-Bestand abgleichen: " ..
-        math.max(0,have-r.before) .. " von " .. r.pending .. " eingelagert")
-    end
-    r = {item = item, credited = r.credited + r.pending}
+    -- Reserve only the uncertain tail of a submission interrupted by reboot.
+    -- The rest of the project can proceed even if players consumed some output.
+    local seen=math.min(r.pending,math.max(0,have-r.before))
+    r={item=item, credited=r.credited+seen, reserved=(r.reserved or 0)+r.pending-seen,
+      reviewAfter=clock()+300}
     save(r)
   end
   local credited = math.max(have, r.credited)
   if credited >= target then
-    save({item = item, credited = target})
+    save({item = item, credited = target, reserved = 0})
     progress(item, "credited", target)
     return "done"
+  end
+  local reserved=math.max(0,(r.reserved or 0)-(credited-r.credited))
+  if reserved>0 and credited+reserved>=target then
+    -- Allow late submissions and confirm the bridge is no longer executing
+    -- this output before requesting any residual amount a second time.
+    if not inspected or clock() < (r.reviewAfter or 0) then
+      if credited~=r.credited or reserved~=r.reserved then
+        save({item=item,credited=credited,reserved=reserved,reviewAfter=r.reviewAfter})
+      end
+      return retry(item,credited,30,"Vorherige Lieferung wird abgeglichen: " .. reserved .. " offen")
+    end
+    reserved=0
   end
   local craftables, why = bridge.getCraftableItems()
   assert(type(craftables) == "table", why or "ME-Patterns nicht lesbar.")
@@ -197,8 +212,8 @@ local function produce(item, target)
   for _, entry in pairs(craftables) do if entry.name == item then found = true; break end end
   if not found then return retry(item, credited, 60, "Kein Pattern erreichbar") end
   local availableBase = amounts[baseItems[item]] or 0
-  local amount = math.min(target - credited, sizes[item] or (availableBase > 0 and availableBase or 1024))
-  save({item = item, credited = credited, before = have, pending = amount})
+  local amount = math.min(target - credited - reserved, sizes[item] or (availableBase > 0 and availableBase or 1024))
+  save({item=item, credited=credited, before=have, pending=amount, reserved=reserved, reviewAfter=r.reviewAfter})
   local job, why = bridge.craftItem({name = item, count = amount})
   if not job then
     -- The documented nil return is a rejection before job creation.

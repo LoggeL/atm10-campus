@@ -109,7 +109,7 @@ class EreborOrderTest(unittest.TestCase):
           end
         """)
         self.lua.execute(PROGRAM)
-        self.lua.execute("assert(taskErrors==1 and stored[item]==2563884 and stored['rechiseled:gold_block_polished_connecting']==353739)")
+        self.lua.execute("assert(taskErrors>=1 and taskErrors<=1+ticks/30 and stored[item]==2563884 and stored['rechiseled:gold_block_polished_connecting']==353739)")
 
     def test_uses_available_materials_then_automatically_resumes(self):
         self.lua.execute("""
@@ -141,13 +141,31 @@ class EreborOrderTest(unittest.TestCase):
         self.lua.execute("""
           crash=false
           local advance=sleep; sleep=function(n)
-            if ticks<60 then assert(#orders==1, "duplicated a pending job") end
+            local total=0;for _,v in ipairs(orders) do total=total+v end
+            assert(total<=9000, "duplicated a pending job")
             advance(n)
-            if ticks==55 then stored[item]=stored[item]+orders[1] end
+            if ticks==55 then
+              assert(#orders>1, "other needed batches were blocked")
+              stored[item]=stored[item]+orders[1]
+            end
           end
         """)
         self.lua.execute(PROGRAM)
         self.lua.execute("local n=0;for _,v in ipairs(orders) do n=n+v end;assert(n==9000 and stored[item]==2563884)")
+
+    def test_missing_part_of_interrupted_batch_only_holds_its_own_balance(self):
+        self.lua.execute("""
+          stored[item]=2563884-100
+          lines[1]={item=item,credited=2563884-2000,before=2563884-2000,pending=1950}
+          local craft=bridge.craftItem
+          bridge.craftItem=function(f)
+            assert(f.count==50)
+            if #orders==0 then assert(ticks==0) else assert(ticks>=300) end
+            return craft(f)
+          end
+        """)
+        self.lua.execute(PROGRAM)
+        self.lua.execute("assert(#orders==2 and stored[item]==2563884)")
 
 
 if __name__ == "__main__":
