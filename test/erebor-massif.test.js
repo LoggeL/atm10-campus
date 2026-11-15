@@ -37,18 +37,24 @@ test('solid, cavity, protected and special positions are separate in real stone-
 });
 
 test('reservations survive retries, respect physical reach and helper capability, and close once',async()=>{
- const db=new DatabaseSync(':memory:'),hooks=[];
- const app={addHook:(n,h)=>hooks.push(h),get(){},post(){}};
+ const db=new DatabaseSync(':memory:'),hooks=[],posts=new Map();
+ const app={addHook:(n,h)=>hooks.push(h),get(){},post:(path,handler)=>posts.set(path,handler)};
  const stations=['K01','K02','K03'].map((site,i)=>({site,main:[i===2?900:i*4,20,0],B:[i*4,20,0],C:[i*4,20,0]}));
  db.exec('CREATE TABLE erebor_queue_sites(state TEXT); CREATE TABLE erebor_helpers(version INTEGER,job TEXT); CREATE TABLE build_projects(id TEXT, current_version INTEGER,plan_json TEXT)');
  const mass=registerMassif(app,{db,config:{worldSources:{}}},stations);
  try{
-  db.exec("INSERT INTO erebor_massif_runs VALUES(12,1,'today'); INSERT INTO erebor_massif_blobs VALUES('hash',x'00')");
+  db.exec("INSERT INTO build_projects VALUES('erebor',12,'{}'); INSERT INTO erebor_massif_runs VALUES(12,1,'today'); INSERT INTO erebor_massif_blobs VALUES('hash',x'00'); CREATE TABLE activity(at TEXT,user_id INTEGER,via TEXT,action TEXT,target TEXT,detail_json TEXT)");
   const add=db.prepare("INSERT INTO erebor_massif_tiles(v,tile,x,y,z,sx,sy,sz,blocks,sha,home,priority,special) VALUES(12,?,?,20,0,1,1,1,1,'hash','K01',1,?)");
   add.run('SOLID',10,0);add.run('CAVITY_LUFT',11,0);add.run('DUNGEON_BE',12,1);
   assert.equal(mass.reserve(12,'K03','A'),null);
   assert.equal(mass.reserve(12,'K01','B',false).job.massif,'CAVITY_LUFT');
   assert.equal(mass.reserve(12,'K01','C',false),null);
+  const setPhase=posts.get('/api/projects/erebor/stone/massif/bauphase');
+  const req={method:'POST',headers:{'x-campus-csrf':'1'},actor:{via:'session',scope:'write',user:{id:1,role:'admin'}},body:{baseVersion:12,stoneOnly:false}};
+  await assert.rejects(setPhase({...req,actor:{...req.actor,via:'token'}}),e=>e.statusCode===403);
+  await assert.rejects(setPhase({...req,body:{...req.body,baseVersion:11}}),e=>e.statusCode===409);
+  assert.equal((await setPhase(req)).stoneOnly,false);assert.equal(mass.reserve(12,'K02','A'),null);
+  assert.equal((await setPhase({...req,body:{baseVersion:12,stoneOnly:true}})).stoneOnly,true);
   const j=mass.reserve(12,'K02','A').job;assert.equal(j.massif,'SOLID');assert.equal(j.phase,'build');
   assert.equal(isStationStone(j,'K02'),true);
   assert.equal(observedEreborOptions(j.desired,{replace_mode:0}).replace_mode,2);

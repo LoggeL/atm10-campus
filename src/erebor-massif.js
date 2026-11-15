@@ -11,6 +11,7 @@ const filename=(v,site,tile)=>'EREBOR_STEIN_'+site+'_MASSIV_'+tile+'_V'+v;
 export function registerMassif(app,campus,stations){
  const {db,config}=campus;
  db.exec(`CREATE TABLE IF NOT EXISTS erebor_massif_runs(v INTEGER PRIMARY KEY,actor INTEGER,created TEXT);
+ CREATE TABLE IF NOT EXISTS erebor_massif_control(v INTEGER PRIMARY KEY,stoneOnly INTEGER NOT NULL);
  CREATE TABLE IF NOT EXISTS erebor_massif_columns(v INTEGER,ix INTEGER,iz INTEGER,priority INTEGER,state TEXT,next INTEGER DEFAULT 0,problem TEXT,protected INTEGER DEFAULT 0,unbreakable INTEGER DEFAULT 0,PRIMARY KEY(v,ix,iz));
  CREATE TABLE IF NOT EXISTS erebor_massif_blobs(sha TEXT PRIMARY KEY,bytes BLOB NOT NULL);
  CREATE TABLE IF NOT EXISTS erebor_massif_audits(v INTEGER,ix INTEGER,iz INTEGER,generation INTEGER DEFAULT 0,finishedAt INTEGER,due INTEGER,verified INTEGER,PRIMARY KEY(v,ix,iz));
@@ -21,7 +22,8 @@ export function registerMassif(app,campus,stations){
   SELECT DISTINCT v,CAST(substr(tile,2,2) AS INTEGER),CAST(substr(tile,6,2) AS INTEGER),?,?
   FROM erebor_massif_tiles WHERE done=1`).run(Date.now(),Date.now()+300000);
  const project=()=>db.prepare("SELECT current_version,plan_json FROM build_projects WHERE id='erebor'").get();
- const enabled=v=>!!db.prepare('SELECT 1 FROM erebor_massif_runs WHERE v=?').get(v);
+ const published=v=>!!db.prepare('SELECT 1 FROM erebor_massif_runs WHERE v=?').get(v);
+ const enabled=v=>!!db.prepare('SELECT 1 FROM erebor_massif_runs LEFT JOIN erebor_massif_control USING(v) WHERE v=? AND coalesce(stoneOnly,1)=1').get(v);
  const current=(v)=>project()?.current_version===v;
  const rowFor=db.prepare('SELECT * FROM erebor_massif_tiles WHERE v=? AND tile=?');
  const nearest=origin=>stations.reduce((best,s)=>{const d=Math.hypot(...origin.map((n,i)=>n-s.main[i]));return d<256&&(!best||d<best.d)?{id:s.site,d}:best;},null)?.id??null;
@@ -44,7 +46,7 @@ export function registerMassif(app,campus,stations){
  }
  async function scan(){
   if(working||closed||!config.worldSources.live)return;
-  const r=project(),v=r?.current_version;if(!r||!enabled(v))return;
+  const r=project(),v=r?.current_version;if(!r||!published(v))return;
   const col=db.prepare("SELECT * FROM erebor_massif_columns WHERE v=? AND state<>'done' AND next<=? ORDER BY priority,iz,ix LIMIT 1").get(v,Date.now())??nextAudit(v);
   if(!col)return;
   working=true;
@@ -114,7 +116,7 @@ export function registerMassif(app,campus,stations){
  app.post(api,async req=>{
   const actor=requireActor(req,'write'),p=project(),b=req.body,v=p?.current_version;
   if(!p||b?.baseVersion!==v||typeof b.dryRun!=='boolean')throw new HttpError(409,'Aktuelle baseVersion und dryRun erforderlich.');
-  if(enabled(v))return status(v);
+  if(published(v))return status(v);
   const plan=JSON.parse(p.plan_json);validateMountain(plan);
   if(!config.worldSources.live)throw new HttpError(503,'Gespeicherte Serverwelt fehlt.');
   const [lo,hi]=plan.mountainFill.bounds,nx=Math.ceil((hi[0]-lo[0])/64),nz=Math.ceil((hi[2]-lo[2])/64);
@@ -137,8 +139,18 @@ export function registerMassif(app,campus,stations){
    logActivity(db,actor,'erebor.massif.publish','erebor',{version:v,columns:nx*nz});previews.delete(actor.user.id);return status(v);
   });
  });
+ app.post(api+'/bauphase',async req=>{
+  const actor=requireActor(req,'admin'),v=project()?.current_version,b=req.body;
+  if(req.headers.origin&&req.headers.origin!==config.publicUrl)throw new HttpError(403,'Fremder Origin.');
+  if(!published(v)||v!==b?.baseVersion||typeof b.stoneOnly!=='boolean')throw new HttpError(409,'Projektversion und Bauphase prüfen.');
+  return tx(db,()=>{
+   db.prepare('INSERT INTO erebor_massif_control VALUES(?,?) ON CONFLICT(v) DO UPDATE SET stoneOnly=excluded.stoneOnly').run(v,Number(b.stoneOnly));
+   logActivity(db,actor,'erebor.massif.phase','erebor',{version:v,stoneOnly:b.stoneOnly});
+   return {version:v,stoneOnly:enabled(v)};
+  });
+ });
  app.get(api+'/plans',async(req,reply)=>{
-  requireActor(req,'read');const v=project()?.current_version,site=req.query.site||'',column=req.query.column||'';
+  const actor=requireActor(req,'read');const v=project()?.current_version,site=req.query.site||'',column=req.query.column||'';
   if(site&&!stations.some(s=>s.site===site))throw new HttpError(400,'Unbekannter Standort.');
   if(column&&!/^X\d\d_Z\d\d$/.test(column))throw new HttpError(400,'Unbekannte Bergspalte.');
   const page=Number(req.query.page||1);if(!Number.isSafeInteger(page)||page<1||page>10000)throw new HttpError(400,'Ungültige Seite.');
@@ -146,7 +158,9 @@ export function registerMassif(app,campus,stations){
   const link=n=>api+'/plans?page='+n+(site?'&site='+site:'')+(column?'&column='+column:'');
   const st=status(v);
   const html=rows.slice(0,100).map(r=>'<tr><td><a download href="'+api+'/'+r.tile+'.nbt?version='+v+'">'+r.tile+'</a></td><td>'+(r.site?r.site+r.slot:r.home||'Außer Reichweite')+'</td><td>'+[r.x,r.y,r.z].join(' / ')+'</td><td>'+r.blocks.toLocaleString('de-DE')+'</td><td>'+(r.done?'Kanone fertig':r.special?'<a href="'+api+'/sonderziele?tile='+r.tile+'">Geschützte Einzelziele ansehen</a>':r.site?'Vergeben':'Offen')+'</td></tr>').join('');
-  const overview='<p>'+st.tiles.published.toLocaleString('de-DE')+' Baupläne · '+st.tiles.blocks.toLocaleString('de-DE')+' geplante Platzierungen · '+st.tiles.finished+' Kanonenabschlüsse · '+st.worldVerifiedColumns+' im Weltstand geprüfte Spalten nach Bauabschluss</p>';
+  const control=actor.via==='session'&&actor.user.role==='admin'&&published(v)
+   ?'<p><button type="button" id="phaseButton" data-version="'+v+'" data-stone="'+(!st.enabled)+'">'+(st.enabled?'Zur regulären Baufolge wechseln':'Nur Cleanstone bauen')+'</button> <span id="phaseResult" role="status"></span></p><script type="module" src="/assets/massif-phase.js"></script>':'';
+  const overview='<p>'+st.tiles.published.toLocaleString('de-DE')+' Baupläne · '+st.tiles.blocks.toLocaleString('de-DE')+' geplante Platzierungen · '+st.tiles.finished+' Kanonenabschlüsse · '+st.worldVerifiedColumns+' Spalten mit geprüften regulären Steinzielen nach Bauabschluss</p>'+control;
   return reply.header('Cache-Control','no-store').type('text/html; charset=utf-8').send('<!doctype html><html lang="de"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Erebor · Massiver Cleanstone</title><link rel="stylesheet" href="/assets/app.css"><main><a href="/app?project=erebor#blueprints">← Erebor-Baupläne</a><h1>Massiver Cleanstone</h1>'+overview+'<p><a href="?site=K35">K35</a> · <a href="?column=X23_Z25">Dungeon bei X 149 / Z −9387</a> · <a href="?">Gesamtes Massiv</a></p><form><label>Standort <select name="site"><option value="">Alle</option>'+stations.map(s=>'<option '+(site===s.site?'selected':'')+'>'+s.site+'</option>').join('')+'</select></label> <button>Filtern</button></form><table><thead><tr><th>NBT herunterladen</th><th>Kanone</th><th>Anker X / Y / Z</th><th>Stein</th><th>Status</th></tr></thead><tbody>'+html+'</tbody></table><p>'+(page>1?'<a href="'+link(page-1)+'">Zurück</a> ':'')+(rows.length>100?'<a href="'+link(page+1)+'">Weiter</a>':'')+'</p></main></html>');
  });
  app.get(api+'/sonderziele',async(req,reply)=>{
