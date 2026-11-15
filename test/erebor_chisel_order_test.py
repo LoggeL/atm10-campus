@@ -30,7 +30,9 @@ class EreborOrderTest(unittest.TestCase):
           bridge = {
             getItems=function() local rows={}; for k,v in pairs(stored) do
               table.insert(rows,{name=k,count=v}) end; return rows end,
-            isCraftable=function() return true end,
+            getCraftableItems=function() local rows={}; for k in pairs(stored) do
+              table.insert(rows,{name=k}) end; return rows end,
+            getCraftingTasks=function() return {} end,
             isCrafting=function() return nil end,
             getCraftingCPUs=function()
               return {{isBusy=occupied==true,craftingJob=occupied and {resource={name=item}} or nil}}
@@ -75,11 +77,19 @@ class EreborOrderTest(unittest.TestCase):
         self.lua.execute(PROGRAM)
         self.lua.execute("assert(table.concat(orders,',')=='2563884,419037,353739,126722')")
 
-    def test_unreadable_busy_cpu_does_not_create_a_duplicate(self):
+    def test_unidentified_busy_cpu_still_allows_known_output(self):
         self.lua.execute("bridge.getCraftingCPUs=function() return {{isBusy=true}} end")
-        with self.assertRaisesRegex(Exception, "belegten ME-CPU"):
-            self.lua.execute(PROGRAM)
-        self.lua.execute("assert(#orders==0)")
+        self.lua.execute(PROGRAM)
+        self.lua.execute("assert(#orders==1 and orders[1]==9000)")
+
+    def test_bridge_task_is_counted_if_cpu_output_is_unknown(self):
+        self.lua.execute("""
+          occupied=true
+          bridge.getCraftingCPUs=function() return {{isBusy=true}} end
+          bridge.getCraftingTasks=function() return occupied and {{resource={name=item}}} or {} end
+        """)
+        self.lua.execute(PROGRAM)
+        self.lua.execute("assert(#orders==1 and orders[1]==8000)")
 
     def test_interruption_does_not_duplicate_an_unconfirmed_request(self):
         self.lua.execute("crash=true")

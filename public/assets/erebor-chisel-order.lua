@@ -57,12 +57,24 @@ local function active(item)
   -- Inspect all CPUs, including crafts submitted through other bridges or terminals.
   local cpus, why = bridge.getCraftingCPUs()
   assert(type(cpus) == "table", why or "ME-Crafting-CPUs nicht lesbar.")
+  local unknown = false
   for _, cpu in pairs(cpus) do
     assert(type(cpu.isBusy) == "boolean", "Unbekannte ME-CPU-Meldung.")
     if cpu.isBusy then
       local resource = cpu.craftingJob and cpu.craftingJob.resource
-      assert(resource and type(resource.name) == "string", "Ziel einer belegten ME-CPU unbekannt.")
-      if resource.name == item then return true end
+      if type(resource) == "table" and resource.name == item then return true end
+      if type(resource) ~= "table" or type(resource.name) ~= "string" then unknown = true end
+    end
+  end
+  -- AE2 can report a busy CPU without an item output (e.g. a modded resource).
+  -- Cross-check the bridge's own task list. Unidentified CPUs are not evidence
+  -- that this specific output is being made. Our persisted pending receipt still
+  -- guards against resubmitting a previous Campus order after any interruption.
+  if unknown then
+    local tasks, reason = bridge.getCraftingTasks()
+    assert(type(tasks) == "table", reason or "ME-Bridge-Auftragsliste nicht lesbar.")
+    for _, task in pairs(tasks) do
+      if type(task.resource) == "table" and task.resource.name == item then return true end
     end
   end
   return false
@@ -118,7 +130,11 @@ local function produce(item, target)
     progress(item, "credited", target)
     return "done"
   end
-  if bridge.isCraftable({type="item", name=item}) ~= true then return "offen: kein Pattern erreichbar" end
+  local craftables, why = bridge.getCraftableItems()
+  assert(type(craftables) == "table", why or "ME-Patterns nicht lesbar.")
+  local found = false
+  for _, entry in pairs(craftables) do if entry.name == item then found = true; break end end
+  if not found then return "offen: kein Pattern erreichbar" end
   local amount = target - credited
   save({item = item, credited = credited, before = have, pending = amount})
   local job, why = bridge.craftItem({name = item, count = amount})
