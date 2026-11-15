@@ -186,7 +186,7 @@ export function registerEreborQueue(app,campus){
   const data={site,version:c.version};
   const signal=report?.stations?.[site],tracked=s.job;
   if(!choice&&tracked?.loaded&&signal&&Date.now()-report.at<15000){
-   if(signal.state==='STOPPED'&&signal.status==='finished'&&signal.empty&&(!signal.finish||tracked.tainted)&&Date.now()/1000-tracked.seen>=90){
+   if(signal.state==='STOPPED'&&signal.status==='finished'&&signal.empty&&(!signal.finish||tracked.tainted||massif.enabled(c.version))&&Date.now()/1000-tracked.seen>=90){
     s.inserted=false;s.status='Wartet auf bestätigten Abschluss';
     if(!automatic()||!massif.enabled(c.version)||!verifyStone||!isStationStone(tracked,site)||signal.upload||
        Date.now()-(tracked.lastWorldCheck||0)<120000)return;
@@ -197,7 +197,7 @@ export function registerEreborQueue(app,campus){
     if(!same(tracked.desired.anchor,original.job.desired.anchor)||!same(tracked.size,original.job.size)||tracked.desired.sha256!==original.job.desired.sha256)return;
     const filled=await verifyStone(p,{bytes:original.bytes,anchor:tracked.desired.anchor,size:tracked.size,blocks:original.job.blocks});
     const {observed}=await request('erebor-inspect',data);
-    if(!current(c.version)||!emptyStopped(observed)||observed.status!=='finished'||
+    if(!current(c.version)||observed.state!=='STOPPED'||!emptyStopped(observed)||observed.status!=='finished'||
        !same(observed.options,observedEreborOptions(tracked.desired,observed.options)))return;
     if(filled){
      tx(db,()=>{

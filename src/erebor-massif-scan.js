@@ -28,16 +28,18 @@ export function scanMassifColumn(world,plan,ix,iz,stations){
   tops[z*sx+x]=top;high=Math.max(high,top);
  }
  if(high<lo[1])return {rows,missing:[],protected:0,unbreakable:0};
- const special=new Set(),missing=new Set(),unknownColumns=new Set();
+ const special=new Set(),missing=new Set(),unknownColumns=new Set(),saved=new Map();
  const index=(x,y,z)=>((y-lo[1])*sz+(z-oz))*sx+x-ox;
  for(let cz=cz0;cz<=cz1;cz++)for(let cx=cx0;cx<=cx1;cx++){
   const rk=(cx>>5)+','+(cz>>5);
   if(!regions.has(rk))regions.set(rk,Region.open(world,cx>>5,cz>>5));
-  const chunk=regions.get(rk)?.chunk(cx,cz);
+  const region=regions.get(rk),chunk=region?.chunk(cx,cz);
   if(!chunk?.sections||chunk.xPos!==cx||chunk.zPos!==cz||!['full','minecraft:full'].includes(chunk.Status)){
    unknownColumns.add(cx+','+cz);continue;
   }
-  chunks.set(cx+','+cz,chunkBlockReader(chunk));
+  const chunkKey=cx+','+cz;
+  chunks.set(chunkKey,chunkBlockReader(chunk));
+  saved.set(chunkKey,region.buf.readUInt32BE(4096+4*((cx&31)+(cz&31)*32))*1000);
   for(const b of chunk.block_entities||[]){
    if(naturalEntity.test(b.id)||dungeon(b.x,b.z)&&dungeonEntity.test(b.id)||
       Math.abs(b.x-149)<=3&&Math.abs(b.z+9387)<=5&&b.y>=61&&b.y<=89&&dungeonFittings.test(b.id)){
@@ -51,7 +53,7 @@ export function scanMassifColumn(world,plan,ix,iz,stations){
  for(let y0=lo[1],iy=0;y0<=high;y0+=16,iy++){
   const size=[sx,Math.min(16,hi[1]-y0),sz],positions=[],specialPositions=[],cavityPositions=[];
   const touching=relevant.filter(([a,b])=>a[1]<y0+size[1]&&b[1]>y0);
-  const tile='X'+pad(ix)+'_Z'+pad(iz)+'_H'+pad(iy);let incomplete=false;
+  const tile='X'+pad(ix)+'_Z'+pad(iz)+'_H'+pad(iy);let incomplete=false,oldestTargetSave=Infinity;
   for(let z=0;z<sz;z++)for(let x=0;x<sx;x++){
    const wx=ox+x,wz=oz+z,top=Math.min(y0+size[1]-1,tops[z*sx+x]);
    if(top<y0)continue;
@@ -74,6 +76,7 @@ export function scanMassifColumn(world,plan,ix,iz,stations){
     if(immutable.has(block)){unbreakable++;continue;}
     const targeted=special.size&&special.has(index(wx,y,wz));
     const cells=targeted?specialPositions:cavities.has(block)?cavityPositions:positions;
+    if(!targeted)oldestTargetSave=Math.min(oldestTargetSave,saved.get(key));
     cells.push([x,y-y0,z]);
    }
   }
@@ -85,7 +88,7 @@ export function scanMassifColumn(world,plan,ix,iz,stations){
     if(bytes.length>250*1024){
      const middle=Math.ceil(part.length/2);
      write(part.slice(0,middle),tag+'A');write(part.slice(middle),tag+'B');
-    }else rows.push({tile:tile+tag+suffix,origin:[ox,y0,oz],size,blocks:part.length,bytes,sha:createHash('sha256').update(bytes).digest('hex')});
+    }else rows.push({tile:tile+tag+suffix,origin:[ox,y0,oz],size,blocks:part.length,bytes,oldestTargetSave,sha:createHash('sha256').update(bytes).digest('hex')});
    }
    write(cells,'');
   }
