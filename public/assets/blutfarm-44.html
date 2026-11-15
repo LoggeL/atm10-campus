@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Blutfarm · Kanone 44</title><link rel="stylesheet" href="/assets/app.css">
+<style>main{max-width:44rem;margin:3rem auto;padding:0 1rem}output{display:block;margin:1rem 0}</style></head>
+<body><main><a href="/app#cannons">Alle Kanonen</a><h1>EvilCraft-Blutfarm</h1>
+<p>Turm Südwest · <strong>X 49 / Y 64 / Z 89</strong><br>Advanced Computer bei Z 87, Netherite-Kiste bei Z 88.</p>
+<p>Beim Start bestätigt der Campus diesen Kanonenblock für die Station <strong>Blutfarm-Suedwest</strong>. Die Kanone erhält Bauplan 44 am Anker <strong>38 / 64 / 90</strong> und bebaut freie Stellen.</p>
+<button class="primary" id="build" disabled>Kanone verbinden und Bauplan 44 starten</button>
+<output id="status" role="status">Stationsstatus wird geladen …</output><p id="feedback" role="alert"></p>
+<p><a id="login" href="/login" hidden>Beim Campus anmelden</a></p>
+<a href="/api/blueprints/44_EvilCraft_Blutfarm_Turm_Suedwest/materials?format=html">Materialliste für Bauplan 44</a>
+</main><script type="module">
+const route='/api/cannons/Blutfarm-Suedwest', plan='44_EvilCraft_Blutfarm_Turm_Suedwest';
+const target={dimension:'minecraft:overworld',x:49,y:64,z:89,owner:'Campus'};
+const build=document.querySelector('#build'), status=document.querySelector('#status'), feedback=document.querySelector('#feedback');
+let working=false, admin=false;
+async function request(url,method='GET',body) {
+  const response=await fetch(url,{method,cache:'no-store',headers:{'content-type':'application/json','x-campus-csrf':'1'},body:body===undefined?undefined:JSON.stringify(body)});
+  const data=await response.json();
+  if(!response.ok){if(response.status===401)document.querySelector('#login').hidden=false;throw Error(data.error || 'Campus-Anfrage fehlgeschlagen.');}
+  return data;
+}
+function exact(binding){return binding && Object.keys(target).every(key=>binding[key]===target[key]);}
+function reason(station){
+  if(!admin)return 'Zum Starten mit einem Campus-Admin anmelden.';
+  if(station.blueprint?.id!==plan || station.blueprint.version!==1)return 'Die Station hat einen anderen Auftrag. Bitte die Kanonenübersicht prüfen.';
+  if(!station.online || !station.status || station.status.stale)return 'Der Campus wartet auf die Anmeldung des Advanced Computers.';
+  if(station.alignment.binding && !exact(station.alignment.binding))return 'Die Station ist an einen anderen Kanonenblock gebunden.';
+  if(station.done || station.alignment.completed)return 'Auftrag abgeschlossen.';
+  return '';
+}
+async function refresh(){
+  if(working)return;
+  try{
+    const station=await request(route);
+    if(working)return;
+    const why=reason(station), observed=station.alignment.observed;
+    status.textContent=why || ('Computer '+station.status.computerId+' online · '+(observed?.state || 'Bereit zur Einrichtung')+(observed?.amountPlaced!=null?' · '+observed.amountPlaced+' Blöcke gesetzt':''));
+    build.disabled=!!why || observed?.state==='RUNNING';
+  }catch(e){status.textContent=e.message;build.disabled=true;}
+}
+build.onclick=async()=>{
+  if(working || !admin)return;
+  working=true;build.disabled=true;feedback.textContent='';
+  try{
+    const station=await request(route), why=reason(station);
+    if(why)throw Error(why);
+    if(!station.alignment.binding){
+      status.textContent='Kanonenblock in Minecraft prüfen …';
+      const probe=await request(route+'/alignment/probe','POST',{binding:target});
+      if(!exact(probe.binding) || !probe.nonce)throw Error('Der Server hat den Standort nicht bestätigt.');
+      await request(route+'/alignment/bind','POST',{binding:target,nonce:probe.nonce,confirm:true});
+    }
+    const current=await request(route);
+    if(reason(current) || current.assignment!==station.assignment || !exact(current.alignment.binding))throw Error('Station oder Auftrag geändert. Bitte erneut prüfen.');
+    const settings=current.schematic.settings;
+    if(!settings.enabled || settings.replaceMode!==0 || !settings.protectBlockEntities || settings.skipMissing){
+      await request(route,'PUT',{schematic:{enabled:true,replaceMode:0,protectBlockEntities:true,skipMissing:false}});
+    }
+    status.textContent='Bauplan vorbereiten und starten …';
+    const configured=await request(route);
+    if(reason(configured) || configured.assignment!==station.assignment || !exact(configured.alignment.binding))throw Error('Station oder Auftrag geändert.');
+    let job=configured.schematic.job;
+    if(job?.state!=='ready')job=(await request(route+'/schematic/prepare','POST',{})).job;
+    if(job?.state!=='ready' || job.blueprint!==plan || job.version!==1)throw Error(job?.message || 'Bauplan 44 ist noch nicht eingelegt.');
+    const result=await request(route+'/start','POST',{version:1,assignment:station.assignment});
+    feedback.textContent=result.message || result.state;
+  }catch(e){feedback.textContent=e.message;}
+  finally{working=false;await refresh();}
+};
+try{const me=await request('/api/me');admin=me.via==='session'&&me.user.role==='admin';await refresh();setInterval(refresh,10000);}
+catch(e){status.textContent=e.message;}
+</script></body></html>
