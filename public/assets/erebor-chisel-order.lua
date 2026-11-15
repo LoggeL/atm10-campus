@@ -53,13 +53,53 @@ local function stock(item)
 end
 
 local function active(item)
-  local value, why = bridge.isCrafting({name = item})
-  assert(type(value) == "boolean", why or "Laufende Auftraege nicht lesbar.")
-  return value
+  -- AP 0.8.2a wraps isCrafting's MethodResult inside another MethodResult.
+  -- Inspect all CPUs, including crafts submitted through other bridges or terminals.
+  local cpus, why = bridge.getCraftingCPUs()
+  assert(type(cpus) == "table", why or "ME-Crafting-CPUs nicht lesbar.")
+  for _, cpu in pairs(cpus) do
+    assert(type(cpu.isBusy) == "boolean", "Unbekannte ME-CPU-Meldung.")
+    if cpu.isBusy then
+      local resource = cpu.craftingJob and cpu.craftingJob.resource
+      assert(resource and type(resource.name) == "string", "Ziel einer belegten ME-CPU unbekannt.")
+      if resource.name == item then return true end
+    end
+  end
+  return false
+end
+
+local submitted = {}
+local function observe(item, target, record, job)
+  if job.hasErrorOccurred() or job.isCalculationNotSuccessful() or job.isCanceled() then
+    local detail = job.getDebugMessage() or "Auftrag abgebrochen"
+    local missing = job.getMissingItems and job.getMissingItems()
+    if type(missing) == "table" then
+      local lines = {}
+      for _, stack in pairs(missing) do
+        if type(stack) == "table" and stack.name then
+          lines[#lines+1] = tostring(stack.count or stack.amount or "?") .. "x " .. stack.name
+        end
+      end
+      table.sort(lines)
+      if #lines > 0 then detail = detail .. ": " .. table.concat(lines, ", ") end
+    end
+    save({item=item, credited=math.min(target, record.credited + math.max(0, stock(item) - record.before))})
+    submitted[item] = nil
+    return "offen: " .. detail
+  end
+  local started = job.isCraftingStarted()
+  if started then progress(item, "crafting", record.pending) end
+  if not job.isDone() or (not started and stock(item) < record.before + record.pending) then return "wait" end
+  local credited = record.credited + record.pending
+  save({item=item, credited=credited})
+  submitted[item] = nil
+  progress(item, "credited", credited)
+  return credited >= target and "done" or "more"
 end
 
 local function produce(item, target)
   local r = records[item] or {item = item, credited = 0}
+  if submitted[item] then return observe(item, target, r, submitted[item]) end
   if r.credited >= target then progress(item, "credited", target); return "done" end
   if active(item) then progress(item, "waiting", r.credited); return "wait" end
   local have = stock(item)
@@ -78,9 +118,8 @@ local function produce(item, target)
     progress(item, "credited", target)
     return "done"
   end
-  if bridge.isCraftable({name = item}) ~= true then return "offen: kein Pattern erreichbar" end
-  -- Submit only one bounded batch at a time on this computer.
-  local amount = math.min(8192, target - credited)
+  if bridge.isCraftable({type="item", name=item}) ~= true then return "offen: kein Pattern erreichbar" end
+  local amount = target - credited
   save({item = item, credited = credited, before = have, pending = amount})
   local job, why = bridge.craftItem({name = item, count = amount})
   if not job then
@@ -88,27 +127,11 @@ local function produce(item, target)
     save({item = item, credited = credited})
     return "offen: " .. tostring(why or "ME hat den Auftrag abgelehnt")
   end
+  submitted[item] = job
   print(item .. " +" .. amount .. " (AE2 berechnet)")
   progress(item, "calculating", amount)
-  local started = false
-  while true do
-    if job.hasErrorOccurred() or job.isCalculationNotSuccessful() or job.isCanceled() then
-      local detail = job.getDebugMessage() or "Auftrag abgebrochen"
-      -- Credit only visible results, including partial output on cancellation.
-      save({item = item, credited = math.min(target, credited + math.max(0, stock(item) - have))})
-      return "offen: " .. tostring(detail)
-    end
-    if not started and job.isCraftingStarted() then
-      started = true
-      progress(item, "crafting", amount)
-    end
-    if job.isDone() and (started or stock(item) >= have + amount) then break end
-    sleep(5)
-  end
-  save({item = item, credited = credited + amount})
-  progress(item, "credited", credited + amount)
-  print(item .. " " .. (credited + amount) .. "/" .. target)
-  return credited + amount >= target and "done" or "more"
+  -- Poll this receipt after the other three variants have had a chance to submit.
+  return "wait"
 end
 
 print("Erebor: einmaliger ME-Auftrag. Zum Fortsetzen denselben Computer nutzen.")

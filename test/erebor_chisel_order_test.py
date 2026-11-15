@@ -31,7 +31,10 @@ class EreborOrderTest(unittest.TestCase):
             getItems=function() local rows={}; for k,v in pairs(stored) do
               table.insert(rows,{name=k,count=v}) end; return rows end,
             isCraftable=function() return true end,
-            isCrafting=function(f) return occupied == true and f.name==item end,
+            isCrafting=function() return nil end,
+            getCraftingCPUs=function()
+              return {{isBusy=occupied==true,craftingJob=occupied and {resource={name=item}} or nil}}
+            end,
             craftItem=function(f)
               table.insert(orders, f.count)
               if crash then error("connection lost") end
@@ -48,9 +51,9 @@ class EreborOrderTest(unittest.TestCase):
 
     def test_quantities_and_no_repeat_after_consumption(self):
         self.lua.execute(PROGRAM)
-        self.lua.execute("assert(#orders==2 and orders[1]==8192 and orders[2]==808); stored[item]=0")
+        self.lua.execute("assert(#orders==1 and orders[1]==9000); stored[item]=0")
         self.lua.execute(PROGRAM)
-        self.lua.execute("assert(#orders==2)")
+        self.lua.execute("assert(#orders==1)")
 
     def test_existing_job_supplies_part(self):
         self.lua.execute("occupied=true")
@@ -62,7 +65,21 @@ class EreborOrderTest(unittest.TestCase):
         self.lua.execute(PROGRAM)
         self.lua.execute("assert(#orders==1); reject=false")
         self.lua.execute(PROGRAM)
-        self.lua.execute("assert(#orders==3 and stored[item]==2563884)")
+        self.lua.execute("assert(#orders==2 and stored[item]==2563884)")
+
+    def test_all_four_full_orders_are_submitted_before_waiting(self):
+        self.lua.execute("""
+          for k in pairs(stored) do stored[k]=0 end
+          sleep=function() assert(#orders==4, "waited before submitting all four") end
+        """)
+        self.lua.execute(PROGRAM)
+        self.lua.execute("assert(table.concat(orders,',')=='2563884,419037,353739,126722')")
+
+    def test_unreadable_busy_cpu_does_not_create_a_duplicate(self):
+        self.lua.execute("bridge.getCraftingCPUs=function() return {{isBusy=true}} end")
+        with self.assertRaisesRegex(Exception, "belegten ME-CPU"):
+            self.lua.execute(PROGRAM)
+        self.lua.execute("assert(#orders==0)")
 
     def test_interruption_does_not_duplicate_an_unconfirmed_request(self):
         self.lua.execute("crash=true")

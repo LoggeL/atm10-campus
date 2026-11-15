@@ -4,7 +4,7 @@
 <style>main{max-width:56rem;margin:3rem auto;padding:0 1.25rem}h1{margin:1.5rem 0 .75rem}
 table{width:100%;margin:1.5rem 0}td,th{text-align:left;padding:.6rem}output{display:block;margin:.8rem 0}</style></head>
 <body><main><a href="/app?project=erebor#overview">← Erebor-Baupläne</a>
-<h1>Connecting-Blöcke für Erebor</h1><p>Der ME-Computer an K02 fertigt die vier Varianten in Chargen von bis zu 8.192 Stück. Vorhandene Blöcke werden angerechnet. Die fertigen Blöcke bleiben im ME-Lager.</p>
+<h1>Connecting-Blöcke für Erebor</h1><p>K02 bestellt die gesamte offene Menge jeder Variante in einem Durchgang. AE2 prüft Zutaten und Crafting-CPU für jeden der vier Aufträge. Vorhandene Blöcke werden angerechnet. Die fertigen Blöcke bleiben im ME-Lager.</p>
 <button id="start" class="primary" disabled>Vier Blöcke im ME anfordern</button>
 <output id="status" role="status">Campus wird abgefragt …</output><p id="error" role="alert"></p>
 <a id="login" href="/login" hidden>Beim Campus anmelden</a>
@@ -22,7 +22,7 @@ function progress(d) {
   if(!d)return 'Noch keine Meldung';
   if(d.stage==='waiting')return 'Wartet auf einen bereits laufenden Craft';
   if(d.stage==='calculating')return 'AE2 berechnet '+qty(d.quantity)+' Stück';
-  if(d.stage==='crafting')return 'AE2 hat die Charge von '+qty(d.quantity)+' Stück gestartet';
+  if(d.stage==='crafting')return 'AE2 fertigt '+qty(d.quantity)+' Stück';
   if(d.stage==='credited')return qty(d.quantity)+' Stück gedeckt';
   return d.message||'Blockiert';
 }

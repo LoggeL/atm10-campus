@@ -45,8 +45,11 @@ const nextAssignment = prev => Math.max((prev || 0) + 1, Math.floor(Date.now() /
 const currentVersion = /local VERSION = "([^"]+)"/.exec(stationSource())?.[1] ?? '0';
 // The connecting-order release is needed only on K02. Existing 1.4.3 feeders
 // at other sites keep supplying their cannons without a fleet-wide reboot.
-const scriptVersion = row => currentVersion === '1.4.4' && row.name !== 'erebor-K02' &&
-  JSON.parse(row.status_json || '{}').script === '1.4.3' ? '1.4.3' : currentVersion;
+const scriptVersion = row => {
+  const installed = JSON.parse(row.status_json || '{}').script;
+  return currentVersion === '1.4.5' && row.name !== 'erebor-K02' && ['1.4.3','1.4.4'].includes(installed)
+    ? installed : currentVersion;
+};
 const clip = (v, n) => (v == null ? null : String(v).slice(0, n));
 const int = v => Math.max(0, Math.floor(Number(v) || 0));
 const asList = v => (Array.isArray(v) ? v : v && typeof v === 'object' ? Object.values(v) : []);
@@ -389,7 +392,8 @@ export function registerStationRoutes(app, campus, mat, alignment, schematics) {
     seen(row.name);
     if (isEreborStation(row.name)) {
       const plan = await campus.ereborFeeder(row,{options:normalizeOptions(JSON.parse(row.options_json || '{}')),script:scriptVersion(row),intervals:INTERVALS});
-      return {...plan, connectingOrder:meOrder.attemptFor(row.name,actor)};
+      const runningVersion = JSON.parse(row.status_json || '{}').script;
+      return {...plan, connectingOrder:runningVersion === currentVersion ? meOrder.attemptFor(row.name,actor) : null};
     }
     return alignment.gate(row.name, planFor(row, liveSnap()));
   });
