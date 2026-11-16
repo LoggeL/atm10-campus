@@ -3,6 +3,10 @@ import {esc,fmt} from './format.js?v=20261114-status-1';
 const base='/api/projects/erebor/planfolge';
 const positions=Array.from({length:37},(_,i)=>'K'+String(i+1).padStart(2,'0'));
 const labels={noGunpowder:'Schießpulver fehlt',targetNotLoaded:'Wartet auf Zielchunk',missingBlock:'Baumaterial fehlt',missingItem:'Baumaterial fehlt'};
+export function counterText(counts){
+ if(!counts)return 'Zähler unbekannt';
+ return [['catalog','Katalog'],['massif','Massiv']].map(([key,label])=>label+' · '+fmt(counts[key].open)+' offen · '+fmt(counts[key].inProgress)+' zugewiesen · '+fmt(counts[key].done)+' erledigt').join(' | ');
+}
 export function fleetState(r){
  const n=r?.live;
  if(!n||Date.now()-n.at>=45000)return {title:r?.file?'Keine aktuelle Rückmeldung':'Kein bestätigter Plan',tone:'offline'};
@@ -54,8 +58,10 @@ export function setupEreborQueue({api,admin,active,notify,onStatus,onSite}){
   const next=plans?.pending[0];
   find('[data-waiting]').hidden=!next;
   if(next)setText('[data-waiting]','Als Nächstes · '+next);
-  setText('[data-open-count]',plans?fmt(plans.pending.length+(r?.file?1:0)):'');
-  setText('[data-done-count]',plans?fmt(plans.done.length):'');
+  setText('[data-open-count]',plans?.counts?fmt(plans.counts.catalog.open+plans.counts.catalog.inProgress):'');
+  setText('[data-done-count]',plans?.counts?fmt(plans.counts.catalog.done):'');
+  setText('[data-global-counts]',counterText(last?.counts?.total));
+  setText('[data-station-counts]',counterText(last?.counts?.stations?.[site]));
   for(const tab of root.querySelectorAll('[data-list]'))tab.setAttribute('aria-pressed',String(tab.dataset.list===view));
   auto.disabled=!editable||(!r?.automatic&&!plans);auto.setAttribute('aria-pressed',String(!!r?.automatic));
   auto.textContent=r?.automatic?'Automatik ausschalten':'Automatik starten';

@@ -1,5 +1,6 @@
 import {publishedPlan,selectionStore,unstarted} from './erebor-selection.js';
 import {productionStore} from './erebor-production.js';
+import {productionCounts} from './erebor-counts.js';
 import {registerMassif} from './erebor-massif.js';
 import {parallelFleet,parallelLayout} from './erebor-parallel.js';
 import {Region} from './region.js';
@@ -379,7 +380,10 @@ export function registerEreborQueue(app,campus){
  }
  campus.ereborLiveReport=liveReport;
  function status(report=null,focus=null){
-  const c=cfg(),v=project()?.current_version;
+  const c=cfg(),p=project(),v=p?.current_version;
+  const mains=db.prepare('SELECT site,state FROM erebor_queue_sites ORDER BY site').all().map(r=>({site:r.site,...JSON.parse(r.state)}));
+  const helperJobs=v?helpers.list(v).map(r=>({...r,job:helpers.jobAt(v,r.site,r.slot)})):[];
+  const counts=p?productionCounts(db,production,p,sites,c?.version===v?mains:[],helperJobs):null;
   let queue=null;
   if(v&&sites.includes(focus)){
    const {open,done,preferred}=production.ordered(project(),focus),state=c?read(focus):readyState(),job=state.job;
@@ -388,9 +392,9 @@ export function registerEreborQueue(app,campus){
    const promoted=[...new Set([...preferred,...nextNames])];
    const busy=helpers.reserved(v,focus);
    const pending=[...new Set([...promoted,...open.map(e=>e.name)])].filter(name=>name!==job?.desired.blueprint&&!busy.has(name));
-   queue={site:focus,pending,preferred:promoted,done:[...done].map(([name,at])=>({name,at}))};
+   queue={site:focus,pending,preferred:promoted,done:[...done].map(([name,at])=>({name,at})),counts:counts.stations[focus]};
   }
-  return {queue,helpers:c?helpers.list(c.version):[],waiting:c?choices.waiting(c.version):[],enabled:!!c?.enabled,version:c?.version??v,stale:!!c&&c.version!==v,phase:c?(stages[c.phase]||'Fertig'):'Steinfüllung',stations:db.prepare('SELECT site,state FROM erebor_queue_sites ORDER BY site').all().map(r=>{
+  return {queue,counts,helpers:c?helpers.list(c.version):[],waiting:c?choices.waiting(c.version):[],enabled:!!c?.enabled,version:c?.version??v,stale:!!c&&c.version!==v,phase:c?(stages[c.phase]||'Fertig'):'Steinfüllung',stations:db.prepare('SELECT site,state FROM erebor_queue_sites ORDER BY site').all().map(r=>{
    const s=JSON.parse(r.state),j=s.job,signal=report?.stations?.[r.site];
    const live=j?.loaded&&signal?.upload===j.desired.file?{state:signal.state,status:signal.status,placed:signal.placed,total:signal.total,fuel:signal.fuel,target:signal.target,chunks:signal.chunks?.length||0,at:report.at}:null;
    const native=signal?.state?{state:signal.state,status:signal.status,empty:signal.empty,placed:signal.placed,at:report.at}:null;

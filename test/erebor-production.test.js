@@ -49,6 +49,7 @@ test('a single cannon continues its complete queue after restart, prioritises th
   const files=names.map((name,i)=>({fileName:name+'.nbt',cannon:'K01',sha256:sha,size:[2,2,2],origin:[-252+i,32,-11010],blocks:1}));
   db.prepare("INSERT INTO project_stone_packages VALUES('erebor',12,'K01',1,?,?,?,?,NULL)").run('sum',zipStore(files.map(f=>({name:f.fileName,data:bytes}))),JSON.stringify({files,skipped:[]}),new Date().toISOString());
   assert.deepEqual((await list()).pending,names);
+  assert.deepEqual((await list()).counts.catalog,{open:3,inProgress:0,done:0});
   assert.equal((await send('/automatik',{enabled:true},{})).statusCode,401);
   assert.equal((await send('/automatik',{enabled:true},{...headers,origin:'https://foreign.invalid'})).statusCode,403);
   const wait=async(check,ms=3000)=>{const end=Date.now()+ms;while(!check()&&Date.now()<end)await new Promise(r=>setTimeout(r,40));assert.ok(check(),'Zeitlimit: '+JSON.stringify(started));};

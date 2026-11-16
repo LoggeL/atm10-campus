@@ -101,6 +101,7 @@ export function productionStore(db) {
   }
   migrate();
   return {
+    catalog,
     ordered,
     done:(v,site,name)=>!!db.prepare('SELECT 1 FROM erebor_finished_plans WHERE version=? AND site=? AND name=?').get(v,site,name),
     finish(v,site,name,at){if(name)finish.run(v,site,name,at);db.prepare('DELETE FROM erebor_priority WHERE version=? AND site=? AND name=?').run(v,site,name??'');},
