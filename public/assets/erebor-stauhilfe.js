@@ -1,5 +1,5 @@
 // Additional KubeJS server script for the surveyed Erebor fleet (Homebox V5/V6).
-// It only renews temporary chunk tickets; Create owns all printer and inventory changes.
+// Version 2 renews chunk tickets and releases a stale stone wait at the initial cursor.
 ;(function () {
   var BlockPos = Java.loadClass('net.minecraft.core.BlockPos')
   var ChunkPos = Java.loadClass('net.minecraft.world.level.ChunkPos')
@@ -7,6 +7,7 @@
   var Comparator = Java.loadClass('java.util.Comparator')
   var Cannon = Java.loadClass('com.simibubi.create.content.schematics.cannon.SchematicannonBlockEntity')
   var Components = Java.loadClass('com.simibubi.create.AllDataComponents')
+  var CompoundTag = Java.loadClass('net.minecraft.nbt.CompoundTag')
   var survey = JsonIO.read('kubejs/config/erebor-parallel.json')
   if (!survey || !survey.sites || survey.sites.length !== 37) return
   var ticket = TicketType.create('campus_erebor_stalled', Comparator.naturalOrder(), 120)
@@ -14,7 +15,7 @@
   survey.sites.forEach(function (row) {
     ;['main', 'B', 'C'].forEach(function (slot) {
       var p = row[slot]
-      if (p) stations.push({pos:new BlockPos(p[0], p[1], p[2]), file:null, still:0})
+      if (p) stations.push({name:row.site+(slot==='main'?'A':slot),pos:new BlockPos(p[0], p[1], p[2]),file:null,still:0,lastError:-1200})
     })
   })
   function surveyPrinter(level, chunks, site) {
@@ -42,6 +43,22 @@
     site.still = fingerprint === site.file ? site.still + 1 : 0
     site.file = fingerprint
     if (site.still < 2) return true
+    // After a reload Create can restore MissingItem while resetting its cursor
+    // to (-1,0,0). The wait prevents advanceCurrentPos, and the out-of-bounds
+    // target returns "searching" forever. Clear only that stale stone marker.
+    if (loaded && state === 'RUNNING' && status === 'searching' && target &&
+        target.getX() === anchor.getX()-1 && target.getY() === anchor.getY() && target.getZ() === anchor.getZ() &&
+        c.flyingBlocks.isEmpty() && c.missingItem && String(c.missingItem.id) === 'minecraft:stone') {
+      var printerState = new CompoundTag()
+      c.printer.write(printerState)
+      if (String(printerState.getString('PrintStage')) === 'BLOCKS' &&
+          printerState.getInt('EntityProgress') === -1 && printerState.getList('DeferredBlocks', 10).isEmpty()) {
+        c.missingItem = null
+        c.setChanged()
+        c.sendData()
+        console.info('Erebor-Stauhilfe v2 '+site.name+': veraltete Stein-Wartemeldung am Startcursor entfernt.')
+      }
+    }
     // An already accessible station can be in a border chunk without ticking.
     chunks.addRegionTicket(ticket, new ChunkPos(pos), 2, pos)
     // Create also checks the cursor just outside the structure when scanning a
@@ -58,7 +75,15 @@
     if (++ticks % 40 !== 0) return
     var level = event.server.overworld(), chunks = level.getChunkSource()
     stations.forEach(function (site) {
-      if (!surveyPrinter(level,chunks,site)) { site.file=null; site.still=0 }
+      try {
+        if (!surveyPrinter(level,chunks,site)) { site.file=null; site.still=0 }
+      } catch (error) {
+        if (ticks-site.lastError >= 1200) {
+          site.lastError=ticks
+          console.error('Erebor-Stauhilfe v2 '+site.name+': '+error)
+        }
+      }
     })
   })
+  console.info('Erebor-Stauhilfe v2: '+stations.length+' Kanonen überwacht.')
 })()

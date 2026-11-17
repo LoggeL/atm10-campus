@@ -29,6 +29,41 @@ test('stalled printer support temporarily tickets only the surveyed station and 
  c.parts.OWNER='Erebor';c.mode='STOPPED';polls(4);assert.deepEqual(held,[]);
 });
 const Components=Object.fromEntries(['OWNER','FILE','ANCHOR','BOUNDS','ROTATION','MIRROR'].map(k=>['SCHEMATIC_'+k,k]));
+test('stale stone marker at the initial cursor is released without resetting progress or real material waits',()=>{
+ let tick,changes=0,updates=0;
+ const anchor=new Pos(16,64,16),sentinel=new Pos(15,64,16);
+ const c=machine('K12',anchor,sentinel);
+ c.mode='RUNNING';c.statusMsg='searching';c.blocksPlaced=38806;c.blocksToPlace=78844;c.remainingFuel=354;
+ c.missingItem={id:'minecraft:stone'};
+ c.setChanged=()=>changes++;c.sendData=()=>updates++;
+ c.stage='BLOCKS';c.entity=-1;c.deferred=[];
+ c.printer.write=tag=>{tag.stage=c.stage;tag.entity=c.entity;tag.deferred=c.deferred;};
+ const classes={BlockPos:Pos,ChunkPos:class{},SchematicannonBlockEntity:Cannon,AllDataComponents:Components,
+  Comparator:{naturalOrder:()=>({})},TicketType:{create:()=>({})},CompoundTag:class{
+   getString(key){assert.equal(key,'PrintStage');return this.stage;}
+   getInt(key){assert.equal(key,'EntityProgress');return this.entity;}
+   getList(key,type){assert.equal(key,'DeferredBlocks');assert.equal(type,10);return {isEmpty:()=>this.deferred.length===0};}
+  }};
+ const layout={sites:Array.from({length:37},(_,i)=>({site:'K'+i,main:[i*16,64,0]}))};
+ const world={getChunkSource:()=>({getChunkNow:x=>x===0,addRegionTicket(){}}),getBlockEntity:()=>c};
+ const code=readFileSync(new URL('../public/assets/erebor-stauhilfe.js',import.meta.url),'utf8');
+ vm.runInNewContext(code,{Java:{loadClass:n=>classes[n.split('.').at(-1)]},JsonIO:{read:()=>layout},
+  ServerEvents:{tick:handler=>{tick=handler;}},console:{info(){},error(e){throw Error(e);}}});
+ const polls=n=>{for(let i=0;i<40*n;i++)tick({server:{overworld:()=>world}});};
+ polls(2);assert.equal(c.missingItem.id,'minecraft:stone');
+ polls(1);assert.equal(c.missingItem,null);assert.equal(changes,1);assert.equal(updates,1);
+ assert.deepEqual([c.blocksPlaced,c.blocksToPlace,c.remainingFuel],[38806,78844,354]);
+ c.missingItem={id:'minecraft:stone'};c.target=anchor;polls(4);assert.ok(c.missingItem);
+ c.target=sentinel;c.mode='PAUSED';c.statusMsg='missingBlock';polls(4);assert.ok(c.missingItem);
+ c.mode='RUNNING';c.statusMsg='searching';c.flights=[anchor];polls(4);assert.ok(c.missingItem);
+ c.flights=[];c.deferred=[anchor];polls(4);assert.ok(c.missingItem);
+ c.deferred=[];c.stage='ENTITIES';polls(4);assert.ok(c.missingItem);
+ c.stage='BLOCKS';c.entity=0;polls(4);assert.ok(c.missingItem);
+ c.entity=-1;c.missingItem={id:'minecraft:gold_block'};polls(4);assert.ok(c.missingItem);
+ c.missingItem={id:'minecraft:stone'};c.parts.OWNER='Other';polls(4);assert.ok(c.missingItem);
+ assert.equal(changes,1);
+ c.parts.OWNER='Erebor';polls(3);assert.equal(c.missingItem,null);assert.equal(changes,2);
+});
 function machine(n,anchor,target){
  const c=new Cannon();c.mode='PAUSED';c.state={name:()=>c.mode};c.statusMsg='targetNotLoaded';c.target=target;c.flights=[];
  c.parts={OWNER:'Erebor',FILE:'campus_'+'1'.repeat(36)+'.nbt',ANCHOR:anchor,BOUNDS:new Pos(64,16,64),ROTATION:'NONE',MIRROR:'none'};
