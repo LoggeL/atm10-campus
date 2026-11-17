@@ -1,3 +1,4 @@
+import {cannonProgressRows} from './cannon-progress-rows.js';
 import {publishedPlan,selectionStore,unstarted} from './erebor-selection.js';
 import {productionStore} from './erebor-production.js';
 import {productionCounts} from './erebor-counts.js';
@@ -394,7 +395,7 @@ export function registerEreborQueue(app,campus){
    const pending=[...new Set([...promoted,...open.map(e=>e.name)])].filter(name=>name!==job?.desired.blueprint&&!busy.has(name));
    queue={site:focus,pending,preferred:promoted,done:[...done].map(([name,at])=>({name,at})),counts:counts.stations[focus]};
   }
-  return {queue,counts,helpers:c?helpers.list(c.version):[],waiting:c?choices.waiting(c.version):[],enabled:!!c?.enabled,version:c?.version??v,stale:!!c&&c.version!==v,phase:c?(stages[c.phase]||'Fertig'):'Steinfüllung',stations:db.prepare('SELECT site,state FROM erebor_queue_sites ORDER BY site').all().map(r=>{
+  return {queue,counts,cannons:c?.version===v?cannonProgressRows(mains,helperJobs,report):[],helpers:c?helpers.list(c.version):[],waiting:c?choices.waiting(c.version):[],enabled:!!c?.enabled,version:c?.version??v,stale:!!c&&c.version!==v,phase:c?(stages[c.phase]||'Fertig'):'Steinfüllung',stations:db.prepare('SELECT site,state FROM erebor_queue_sites ORDER BY site').all().map(r=>{
    const s=JSON.parse(r.state),j=s.job,signal=report?.stations?.[r.site];
    const live=j?.loaded&&signal?.upload===j.desired.file?{state:signal.state,status:signal.status,placed:signal.placed,total:signal.total,fuel:signal.fuel,target:signal.target,chunks:signal.chunks?.length||0,at:report.at}:null;
    const native=signal?.state?{state:signal.state,status:signal.status,empty:signal.empty,placed:signal.placed,at:report.at}:null;

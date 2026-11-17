@@ -9,13 +9,21 @@ export function counterText(counts){
 }
 export function fleetState(r){
  const n=r?.live;
- if(!n||Date.now()-n.at>=45000)return {title:r?.file?'Keine aktuelle Rückmeldung':'Kein bestätigter Plan',tone:'offline'};
+ if(!n||!Number.isFinite(n.at)||Math.abs(Date.now()-n.at)>=45000)return {title:r?.file?'Keine aktuelle Rückmeldung':'Kein bestätigter Plan',tone:'offline'};
  if(n.state==='RUNNING')return {title:'Baut',tone:'working'};
  if(labels[n.status])return {title:labels[n.status],tone:'waiting'};
  if(n.state==='PAUSED'&&n.status==='ready')return {title:'Startbereit',tone:'ready'};
  if(n.state==='PAUSED')return {title:'Pausiert',tone:'ready'};
  if(n.state==='STOPPED')return {title:'Gestoppt',tone:'ready'};
  return {title:'Unbekannt',tone:'offline'};
+}
+export function renderCannonStrip(rows=[],site){
+ return '<div class="cannon-strip" aria-label="Kanonenfortschritt">'+['A','B','C'].map(slot=>{
+  const id=slot==='A'?site:site+slot,r=rows.find(r=>r.station===id),s=fleetState(r),n=s.tone==='offline'?null:r?.live;
+  const valid=n&&Number.isFinite(n.placed)&&n.placed>=0&&Number.isFinite(n.total)&&n.total>0;
+  const pct=valid?Math.max(0,Math.min(100,n.placed/n.total*100)):null;
+  return `<div class="cannon-strip-row ${s.tone}" title="${esc(r?.file||'Kein bestätigter Plan')}"><strong>${slot}</strong><span class="cannon-strip-state">${esc(s.title)}</span><span>${valid?fmt(n.placed)+' / '+fmt(n.total):'Unbekannt'}</span><div class="bar" role="progressbar" aria-label="Kanone ${slot}" aria-valuemin="0" aria-valuemax="100"${pct===null?'':` aria-valuenow="${pct}"`}><i style="width:${pct??0}%"></i></div></div>`;
+ }).join('')+'</div>';
 }
 export function setupEreborQueue({api,admin,active,notify,onStatus,onSite}){
  const root=document.getElementById('ereborQueue');
@@ -49,6 +57,7 @@ export function setupEreborQueue({api,admin,active,notify,onStatus,onSite}){
    else if(find('[data-resume-status]').textContent==='Zum Sammelstart als Campus-Admin anmelden.')setText('[data-resume-status]','');
   }
   setText('[data-station-name]',site);
+  find('[data-cannon-strip]').innerHTML=renderCannonStrip(last?.stale?[]:last?.cannons,site);
   setText('[data-catalog-heading]','Abschnitte für '+site);
   setText('[data-native]',s.title);find('[data-native]').className='fleet-pill '+s.tone;
   setText('[data-job]',r?.file||'Kein Bauplan eingelegt');
