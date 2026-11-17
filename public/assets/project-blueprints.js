@@ -42,7 +42,8 @@ export function createProjectBlueprints({api,isSelected,closeDrawer,loadedStatus
   const dates=new Map(queue.done.map(r=>[r.name,r.at]));
   const preferred=new Set(queue.preferred),search=$('search').value.trim().toLowerCase();
   const list=order.map((id,index)=>({id,index,b:byId.get(id)})).filter(({id,b})=>!search||(id+' '+(b?.name||'')+' '+(b?.origin||[]).join(' ')).toLowerCase().includes(search));
-  $('bpRows').innerHTML=list.slice(0,limit).map(({id,index,b})=>{
+  const fallback=[];
+  const visible=list.filter(({id,b},index)=>index<limit||b?.kind||station?.file===id).map(({id,index,b})=>{
    const current=station?.file===id&&!doneView,number=queue.pending.indexOf(id)+1;
    const state=doneView?'Erledigt':current?(loadedStatus(id+'.nbt',b?.sha256)||'Eingelegt'):preferred.has(id)?'Vorgezogen':number===1?'Als Nächstes':'Offen';
    const progress=doneView?(dates.get(id)?when(dates.get(id)):'Abgeschlossen'):current&&station.live?fmt(station.live.placed)+' / '+fmt(station.blocks):'Offen';
@@ -50,8 +51,11 @@ export function createProjectBlueprints({api,isSelected,closeDrawer,loadedStatus
    const priority=b&&!doneView&&!current&&number>1&&admin()?`<button class="small" data-promote="${esc(id)}">Vorziehen</button>`:'';
    const load=b&&!doneView&&!current&&!station?.automatic?loadButton(b):'';
    const links=b?`<button class="text-button" data-stone-id="${esc(id)}">Details</button> <a class="btn small" href="${esc(b.download)}" download>NBT</a>`:'';
-   return `<tr class="click" data-stone-id="${esc(id)}"><td><div class="blueprint-entry">${b?projectBlueprintPreview(b):''}<span><button class="text-button blueprint-name">${esc(b?.name||id)}</button><span class="muted mono blueprint-file">${esc(id)}.nbt</span><span class="cell-note">${esc(count)}</span></span></div></td><td><span class="badge ${doneView?'ok':current?'warn':''}">${esc(state)}</span>${number&&!doneView?`<div class="cell-note">Platz ${number}</div>`:''}</td><td>${b?(b.revision?'R'+b.revision:'v'+b.version):''}</td><td>${esc(progress)}</td><td>${priority} ${load} ${links}</td></tr>`;
-  }).join('')||'<tr><td colspan="5">'+(search?'Keine passenden Abschnitte.':doneView?'Noch kein bestätigter Abschluss.':'Alle veröffentlichten Abschnitte sind abgearbeitet.')+'</td></tr>';
+   const row=`<tr class="click" data-stone-id="${esc(id)}"><td><div class="blueprint-entry">${b?projectBlueprintPreview(b):''}<span><button class="text-button blueprint-name">${esc(b?.name||id)}</button><span class="muted mono blueprint-file">${esc(id)}.nbt</span><span class="cell-note">${esc(count)}</span></span></div></td><td><span class="badge ${doneView?'ok':current?'warn':''}">${esc(state)}</span>${number&&!doneView?`<div class="cell-note">Platz ${number}</div>`:''}</td><td>${b?(b.revision?'R'+b.revision:'v'+b.version):''}</td><td>${esc(progress)}</td><td>${priority} ${load} ${links}</td></tr>`;
+   if(b&&!b.kind&&!current){fallback.push(row);return '';}
+   return row;
+  }).join('');
+  $('bpRows').innerHTML=visible+(fallback.length?'<tr><td colspan="5"><details data-regular-fallback><summary>Reguläre Cleanstone-Fallbackpläne · '+fmt(fallback.length)+' angezeigt</summary><p>Beibehaltene Katalogpläne, keine zusätzliche Massiv-Restmenge. Automatische Auswahl unverändert; exakte voxelweise Abdeckung nicht nachgewiesen.</p><table class="blueprint-table stack-table"><thead><tr><th>Bauplan</th><th>Status</th><th>Version</th><th>Fortschritt</th><th>Aktion</th></tr></thead><tbody>'+fallback.join('')+'</tbody></table></details></td></tr>':'')||'<tr><td colspan="5">'+(search?'Keine passenden Abschnitte.':doneView?'Noch kein bestätigter Abschluss.':'Alle veröffentlichten Abschnitte sind abgearbeitet.')+'</td></tr>';
   $('stoneBlueprintCount').innerHTML=`${fmt(list.length)} ${doneView?'erledigte Abschnitte':'Abschnitte in der Baufolge'} · ${esc(getSite())} ${list.length>limit?'<button class="small" id="moreErebor">Weitere 150 anzeigen</button>':''}`;
   if($('moreErebor'))$('moreErebor').onclick=()=>{limit+=150;rows();};
  }
@@ -79,6 +83,6 @@ export function createProjectBlueprints({api,isSelected,closeDrawer,loadedStatus
 const [prepared,architecture,manifest,icons]=await Promise.all([api('/api/projects/erebor/stone/prepared?version='+project.version),api('/api/projects/erebor/architecture'),api('/api/projects/erebor/architecture/manifest'),fetch('/assets/material-icons/catalog.json').then(r=>r.json())]);if(!isSelected())return;catalog=icons;packages=prepared.packages;version=project.version;items=[...architectureBlueprints(project,architecture.packages),...preparedBlueprints(project,packages)];byId.clear();for(const b of items)byId.set(b.id,b);
   $('liveLine').textContent=`Erebor · ${architecture.packages.length} von ${manifest.packages.length} Architekturpaketen veröffentlicht.`;
   catalogAt=Date.now();
-  $('cards').innerHTML=`<span><b>${fmt(items.filter(b=>b.kind==='build').length)}</b> Architektur-Baupläne</span><span><b>${fmt(items.filter(b=>b.kind==='clear').length)}</b> Aushub-Dateien</span><span><b>${fmt(preparedBlueprints(project,packages).length)}</b> Cleanstone-Schematics</span><span><a href="/api/projects/erebor/stone/massif/plans">Massiver Cleanstone · Baupläne und Kanonen</a></span><span><a href="/viewer?project=erebor&room=E05">Blockvorschau öffnen</a></span>`;rows();coordinates();
+  $('cards').innerHTML=`<span><b>${fmt(items.filter(b=>b.kind==='build').length)}</b> Architektur-Baupläne</span><span><b>${fmt(items.filter(b=>b.kind==='clear').length)}</b> Aushub-Dateien</span><details><summary>Regulärer Cleanstone-Fallback</summary><span><b>${fmt(preparedBlueprints(project,packages).length)}</b> beibehaltene Katalog-Schematics (keine zusätzliche Massiv-Restmenge)</span></details><span><a href="/api/projects/erebor/stone/massif/plans">Massiver Cleanstone · Baupläne und Kanonen</a></span><span><a href="/viewer?project=erebor&room=E05">Blockvorschau öffnen</a></span>`;rows();coordinates();
  },rows,coordinates,changeSite(){limit=150;renderKey='';rows();},refreshQueue,updateLoadStates,coordinateText:()=>coordinateListText(items).replace('ATM10 Campus – Einsetzkoordinaten der aktuellen Baupläne','Erebor – Einsetzkoordinaten der gespeicherten Schematics')};
 }

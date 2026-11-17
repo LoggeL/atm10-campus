@@ -33,8 +33,8 @@
       <p><a href="/assets/erebor-me-auftrag.html">ME-Auftrag für die vier Connecting-Blöcke</a></p>
       <div class="fleet-headed"><div><p class="eyebrow">EREBOR · BAULEITUNG</p><h2 id="ereborQueueTitle">Kanonen</h2></div><details class="fleet-settings"><summary>Nachlegen für alle Kanonen</summary><p data-summary role="status">Planfolge wird geladen …</p><div class="row"><button type="button" class="hide" data-prepare>Nachlegen aktivieren</button><button type="button" class="hide" data-pause>Nachlegen pausieren</button></div></details></div>
       <div class="fleet-actions"><button type="button" class="primary" data-resume-fleet disabled>Pausierte Cleanstone-Kanonen fortsetzen</button><output data-resume-status></output></div>
-      <p data-global-counts aria-label="Gesamte Flotte: getrennte Planregister">Zähler unbekannt</p>
-      <p class="muted">Offen = noch nicht zugewiesen; zugewiesen umfasst wartende und aktive Drucker (A/B/C), nicht nur laufende Kanonen. Katalog und Massiv sind getrennte Planregister, keine addierbare Gesamtgeometrie.</p>
+      <details><summary>Flotten-Katalog und Massiv · getrennte Register (Details)</summary><p data-global-counts aria-label="Gesamte Flotte: getrennte Planregister">Zähler unbekannt</p>
+      <p class="muted">Offen = noch nicht zugewiesen; zugewiesen umfasst wartende und aktive Drucker (A/B/C), nicht nur laufende Kanonen. Katalog und Massiv sind getrennte Planregister, keine addierbare Gesamtgeometrie. Regulärer Cleanstone bleibt als Fallback erhalten; Architektur und Aushub sind eigene Bauphasen.</p></details>
       <div class="fleet-layout"><nav class="fleet-nav" aria-label="Kanone auswählen"><div class="fleet-grid" data-sites></div><p class="fleet-legend"><i></i> Baut <i></i> Bereit <i></i> Wartet</p></nav>
       <section class="fleet-station" aria-label="Ausgewählte Kanone">
         <div class="fleet-station-heading"><div><p class="eyebrow">AUSGEWÄHLTE KANONE</p><h3 data-station-name>K01</h3></div><span class="fleet-pill" data-native>Wird geladen</span></div>
@@ -43,12 +43,13 @@
         <div data-cannon-strip></div>
         <div class="fleet-metrics fleet-main-details"><div hidden><span>Gesetzte Blöcke</span><b data-placed>·</b></div><div><span>Treibstoff A</span><b data-fuel>·</b></div><div><span>Zielchunk A</span><b data-target>·</b></div></div>
         <p class="fleet-waiting" data-waiting hidden></p>
-        <p data-station-counts aria-label="Ausgewählte Station: getrennte Planregister">Zähler unbekannt</p>
+        <details><summary>Stations-Katalog / Fallback · Zählerdetails</summary><p data-station-counts aria-label="Ausgewählte Station: getrennte Planregister">Zähler unbekannt</p></details>
         <div class="fleet-actions"><button type="button" class="primary" data-auto aria-pressed="false" disabled>Automatik starten</button><button type="button" data-start disabled>Einmal starten</button></div>
         <p class="muted fleet-hint" data-hint role="status"></p>
       </section></div><div class="fleet-catalog-title"><h3 data-catalog-heading>Baupläne für K01</h3></div><div class="fleet-lists" aria-label="Abschnitte anzeigen">
-      <button type="button" data-list="open" aria-pressed="true">Katalog: offen + zugewiesen <span data-open-count></span></button>
-      <button type="button" data-list="done" aria-pressed="false">Katalog: erledigt <span data-done-count></span></button></div>
+      <button type="button" data-list="open" aria-pressed="true">Architektur & Fallback: offen</button>
+      <button type="button" data-list="done" aria-pressed="false">Architektur & Fallback: erledigt</button></div>
+      <details><summary>Katalogzählung (inkl. regulärem Fallback)</summary><p>Offen + zugewiesen: <span data-open-count></span> · Erledigt: <span data-done-count></span>. Nicht zur Massiv-Restmenge addieren.</p></details>
     </section>
     <div class="toolbar">
       <input class="search" id="search" type="search" placeholder="Bauplan suchen …" aria-label="Bauplan suchen">
@@ -142,5 +143,5 @@
 <dialog class="form-dialog" id="editDialog" aria-labelledby="editTitle"></dialog>
 <dialog class="picker-dialog" id="cannonPickerDialog" aria-labelledby="pickerTitle"></dialog>
 <input type="file" id="hiddenFile" accept=".nbt" class="hide">
-<script type="module" src="/assets/app.js?v=20261114-status-1&amp;revision=massif-remaining-1"></script>
+<script type="module" src="/assets/app.js?v=20261114-status-1&amp;revision=fallback-details-1"></script>
 </body></html>
