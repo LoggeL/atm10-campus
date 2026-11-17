@@ -28,6 +28,15 @@ export function parallelFleet(db,production,choices,request,recordedFinish,resum
     const row=lookup.get(v,site,slot);
     let job=row?.job&&JSON.parse(row.job);
     if(!signal?.state||(!job&&(!signal.ready||!enabled()||signal.upload||signal.state!=='STOPPED')))return;
+    // Native resource waits clear themselves. A full RCON inspection of each
+    // waiting helper competes with the very chest probes that let it resume.
+    if(job?.loaded&&signal.state==='PAUSED'&&['missingItem','missingBlock','noGunpowder','targetNotLoaded'].includes(signal.status)&&
+       signal.ready&&signal.aligned&&signal.upload===job.desired.file&&signal.owner===job.desired.owner&&
+       same(signal.anchor,job.desired.anchor)&&same(signal.size,job.size)&&
+       ((!needsSolidReplacement(job.desired)&&same(signal.options,[0,false,false]))||same(signal.options,[2,false,false]))){
+      if(row.message!==signal.status)save.run(JSON.stringify(job),signal.status,v,site,slot);
+      return;
+    }
     const missingReceipt=job?.loaded&&signal.empty&&signal.state==='STOPPED'&&signal.status==='finished'&&!signal.finish;
     if(missingReceipt && (!verifyStone||!job.source||!isStationStone(job,site)||!enabled()||!signal.ready||
        at-Math.max(job.seen*1000,job.lastWorldCheck||0)<90000)){

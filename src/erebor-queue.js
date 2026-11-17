@@ -189,39 +189,47 @@ export function registerEreborQueue(app,campus){
   const data={site,version:c.version};
   const signal=report?.stations?.[site],tracked=s.job;
   if(!choice&&tracked?.loaded&&signal&&Date.now()-report.at<15000){
-   if(signal.state==='STOPPED'&&signal.status==='finished'&&signal.empty&&(!signal.finish||tracked.tainted||massif.enabled(c.version))&&Date.now()/1000-tracked.seen>=90){
+   if(signal.state==='STOPPED'&&['finished','schematicInvalid'].includes(signal.status)&&signal.empty&&(!signal.finish||tracked.tainted||massif.enabled(c.version))&&Date.now()/1000-tracked.seen>=90){
     s.inserted=false;s.status='Wartet auf bestätigten Abschluss';
     if(!automatic()||!massif.enabled(c.version)||!verifyStone||!isStationStone(tracked,site)||signal.upload||
        Date.now()-(tracked.lastWorldCheck||0)<120000)return;
     tracked.lastWorldCheck=Date.now();
-    const entry=tracked.massif?null:production.ordered(p,site).open.find(e=>e.name===tracked.desired.blueprint&&e.sha256===tracked.desired.sha256);
+    const entry=tracked.massif?null:production.catalog(p,site).find(e=>e.stage==='stone'&&e.name===tracked.desired.blueprint);
     if(!entry&&!tracked.massif)return;
     const original=tracked.massif?massif.restore(c.version,site,'A',tracked.massif):published(p,site,entry);
-    if(!same(tracked.desired.anchor,original.job.desired.anchor)||!same(tracked.size,original.job.size)||tracked.desired.sha256!==original.job.desired.sha256)return;
+    if(!same(tracked.desired.anchor,original.job.desired.anchor)||!same(tracked.size,original.job.size))return;
+    const revised=original.job.desired.sha256!==tracked.desired.sha256;
+    if(revised&&tracked.massif)return;
     const filled=await verifyStone(p,{bytes:original.bytes,anchor:tracked.desired.anchor,size:tracked.size,blocks:original.job.blocks});
     const {observed}=await request('erebor-inspect',data);
-    if(!current(c.version)||observed.state!=='STOPPED'||!emptyStopped(observed)||observed.status!=='finished'||
+    if(!current(c.version)||!automatic()||choices.next(c.version,site)||!emptyStopped(observed)||observed.status!==signal.status||
        !same(observed.options,observedEreborOptions(tracked.desired,observed.options)))return;
     if(filled){
      tx(db,()=>{
       production.finish(c.version,site,tracked.desired.blueprint,new Date().toISOString());
       if(tracked.massif)massif.finish(c.version,tracked.massif,site,'A');
-      choices.mark(tracked.selection,'finished');s.cursor=tracked.next;s.completed++;s.job=null;
+      choices.mark(tracked.selection,revised?'replaced':'finished');s.cursor=tracked.next;s.completed++;s.job=null;
       s.status='Alle Steinziele im Weltstand bestätigt';persist(site,s);
      });
     }else{
-     s.job={...original.job,next:tracked.next,selection:tracked.selection,lastWorldCheck:Date.now()};
-     s.status='Offene Steinziele erneut eingeplant';
-     db.prepare('UPDATE erebor_queue_sites SET state=?,payload=? WHERE site=?').run(JSON.stringify(s),original.bytes,site);
-     production.started(c.version,site,null);
+     tx(db,()=>{
+      if(revised)choices.mark(tracked.selection,'replaced');
+      s.job={...original.job,next:tracked.next,selection:revised?null:tracked.selection,lastWorldCheck:Date.now()};
+      s.status='Offene Steinziele erneut eingeplant';
+      db.prepare('UPDATE erebor_queue_sites SET state=?,payload=? WHERE site=?').run(JSON.stringify(s),original.bytes,site);
+      production.started(c.version,site,null);
+     });
     }
     return;
    }
-   if(isStationStone(tracked,site)&&signal.upload===tracked.desired.file&&signal.state==='RUNNING'&&signal.aligned&&
+   const waiting=signal.state==='PAUSED'&&['targetNotLoaded','missingBlock','missingItem','noGunpowder'].includes(signal.status);
+   if(isStationStone(tracked,site)&&signal.upload===tracked.desired.file&&(signal.state==='RUNNING'||waiting)&&signal.aligned&&
       signal.owner===tracked.desired.owner&&same(signal.anchor,tracked.desired.anchor)&&same(signal.size,tracked.size)&&
       ((!needsSolidReplacement(tracked.desired)&&same(signal.options,[0,false,false]))||same(signal.options,[2,false,false]))&&Number.isSafeInteger(signal.placed)&&report.at>=tracked.seen*1000){
     if(signal.status==='skipping'||signal.placed<(tracked.placed||0))tracked.tainted=true;
-    tracked.placed=signal.placed;tracked.seen=report.at/1000;tracked.started=true;s.inserted=true;s.status='Baut';
+    tracked.placed=signal.placed;tracked.seen=report.at/1000;s.inserted=true;
+    if(waiting){s.status='Pausiert: '+signal.status;return;}
+    tracked.started=true;s.status='Baut';
     if(automatic()&&production.mode(c.version,site).started_upload!==signal.upload)production.started(c.version,site,signal.upload);
     return;
    }

@@ -11,6 +11,23 @@ class Pos{
  equals(p){return this.x===p.x&&this.y===p.y&&this.z===p.z;}distSqr(p){return (this.x-p.x)**2+(this.y-p.y)**2+(this.z-p.z)**2;}
 }
 class Cannon{}
+test('stalled printer support temporarily tickets only the surveyed station and the validated cursor fringe',()=>{
+ let tick;const held=[];
+ const pos=new Pos(0,64,0),anchor=new Pos(16,64,16);
+ const c=machine('K01',anchor,new Pos(80,64,16));
+ const classes={BlockPos:Pos,ChunkPos:class{constructor(p){this.p=p;}},TicketType:{create:(_,cmp,ttl)=>{assert.equal(ttl,120);return 'temporary';}},
+  Comparator:{naturalOrder:()=>({})},SchematicannonBlockEntity:Cannon,AllDataComponents:Components};
+ const layout={sites:Array.from({length:37},(_,i)=>({main:[i*16,64,0]}))};
+ const chunks={getChunkNow:x=>x===0,addRegionTicket:(_,p,level)=>held.push([p.p.x,p.p.z,level])};
+ const world={getChunkSource:()=>chunks,getBlockEntity:()=>c};
+ const code=readFileSync(new URL('../public/assets/erebor-stauhilfe.js',import.meta.url),'utf8');
+ vm.runInNewContext(code,{Java:{loadClass:n=>classes[n.split('.').at(-1)]},JsonIO:{read:()=>layout},ServerEvents:{tick:handler=>{tick=handler;}}});
+ const polls=n=>{for(let i=0;i<40*n;i++)tick({server:{overworld:()=>world}});};
+ polls(3);assert.deepEqual(held,[[pos.x,pos.z,2],[80,16,2]]);
+ held.length=0;c.target=new Pos(1900,64,16);polls(3);assert.deepEqual(held,[[pos.x,pos.z,2]]);
+ held.length=0;c.parts.OWNER='Other';polls(4);assert.deepEqual(held,[]);
+ c.parts.OWNER='Erebor';c.mode='STOPPED';polls(4);assert.deepEqual(held,[]);
+});
 const Components=Object.fromEntries(['OWNER','FILE','ANCHOR','BOUNDS','ROTATION','MIRROR'].map(k=>['SCHEMATIC_'+k,k]));
 function machine(n,anchor,target){
  const c=new Cannon();c.mode='PAUSED';c.state={name:()=>c.mode};c.statusMsg='targetNotLoaded';c.target=target;c.flights=[];

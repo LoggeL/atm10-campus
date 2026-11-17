@@ -147,7 +147,13 @@ export function ereborFeeder(db,request,version,liveReport){
     const amounts=new Map();
     for(const [slot,r] of entries){
      const job=group[slot];
-     const materials=isStationStone(job,site)||job.phase==='stone'?{'minecraft:stone':Math.max(0,job.blocks-r.placed)}:job.phase==='build'?job.materials:{};
+     const native=live.stations?.[site+(slot==='A'?'':slot)];
+     // Create can restore a counter above the NBT's block count. A confirmed
+     // stone printer still asking for material gets one stack to resume; the
+     // existing consumption ledger and chest buffer still bound all transfers.
+     const missingStone=isStationStone(job,site)&&native?.upload===r.file&&native.state==='PAUSED'&&
+      ['missingItem','missingBlock'].includes(native.status);
+     const materials=isStationStone(job,site)||job.phase==='stone'?{'minecraft:stone':Math.max(missingStone?64:0,job.blocks-r.placed)}:job.phase==='build'?job.materials:{};
      for(const [block,n] of Object.entries(materials||{}))for(const [item,count] of itemsFor(block))
       if(n>0&&!item.endsWith('_bucket'))amounts.set(item,(amounts.get(item)||0)+count*n);
     }
