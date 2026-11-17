@@ -2,6 +2,7 @@ import {createHash} from 'node:crypto';
 import {Region} from './region.js';
 import {chunkBlockReader} from './terrain.js';
 import {mountainTop,stoneNBT,validateMountain} from './project-stone.js';
+import {parseStructure} from './nbt.js';
 
 const naturalEntity=/^(minecraft:(?:sculk_.*|beehive)|evilcraft:blood_stain|naturesaura:aura_bloom|productivetrees:pollinated_leaves)$/;
 const dungeonEntity=/^(lootr:lootr_(?:chest|barrel|trapped_chest)|minecraft:mob_spawner|apotheosis:boss_spawner)$/;
@@ -12,6 +13,34 @@ const immutable=new Set(['minecraft:bedrock','minecraft:end_portal','minecraft:e
 const dungeon=(x,z)=>Math.abs(x-149)<=44&&Math.abs(z+9387)<=45;
 const pad=n=>String(n).padStart(2,'0');
 const inBox=(x,y,z,[a,b])=>x>=a[0]&&x<b[0]&&y>=a[1]&&y<b[1]&&z>=a[2]&&z<b[2];
+
+// Only newly surveyed repairs enter here. Keep published IDs, receipts and
+// player downloads immutable. Preserve the set of cannons that can take either layer.
+export function combineRepairLayers(rows,stations){
+ const donors=stations.flatMap(s=>[s.main,s.B,s.C]);
+ const reaches=(p,origin)=>Math.hypot(p[0]-origin[0],p[1]-origin[1],p[2]-origin[2])<256;
+ const byName=new Map(rows.map(r=>[r.tile,r])),used=new Set(),out=[];
+ for(const row of rows){
+  if(used.has(row.tile))continue;
+  const m=/^(X\d+_Z\d+_H)(\d+)(_LUFT)?$/.exec(row.tile);
+  const next=m&&byName.get(m[1]+pad(Number(m[2])+1)+(m[3]||''));
+  if(!next||row.blocks+next.blocks>16384||row.size[1]!==16||
+     next.origin[1]!==row.origin[1]+16||!donors.some(p=>reaches(p,row.origin))||
+     donors.some(p=>reaches(p,row.origin)!==reaches(p,next.origin))){
+   out.push(row);continue;
+  }
+  const positions=[];
+  for(const part of [row,next])for(const {x,y,z} of parseStructure(part.bytes).placed){
+   positions.push([x,y+part.origin[1]-row.origin[1],z]);
+  }
+  const size=[row.size[0],16+next.size[1],row.size[2]],bytes=stoneNBT(size,positions);
+  if(bytes.length>250*1024){out.push(row);continue;}
+  used.add(next.tile);
+  out.push({...row,tile:m[1]+m[2]+'_H'+pad(Number(m[2])+1)+(m[3]||''),size,blocks:positions.length,bytes,
+   oldestTargetSave:Math.min(row.oldestTargetSave,next.oldestTargetSave),sha:createHash('sha256').update(bytes).digest('hex')});
+ }
+ return out;
+}
 
 export function scanMassifColumn(world,plan,ix,iz,stations){
  validateMountain(plan);

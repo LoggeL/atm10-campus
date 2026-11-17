@@ -4,11 +4,26 @@ import {mkdtempSync,rmSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {DatabaseSync} from 'node:sqlite';
-import {scanMassifColumn} from '../src/erebor-massif-scan.js';
+import {scanMassifColumn,combineRepairLayers} from '../src/erebor-massif-scan.js';
+import {stoneNBT} from '../src/project-stone.js';
 import {registerMassif} from '../src/erebor-massif.js';
 import {parseStructure} from '../src/nbt.js';
 import {isStationStone,observedEreborOptions} from '../src/erebor-feeder.js';
 import {writeWorld} from './helpers.js';
+
+test('paired repairs preserve every world position, oldest save and eligible cannon',()=>{
+ const stations=[{main:[10,32,0],B:[11,32,0],C:[9,32,0]}];
+ const make=(layer,suffix)=>({tile:'X00_Z00_H0'+layer+suffix,origin:[16,layer*16,32],size:[64,16,64],blocks:1,
+   bytes:stoneNBT([64,16,64],[[1,layer+1,2]]),oldestTargetSave:70-layer});
+ const lo=make(0,'_LUFT'),hi=make(1,'_LUFT'),solid=make(1,''),special=make(0,'_BE');
+ const [merged,rest,be]=combineRepairLayers([lo,hi,solid,special],stations);
+ assert.equal(rest,solid);assert.equal(be,special);
+ assert.equal(merged.blocks,2);assert.equal(merged.oldestTargetSave,69);assert.deepEqual(merged.size,[64,32,64]);
+ assert.match(merged.tile,/_LUFT$/);assert.deepEqual(merged.origin,lo.origin);
+ assert.deepEqual(parseStructure(merged.bytes).placed.map(({x,y,z})=>[x,y,z]),[[1,1,2],[1,18,2]]);
+ const nearLimit=[16,-245,32];assert.equal(combineRepairLayers([lo,hi],[{main:nearLimit,B:nearLimit,C:nearLimit}]).length,2);
+ assert.equal(combineRepairLayers([lo,{...hi,blocks:17000}],stations).length,2);
+});
 
 test('solid, cavity, protected and special positions are separate in real stone-only NBT',()=>{
  const world=mkdtempSync(join(tmpdir(),'massif-scan-'));
@@ -65,5 +80,12 @@ test('reservations survive retries, respect physical reach and helper capability
   const borrowed=mass.reserve(12,'K02','B',false).job;
   assert.equal(borrowed.massif,'OTHER_LUFT');assert.match(borrowed.desired.blueprint,/^EREBOR_STEIN_K02_/);
   assert.equal(mass.reserve(12,'K01','C',false),null);
+  add.run('DOUBLE_LUFT',15,0);
+  db.exec("UPDATE erebor_massif_tiles SET sy=32 WHERE tile='DOUBLE_LUFT'");
+  db.prepare('INSERT INTO erebor_queue_sites VALUES(?)').run(JSON.stringify({job:{desired:{anchor:[15,36,0]}}}));
+  assert.equal(mass.reserve(12,'K01','C',false),null);
+  db.exec('DELETE FROM erebor_queue_sites');
+  assert.equal(mass.reserve(12,'K01','C',false).job.massif,'DOUBLE_LUFT');
+  assert.ok(mass.occupied(12).has('15,36,0'));
  }finally{for(const close of hooks)await close();db.close();}
 });

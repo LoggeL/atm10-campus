@@ -185,12 +185,14 @@ export function registerMassif(app,campus,stations){
   return tx(db,()=>{
    let r=db.prepare('SELECT * FROM erebor_massif_tiles WHERE v=? AND site=? AND slot=? AND done=0').get(v,site,slot);
    if(!r){
-    r=db.prepare(`SELECT t.*,((x-:x)*(x-:x)+(y-:y)*(y-:y)+(z-:z)*(z-:z)) AS d FROM erebor_massif_tiles t
-       WHERE v=:v AND site IS NULL AND done=0 AND special=0 AND x BETWEEN :x-255 AND :x+255 AND d<65536
-       AND (:solids OR tile GLOB '*_LUFT')
-       AND json_array(x,y,z) NOT IN (
+    r=db.prepare(`WITH active_catalog(anchor) AS MATERIALIZED (
         SELECT json_extract(state,'$.job.desired.anchor') FROM erebor_queue_sites WHERE json_type(state,'$.job.desired.anchor')='array' AND json_extract(state,'$.job.massif') IS NULL
         UNION ALL SELECT json_extract(job,'$.desired.anchor') FROM erebor_helpers WHERE version=:v AND json_type(job,'$.desired.anchor')='array' AND json_extract(job,'$.massif') IS NULL)
+       SELECT t.*,((x-:x)*(x-:x)+(y-:y)*(y-:y)+(z-:z)*(z-:z)) AS d FROM erebor_massif_tiles t
+       WHERE v=:v AND site IS NULL AND done=0 AND special=0 AND x BETWEEN :x-255 AND :x+255 AND d<65536
+       AND (:solids OR tile GLOB '*_LUFT')
+       AND json_array(x,y,z) NOT IN (SELECT anchor FROM active_catalog)
+       AND (sy<=16 OR json_array(x,y+16,z) NOT IN (SELECT anchor FROM active_catalog))
        ORDER BY (:primary AND tile NOT GLOB '*_LUFT') DESC,(home=:site) DESC,priority,d,tile LIMIT 1`).get({x:pos[0],y:pos[1],z:pos[2],v,site,primary:Number(slot==='A'),solids:Number(allowSolids)});
     if(!r)return null;
     db.prepare('UPDATE erebor_massif_tiles SET site=?,slot=? WHERE v=? AND tile=?').run(site,slot,v,r.tile);
@@ -198,7 +200,13 @@ export function registerMassif(app,campus,stations){
    return load(v,site,slot,r);
   });
  }
- const occupied=v=>new Set(db.prepare('SELECT DISTINCT x,y,z FROM erebor_massif_tiles WHERE v=? AND site IS NOT NULL AND done=0').all(v).map(r=>[r.x,r.y,r.z].join(',')));
+ const occupied=v=>{
+  const anchors=new Set();
+  for(const r of db.prepare('SELECT DISTINCT x,y,z,sy FROM erebor_massif_tiles WHERE v=? AND site IS NOT NULL AND done=0').all(v)){
+   for(let dy=0;dy<r.sy;dy+=16)anchors.add([r.x,r.y+dy,r.z].join(','));
+  }
+  return anchors;
+ };
  return {enabled,reserve,occupied,restore(v,site,slot,tile){const r=rowFor.get(v,tile);if(!r||r.site!==site||r.slot!==slot||r.done)throw Error('Massiv-Auftrag nicht mehr reserviert.');return load(v,site,slot,r);},
   finish(v,tile,site,slot){
    const updated=db.prepare('UPDATE erebor_massif_tiles SET done=1 WHERE v=? AND tile=? AND site=? AND slot=? AND done=0').run(v,tile,site,slot);
