@@ -57,6 +57,8 @@ export function setupEreborQueue({api,admin,active,notify,onStatus,onSite}){
    else if(find('[data-resume-status]').textContent==='Zum Sammelstart als Campus-Admin anmelden.')setText('[data-resume-status]','');
   }
   setText('[data-station-name]',site);
+  const massif=last?.counts?.stations?.[site]?.massif;
+  setText('[data-massif-remaining]',massif?fmt(massif.open+massif.inProgress):'Unbekannt');
   find('[data-cannon-strip]').innerHTML=renderCannonStrip(last?.stale?[]:last?.cannons,site);
   setText('[data-catalog-heading]','Abschnitte für '+site);
   setText('[data-native]',s.title);find('[data-native]').className='fleet-pill '+s.tone;
