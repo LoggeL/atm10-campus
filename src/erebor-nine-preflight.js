@@ -21,15 +21,27 @@ export function ninePreflight(config,observation,jobs=[],now=Date.now()){
  for(const g of config.groups){
   requireThat(name(g.id)&&!ids.has(g.id),'Distinct group IDs required');ids.add(g.id);
   requireThat(Number.isSafeInteger(g.computerId)&&g.computerId>=0&&!computers.has(g.computerId),'Distinct computer IDs required');computers.add(g.computerId);
-  requireThat(name(g.chestName)&&!chests.has(g.chestName)&&name(g.bridgeName),'Explicit distinct feed names required');chests.add(g.chestName);
-  // Named wired peripherals, not directions relative to the shared bridge.
-  requireThat(!['top','bottom','front','back','left','right'].includes(g.chestName)&&!['top','bottom','front','back','left','right'].includes(g.bridgeName),'Wired peripheral names required');
+  const sides=['top','bottom','front','back','left','right'];
+  requireThat(name(g.chestName)&&name(g.bridgeName),'Explicit feed names required');
+  if(g.access==='direct'){
+   requireThat(sides.includes(g.chestName)&&sides.includes(g.bridgeName)&&g.chestName!==g.bridgeName&&
+    adjacent(g.computer,config.bridge),'Direct computer must adjoin shared bridge');
+  }else{
+   requireThat(g.access===undefined||g.access==='wired','Unknown peripheral access');
+   requireThat(!chests.has(g.chestName),'Explicit distinct feed names required');chests.add(g.chestName);
+   requireThat(!sides.includes(g.chestName)&&!sides.includes(g.bridgeName),'Wired peripheral names required');
+  }
   claim(g.computer);claim(g.chest);
   requireThat(adjacent(g.computer,g.chest)&&Array.isArray(g.slots)&&g.slots.length===3,'One local computer and three neighbours per chest required');
   const observed=observation.groups.filter(o=>o.id===g.id);
   requireThat(observed.length===1,'Group observation missing or duplicated');
   const o=observed[0];
-  for(const key of ['computerId','computer','chest','chestName','bridgeName'])requireThat(same(o[key],g[key]),'Feed identity mismatch');
+  for(const key of ['computerId','computer','chest','chestName','bridgeName','access'])requireThat(same(o[key],g[key]),'Feed identity mismatch');
+  if(g.access==='direct'){
+   const p=o.exportProof;
+   requireThat(p?.computerId===g.computerId&&p.chestName===g.chestName&&p.bridgeName===g.bridgeName&&
+    p.exported===1&&p.returned===1&&p.emptyAfter===true,'Direct export and rollback proof required');
+  }
   requireThat(o.chestBlock==='sophisticatedstorage:netherite_chest'&&Array.isArray(o.slots)&&o.slots.length===3,'Netherite chest and consumers unconfirmed');
   for(const s of g.slots){
    requireThat(/^[A-I]$/.test(s.slot)&&!slots.has(s.slot),'Distinct A-I slots required');slots.add(s.slot);

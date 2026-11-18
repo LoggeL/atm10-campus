@@ -1,10 +1,52 @@
 # Optional nine-cannon preparation — LOCAL ONLY
 
-Status: tested concrete subset, **not a working nine-cannon runtime**. Do not push,
-open a PR, deploy, install, reload scripts, restart a service or change queues/world
-until the owner explicitly reports the hardware built and authorizes completion.
-This branch deliberately leaves all existing dispatch, telemetry and feeder paths
-unchanged. Three-slot production remains the default.
+Status: tested concrete subset, **not a working nine-cannon runtime**. Hardware-built
+completion authorization has now been received for K12 only. The bounded live AP
+checks below were performed; this branch still leaves all existing dispatch,
+telemetry and feeder paths unchanged. Three-slot production remains the default.
+No runtime rollout or publishing has been performed by this follow-up.
+
+## K12 live follow-up — 2026-11-18
+
+- West computer #50 and east #51 independently expose the shared ME bridge as
+  `back` and their own Netherite chest as `front`. Both bridges measured online.
+  AP 0.8.2a accepted **computer-local** `exportItem('front', {name='minecraft:stone',
+  count=1})` on both computers. Each exact local inventory changed from empty to
+  one stone, and `importItem('front', ...count=1)` returned that stone; final local
+  inventory was empty. No `@direction` or guessed wired inventory name was used.
+  This corrects the earlier wired-only prerequisite: direct access works in this
+  installed version when independently checked in each computer namespace.
+- #50 is labelled `erebor-K12-D-F`; #51 is `erebor-K12-G-I`. Native readback
+  confirmed both IDs, positions and labels. Original #23 was not shut down, edited,
+  relabelled, read for credentials or reused as a second identity.
+- The only persistent new computer startup sets its group label and exits. No
+  feeder, token, HTTP endpoint, job loop or material automation was installed.
+  One-shot diagnostic scripts/markers/results were archived out of both computers.
+- Native D–I readback: six STOPPED/idle, empty inventories, zero placed/total/fuel,
+  reset printers. Native `skip_missing` is currently true on each; dispatch must
+  still use the existing guarded prepare path to establish required options.
+- Concrete software blockers: the actual installed controller rejects all
+  `erebor-inspect` requests K12D–K12I with `Unbekannter Kanonenplatz` before any
+  world access; tracker has K12/K12B/K12C only; live Campus DB has only the original
+  K12 feeder and B/C helper rows. Group-specific authenticated feed registration,
+  controller physical proof, scheduler/reservation and UI integration are NOT
+  implemented. Labels and the offline validator are not activation.
+- Current phase remains V12 `stoneOnly=1`. Read-only candidate audit found the first
+  legacy-order cavity candidate within full-target range for all six positions
+  (zero unreachable positions out of 65,536 targets each). Thus neither missing
+  materials, mandatory wired modems nor a proven range failure may be given as the
+  reason for the software blocker. This audit is not a reservation or overlap
+  clearance for an eventual concurrent assignment.
+- Original A/B/C retained their exact uploaded files and each advanced 1,720 blocks
+  between trusted persisted tracker snapshots. Minecraft StartedAt remained unchanged.
+- Local validator now permits explicitly attested direct computer namespaces;
+  it remains `prepared-only`, never a runtime lease or trusted telemetry source.
+  Focused tests: 23 pass. Complete serial Node suite after rebase onto current
+  upstream `1b8e03a`: 244 pass. No push or application/controller deployment.
+
+Private machine-local raw evidence is under the scratch `k12-activation` directory;
+no tokens or original feeder settings were collected. The remaining runtime work
+is still listed below; this follow-up does not claim nine-cannon completion.
 
 ## Scope and test seam
 

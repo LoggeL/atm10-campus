@@ -15,6 +15,31 @@ function fixture(){
  const observation={at:now,version:12,site:'K01',dimension:config.dimension,bridge:{position:config.bridge,online:true,powered:true},groups:structuredClone(groups).map(g=>({...g,chestBlock:'sophisticatedstorage:netherite_chest',slots:g.slots.map(s=>({...s,empty:true}))}))};
  return {config,observation};
 }
+test('direct AP names are scoped to independently verified computer namespaces',()=>{
+ const f=fixture();
+ // All three computers face outward from one bridge; each chest is opposite it.
+ const coords=[
+  {computer:[0,0,1],chest:[0,0,2],slots:[[0,0,3],[-1,0,2],[1,0,2]]},
+  {computer:[-1,0,0],chest:[-2,0,0],slots:[[-3,0,0],[-2,0,-1],[-2,0,1]]},
+  {computer:[1,0,0],chest:[2,0,0],slots:[[3,0,0],[2,0,-1],[2,0,1]]},
+ ];
+ f.config.bridge=[0,0,0];f.observation.bridge.position=[0,0,0];
+ for(let i=0;i<3;i++){
+  const g=f.config.groups[i],p=coords[i];
+  Object.assign(g,{access:'direct',computer:p.computer,chest:p.chest,chestName:'front',bridgeName:'back'});
+  g.slots.forEach((s,j)=>s.position=p.slots[j]);
+  f.observation.groups[i]={...structuredClone(g),chestBlock:'sophisticatedstorage:netherite_chest',
+   exportProof:{computerId:g.computerId,chestName:'front',bridgeName:'back',exported:1,returned:1,emptyAfter:true},
+   slots:g.slots.map(s=>({...s,empty:true}))};
+ }
+ const r=ninePreflight(f.config,f.observation,[],now);
+ assert.equal(r.runtimeEnabled,false);
+ assert.deepEqual(r.groups.map(g=>g.computerId),[0,1,2]);
+ const bad=structuredClone(f);delete bad.observation.groups[1].exportProof;
+ assert.throws(()=>ninePreflight(bad.config,bad.observation,[],now),/Direct export/);
+ const cross=structuredClone(f);cross.observation.groups[1].exportProof.computerId=0;
+ assert.throws(()=>ninePreflight(cross.config,cross.observation,[],now),/Direct export/);
+});
 test('explicit measured mapping prepares isolated groups, never enables runtime',()=>{
  const {config,observation}=fixture();
  const result=ninePreflight(config,observation,[],now);
