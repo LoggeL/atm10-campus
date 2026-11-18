@@ -420,7 +420,8 @@ export function registerEreborQueue(app,campus){
   const helperJobs=helpers.list(p.current_version).map(r=>({...r,job:helpers.jobAt(p.current_version,r.site,r.slot)}));
   const counts=productionCounts(db,production,p,sites,mains,helperJobs);
   const published=!!db.prepare('SELECT 1 FROM erebor_massif_runs WHERE v=?').get(p.current_version);
-  const counter=constructionCounter(production,p,sites,[...mains,...helperJobs],counts,published);
+  const tiles=published?db.prepare('SELECT blocks,done,special,site,home FROM erebor_massif_tiles WHERE v=? AND done=0').all(p.current_version):null;
+  const counter=constructionCounter(production,p,sites,[...mains,...helperJobs],counts,published,tiles);
   // Only consume existing signed telemetry cache: this GET issues no controller commands.
   const report=liveCache?.version===p.current_version?liveCache:null;
   const jobs=new Map([...mains.map(r=>[r.site,r.job]),...helperJobs.map(r=>[r.site+r.slot,r.job])]);
