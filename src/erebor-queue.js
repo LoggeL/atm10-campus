@@ -2,6 +2,7 @@ import {cannonProgressRows} from './cannon-progress-rows.js';
 import {publishedPlan,selectionStore,unstarted} from './erebor-selection.js';
 import {productionStore} from './erebor-production.js';
 import {productionCounts} from './erebor-counts.js';
+import {constructionCounter} from './erebor-bauzaehler.js';
 import {registerMassif} from './erebor-massif.js';
 import {parallelFleet,parallelLayout} from './erebor-parallel.js';
 import {Region} from './region.js';
@@ -410,6 +411,15 @@ export function registerEreborQueue(app,campus){
    return {site:r.site,automatic:!!production.mode(c.version,r.site).enabled,status:s.status,live,native,nativeOptions:signal?.options??null,upload:j?.desired.file??null,kind:j?.phase??null,inserted:!!s.inserted,sha256:j?.desired.sha256||null,file:j?.desired.blueprint||null,anchor:j?.desired.anchor||null,blocks:j?.blocks??null,completed:s.completed,checked:s.checked||null};
   })};
  }
+ app.get('/api/projects/erebor/bauzaehler',async(req,reply)=>{
+  requireActor(req,'read');
+  const p=project();if(!p)throw new HttpError(404,'Erebor nicht verfügbar.');
+  const mains=cfg()?.version===p.current_version?db.prepare('SELECT site,state FROM erebor_queue_sites').all().map(r=>({site:r.site,...JSON.parse(r.state)})):[];
+  const helperJobs=helpers.list(p.current_version).map(r=>({...r,job:helpers.jobAt(p.current_version,r.site,r.slot)}));
+  const counts=productionCounts(db,production,p,sites,mains,helperJobs);
+  const published=!!db.prepare('SELECT 1 FROM erebor_massif_runs WHERE v=?').get(p.current_version);
+  return reply.header('Cache-Control','private, no-store').send(constructionCounter(production,p,sites,[...mains,...helperJobs],counts,published));
+ });
  app.get(base,async(req,reply)=>{requireActor(req,'read');const report=await liveReport(cfg()?.version);return reply.header('Cache-Control','private, no-store').send(status(report,req.query.site));});
  app.get(base+'/drucker-reparatur.zip',async(req,reply)=>{
   requireActor(req,'admin');
