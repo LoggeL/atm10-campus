@@ -52,6 +52,18 @@ for(const mode of ['success','stale-start-inspection','future-start-inspection',
   }
   const result=await scheduler.tick({site:'K12',version:12,group:'DEF',positions,computerId:50,chestSide:'front'});
   assert.equal(result.state,'started');assert.equal(result.started.length,3);
+  const mapping={site:'K12',version:12,group:'DEF',positions,computerId:50,chestSide:'front'};
+  assert.equal((await scheduler.renew(mapping)).state,'renewed');
+  assert.equal((await scheduler.renew({...mapping,group:'GHI'})).state,'disabled');
+  f.db.exec(`UPDATE cannons SET options_json='{"paused":true}'`);
+  await assert.rejects(scheduler.renew(mapping),/gesperrt/);
+  f.db.exec(`UPDATE cannons SET options_json='{}'`);
+  const d=f.db.prepare("SELECT job FROM erebor_helpers WHERE slot='D'").get().job;
+  f.db.prepare('INSERT INTO erebor_queue_sites(state) VALUES(?)').run(JSON.stringify({job:JSON.parse(d)}));
+  await assert.rejects(scheduler.renew(mapping),/mehrfach/);
+  f.db.exec('DELETE FROM erebor_queue_sites');
+  f.db.exec('DELETE FROM erebor_group_feeders');
+  await assert.rejects(scheduler.renew(mapping),/Pilotbindung/);
   assert.ok(calls.indexOf('erebor-target-leases')<calls.indexOf('erebor-start'));
   assert.equal(f.db.prepare('SELECT count(*) n FROM erebor_helpers WHERE json_extract(job,\'$.started\')=1').get().n,3);
  }finally{await f.close();}

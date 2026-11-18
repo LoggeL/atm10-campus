@@ -393,7 +393,14 @@ export function registerEreborQueue(app,campus){
   working=tick().catch(e=>app.log.error(e)).finally(()=>{working=null;if(queued){queued=false;wake();}});
  }
  const timer=setInterval(()=>{if(!working)wake();},10000);timer.unref();
- app.addHook('onClose',async()=>{closed=true;clearInterval(timer);stopWorker();await working;});
+ let renewing=null;
+ const renewalTimer=setInterval(()=>{
+  if(closed||renewing||!config.ereborPilot)return;
+  renewing=pilot.renew(config.ereborPilot).then(s=>{campus.ereborPilotRenewal=s;})
+   .catch(e=>{campus.ereborPilotRenewal={state:'blocked',message:e.message};})
+   .finally(()=>{renewing=null;});
+ },2000);renewalTimer.unref();
+ app.addHook('onClose',async()=>{closed=true;clearInterval(timer);clearInterval(renewalTimer);stopWorker();await working;await renewing;});
  const throughput=placementThroughput();
  let liveFetch=null,liveCache=null,readAt=0;
  async function liveReport(version){

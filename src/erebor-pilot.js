@@ -1,3 +1,4 @@
+import {targetRenewal} from './erebor-pilot-renewal.js';
 import {randomUUID} from 'node:crypto';
 import {isDeepStrictEqual as same} from 'node:util';
 import {verifyAlignment,cannonReset} from './alignment.js';
@@ -9,7 +10,12 @@ import {verifyAlignment,cannonReset} from './alignment.js';
 export function pilotScheduler(db,massif,request,supply){
  db.exec(`CREATE TABLE IF NOT EXISTS erebor_pilot_claim(id INTEGER PRIMARY KEY CHECK(id=1),owner TEXT,expires INTEGER); INSERT OR IGNORE INTO erebor_pilot_claim VALUES(1,NULL,0)`);
  const row=(v,s)=>db.prepare('SELECT job FROM erebor_helpers WHERE version=? AND site=\'K12\' AND slot=?').get(v,s)?.job;
- return {async tick(mapping){
+ let renewSnapshot=null,renewMapping=null;
+ const renewal=targetRenewal(()=>renewSnapshot?.()??null,request);
+ return {async renew(mapping){
+  if(!mapping||!same(mapping,renewMapping))return {state:'disabled'};
+  return renewal.tick();
+ },async tick(mapping){
   if(!mapping)return {state:'disabled'};
   const m=structuredClone(mapping),{site,version:v,group,positions}=m;
   if(site!=='K12'||!['DEF','GHI'].includes(group)||!Number.isSafeInteger(v))throw Error('Ungültige Pilotbindung');
@@ -82,6 +88,18 @@ export function pilotScheduler(db,massif,request,supply){
     if(!r.started||r.observed?.state!=='RUNNING'||!matches(j,r.observed))throw Error('Pilotstart nicht bestätigt');
     j.started=true;save(s,j);started.push(site+s);
    }
+   // Arm only after complete native dispatch, never on a material plan alone.
+   // Re-read reservations/credentials/phase on every independent renewal.
+   renewMapping=structuredClone(m);
+   renewSnapshot=()=>{
+    gate();
+    if([...group].some(s=>row(v,s)!==expected[s]))throw Error('Pilotauftrag geändert');
+    const files=Object.values(lease.jobs).map(j=>j.file);
+    const helpers=db.prepare('SELECT job FROM erebor_helpers').all().map(r=>JSON.parse(r.job||'null')?.desired?.file).filter(Boolean);
+    const mains=db.prepare('SELECT state FROM erebor_queue_sites').all().map(r=>JSON.parse(r.state||'{}').job?.desired?.file).filter(Boolean);
+    if(files.some(f=>helpers.filter(x=>x===f).length!==1||mains.includes(f)))throw Error('Pilotauftrag mehrfach reserviert');
+    return {version:v,jobs:structuredClone(lease.jobs)};
+   };
    return {state:'started',started,expiresAt:lease.expiresAt};
   }finally{db.prepare('UPDATE erebor_pilot_claim SET owner=NULL,expires=0 WHERE id=1 AND owner=?').run(owner);}
  }};

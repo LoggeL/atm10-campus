@@ -49,6 +49,8 @@ def handle(bridge, action, obj):
     layout = json.loads(Path(__file__).with_name('erebor-stations.json').read_text())
     if action == 'erebor-target-leases':
         return publish_target_leases(bridge, layout, obj)
+    if action == 'erebor-group-proof':
+        return group_physical_proof(bridge, layout, obj)
     if action == 'erebor-live':
         import time
         if not isinstance(obj,dict) or set(obj)!={'version'} or obj['version']!=layout['version']:
@@ -279,6 +281,58 @@ def observer_binding(layout, key, *, runtime=False):
         require(all(not adjacent(p, other['chest']) for other in groups if other is not group for p in group['slots'].values()))
     require(key in bindings)
     return bindings[key]
+
+
+def runtime_mapping():
+    return json.loads(Path(__file__).with_name('erebor-runtime-tracker.json').read_text())
+
+
+def group_physical_proof(bridge, layout, obj):
+    """Read-only native identity proof; never claims authenticated CC delivery.
+
+    The signed app request supplies complete persisted reservation identities.
+    A physical observation alone deliberately cannot arm optional dispatch.
+    """
+    import time
+    from campus_discovery import condition, FACING, side_offset, NEIGHBORS
+    def require(ok):
+        if not ok:
+            raise ValueError('K12-Gruppenbeweis nicht bestätigt.')
+    require(isinstance(obj, dict) and set(obj) == {'site','version','group','computerId','chestSide','jobs'})
+    require(obj['site'] == 'K12' and obj['version'] == layout['version'] and obj['group'] in ('DEF','GHI'))
+    keys = {'K12'+s for s in obj['group']}
+    require(isinstance(obj['jobs'], dict) and set(obj['jobs']) == keys)
+    mapping = runtime_mapping()
+    bindings = {k:observer_binding(layout,k,runtime=True) for k in sorted(keys)}
+    row = next(r for r in mapping['sites'] if r['site'] == 'K12')
+    group = next(g for g in row['groups'] if set(g['slots']) == set(obj['group']))
+    require(type(obj['computerId']) is int and obj['computerId'] == group['computerId'])
+    delta = tuple(a-b for a,b in zip(group['chest'],group['computer']))
+    faces = [f for f in FACING if obj['chestSide'] in ('front','back','left','right','top','bottom') and side_offset(f,obj['chestSide']) == delta]
+    require(len(faces) == 1)
+    pos = lambda p:' '.join(map(str,p))
+    cp,hp = pos(group['computer']),pos(group['chest'])
+    prefix = 'execute in minecraft:overworld'
+    require(any(condition(bridge,prefix+' if loaded '+cp+' if block '+cp+' '+block+'[facing='+faces[0]+']{ComputerId:'+str(obj['computerId'])+'}') for block in ('computercraft:computer_normal','computercraft:computer_advanced')))
+    require(any(condition(bridge,prefix+' if loaded '+hp+' if block '+hp+' '+block) for block in ('minecraft:chest[type=single]','sophisticatedstorage:netherite_chest[type=single]')))
+    require(condition(bridge,prefix+' if loaded '+pos(row['bridge'])+' if block '+pos(row['bridge'])+' advancedperipherals:me_bridge'))
+    allowed = {tuple(p) for p in group['slots'].values()}
+    for d in NEIGHBORS:
+        p = tuple(a+b for a,b in zip(group['chest'],d))
+        require(condition(bridge,prefix+' if loaded '+pos(p)+(' if block ' if p in allowed else ' unless block ')+pos(p)+' create:schematicannon'))
+    files = set()
+    for key,binding in bindings.items():
+        j = obj['jobs'][key]
+        require(isinstance(j,dict) and set(j) == {'file','anchor','size','options'})
+        require(isinstance(j['file'],str) and j['file'] not in files)
+        files.add(j['file'])
+        observed = bridge.inspect(binding)
+        require(type(observed.get('at')) in (int,float) and 0 <= time.time()-observed['at'] < 10)
+        c = observed.get('components',{})
+        require(c.get('create:schematic_owner') == 'Erebor' and c.get('create:schematic_file') == j['file'] and c.get('create:schematic_anchor') == j['anchor'] and c.get('create:schematic_bounds') == j['size'])
+        require(j['options'] == [2,False,False] and observed.get('options') == dict(replace_mode=2,skip_missing=False,replace_block_entities=False))
+    require(runtime_mapping() == mapping)
+    return {'verified':False,'physicalVerified':True,'reason':'authenticated-delivery-required','jobs':obj['jobs'],'at':int(time.time()*1000)}
 
 
 def publish_target_leases(bridge, layout, obj):
