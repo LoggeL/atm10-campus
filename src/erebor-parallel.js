@@ -143,18 +143,54 @@ export function parallelFleet(db,production,choices,request,recordedFinish,resum
       if(!enabled()||!signal.ready||job.started||job.tainted||!Number.isInteger(job.baseline)||observed.flyingBlocks!==0 ||
          !['PAUSED','STOPPED'].includes(observed.state)||['missingItem','missingBlock','noGunpowder','targetNotLoaded'].includes(observed.status))return;
       const result=await request('erebor-start',operation);
-      if(current()&&result.started&&matches(result.observed)){job.started=true;set('Gestartet');}
+      if(current()&&result.started&&matches(result.observed)){
+        // The bridge also acknowledges initialization into PAUSED/noGunpowder.
+        // This is still the first start until Create reports actual running.
+        job.started=result.observed.state==='RUNNING';
+        set(job.started?'Gestartet':result.observed.status||'Wartet auf den ersten Start');
+      }
     }catch(e){if(current())set(e.message);}
   }
   const jobAt=(version,site,slot)=>JSON.parse(lookup.get(version,site,slot)?.job||'null');
+  const lastFirstStart=new Map();
+  async function startFueledExtras(p,report,enabled,read,current){
+    if(!report || Date.now()-report.at>=15000 || report.at>Date.now())return;
+    const ready=[];
+    for(const station of parallelLayout.sites){
+      if(!groupSites.has(station.site)||!enabled(station.site))continue;
+      for(const slot of slotsFor(station.site).slice(3)){
+        const key=station.site+slot, signal=report.stations[key];
+        if(signal?.state!=='PAUSED'||signal.status!=='ready'||!signal.ready||!signal.aligned||signal.placed!==0)continue;
+        const job=jobAt(p.current_version,station.site,slot);
+        if(!job?.loaded||job.started||job.tainted||!Number.isInteger(job.baseline)||job.placed>0||
+           !isStationStone(job,station.site)||signal.upload!==job.desired.file||signal.owner!==job.desired.owner||
+           !same(signal.anchor,job.desired.anchor)||!same(signal.size,job.size))continue;
+        const previous=lastFirstStart.get(key);
+        const last=previous?.file===signal.upload?previous.at:0;
+        if(Date.now()-last>=30000)ready.push({key,station,slot,signal,last});
+      }
+    }
+    // Interleave newly fueled machines with initial assignments on large fleets.
+    // The same serialized service performs the native inspection, file and flight checks.
+    ready.sort((a,b)=>a.last-b.last);
+    for(const r of ready.slice(0,3)){
+      if(!current()||Date.now()-report.at>=15000)break;
+      const active=()=>enabled(r.station.site);
+      if(!active())continue;
+      lastFirstStart.set(r.key,{file:r.signal.upload,at:Date.now()});
+      await service(p,r.station,r.slot,r.signal,report.at,active,read(r.station.site),current);
+    }
+  }
   return {reserved,list,jobs,isEnabled,switchAll,jobAt,async tick(p,report,enabled,read,current,refresh){
     if(report?.version!==parallelLayout.version||report.sharedChest!==4||!report.stations)return;
+    await startFueledExtras(p,report,enabled,read,current);
     for(const pair of parallelLayout.sites){
       for(const slot of slotsFor(pair.site).slice(1)){
         if(!current())return;
-        if(Date.now()-report.at>=30000&&refresh){
+        if(Date.now()-report.at>=12000&&refresh){
           report=await refresh();
           if(report?.version!==parallelLayout.version||report.sharedChest!==4||!report.stations||!current())return;
+          await startFueledExtras(p,report,enabled,read,current);
         }
         const signal=report.stations[pair.site+slot];
         if(signal?.state && Date.now()-report.at<45000){
