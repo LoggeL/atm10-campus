@@ -3,6 +3,7 @@ import {publishedPlan,selectionStore,unstarted} from './erebor-selection.js';
 import {productionStore} from './erebor-production.js';
 import {productionCounts} from './erebor-counts.js';
 import {constructionCounter} from './erebor-bauzaehler.js';
+import {placementThroughput} from './erebor-throughput.js';
 import {registerMassif} from './erebor-massif.js';
 import {parallelFleet,parallelLayout} from './erebor-parallel.js';
 import {Region} from './region.js';
@@ -381,11 +382,12 @@ export function registerEreborQueue(app,campus){
  }
  const timer=setInterval(()=>{if(!working)wake();},10000);timer.unref();
  app.addHook('onClose',async()=>{closed=true;clearInterval(timer);stopWorker();await working;});
+ const throughput=placementThroughput();
  let liveFetch=null,liveCache=null,readAt=0;
  async function liveReport(version){
   if(!Number.isInteger(version))return null;
   if(Date.now()-readAt<1500)return liveCache;
-  if(!liveFetch)liveFetch=request('erebor-live',{version}).then(r=>r.version===version&&Math.abs(Date.now()-r.at)<45000?r:null).catch(()=>null).then(r=>{readAt=Date.now();liveCache=r;return r;}).finally(()=>{liveFetch=null;});
+  if(!liveFetch)liveFetch=request('erebor-live',{version}).then(r=>r.version===version&&Math.abs(Date.now()-r.at)<45000?r:null).catch(()=>null).then(r=>{readAt=Date.now();liveCache=r;throughput.observe(r);return r;}).finally(()=>{liveFetch=null;});
   return liveFetch;
  }
  campus.ereborLiveReport=liveReport;
@@ -418,7 +420,16 @@ export function registerEreborQueue(app,campus){
   const helperJobs=helpers.list(p.current_version).map(r=>({...r,job:helpers.jobAt(p.current_version,r.site,r.slot)}));
   const counts=productionCounts(db,production,p,sites,mains,helperJobs);
   const published=!!db.prepare('SELECT 1 FROM erebor_massif_runs WHERE v=?').get(p.current_version);
-  return reply.header('Cache-Control','private, no-store').send(constructionCounter(production,p,sites,[...mains,...helperJobs],counts,published));
+  const counter=constructionCounter(production,p,sites,[...mains,...helperJobs],counts,published);
+  // Only consume existing signed telemetry cache: this GET issues no controller commands.
+  const report=liveCache?.version===p.current_version?liveCache:null;
+  const jobs=new Map([...mains.map(r=>[r.site,r.job]),...helperJobs.map(r=>[r.site+r.slot,r.job])]);
+  const rows=cannonProgressRows(mains,helperJobs,report).map(r=>{
+   const job=jobs.get(r.station);
+   return {...r,live:job?.tainted?null:r.live,workloadBlocks:['stone','build'].includes(job?.phase)?job.blocks:null};
+  });
+  counter.throughput=throughput.read(report,rows);
+  return reply.header('Cache-Control','private, no-store').send(counter);
  });
  app.get(base,async(req,reply)=>{requireActor(req,'read');const report=await liveReport(cfg()?.version);return reply.header('Cache-Control','private, no-store').send(status(report,req.query.site));});
  app.get(base+'/drucker-reparatur.zip',async(req,reply)=>{
