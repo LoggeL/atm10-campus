@@ -76,6 +76,12 @@ def handle(bridge, action, obj):
     if not isinstance(obj, dict) or set(obj) != required or obj['version'] != layout['version']:
         raise ValueError('Erebor-Standortplan oder Auftrag passt nicht.')
     key = obj['site']
+    if isinstance(key, str) and re.fullmatch(r'K[0-9]{2}[D-I]', key):
+        # New physical addresses are observations, NOT scheduler/feed capability.
+        # Reject mutation before looking up opt-in config or touching the world.
+        if action != 'erebor-inspect':
+            raise ValueError('Zusatzkanonen D–I sind nur zur Beobachtung freigegeben.')
+        return {'observerOnly': True, 'observed': bridge.inspect(observer_binding(layout, key))}
     helper = isinstance(key, str) and re.fullmatch(r'(K[0-9]{2})([BC])', key)
     parent = helper[1] if helper else key
     site = next((s for s in layout['sites'] if s['site'] == parent), None)
@@ -165,6 +171,71 @@ def handle(bridge, action, obj):
             validate_clear((bridge.base/'data/schematics/uploaded'/b['owner']/desired['file']).read_bytes(),obj['size'])
         return start(bridge,b,desired,opts,observed,erebor_clear=clear,bounds=obj['size'])
     return prepare_schematic(bridge,b,desired,obj['nbtBase64'],opts,obj['size'],erebor_kind=kind,previous=obj.get('previous'))
+
+
+def observer_binding(layout, key):
+    """Validate the entire opt-in map before exposing any new native read target.
+
+    This file is intentionally separate from scheduling and material identities.
+    A mapping never authorizes prepare/start/supply, target tickets or mode edits.
+    """
+    def require(ok):
+        if not ok:
+            raise ValueError('Ungültige Beobachtungszuordnung.')
+    def exact(value, keys):
+        return isinstance(value, dict) and set(value) == set(keys)
+    def position(p):
+        return isinstance(p, list) and len(p) == 3 and all(type(n) is int and -30000000 <= n <= 30000000 for n in p)
+    def adjacent(a, b):
+        return sum(abs(x-y) for x,y in zip(a,b)) == 1
+
+    path = Path(__file__).with_name('erebor-observers.json')
+    if not path.exists():
+        raise ValueError('Keine Zusatzkanone zur Beobachtung freigegeben.')
+    require(path.stat().st_size <= 32768)
+    config = json.loads(path.read_text())
+    require(exact(config, ('schema','version','mode','sites')))
+    require(type(config['schema']) is int and config['schema'] == 1 and
+            type(config['version']) is int and config['version'] == layout['version'] and
+            config['mode'] == 'observe-only')
+    require(isinstance(config['sites'], list) and 1 <= len(config['sites']) <= 37)
+    pairs = json.loads(Path(__file__).with_name('erebor-parallel.json').read_text())
+    require(pairs['version'] == layout['version'])
+    # Protect all pre-existing physical objects, not merely the selected site.
+    occupied = {tuple(s[k]) for s in layout['sites'] for k in ('cannon','computer','chest','bridge')}
+    occupied.update(tuple(s[k]) for s in pairs['sites'] for k in ('B','C'))
+    sites, computers, bindings, groups = set(), set(), {}, []
+    def claim(p):
+        require(position(p) and tuple(p) not in occupied)
+        occupied.add(tuple(p))
+    for row in config['sites']:
+        require(exact(row, ('site','main','bridge','groups')))
+        site = row['site']
+        require(isinstance(site, str) and re.fullmatch(r'K(?:0[1-9]|[12][0-9]|3[0-7])', site) and site not in sites)
+        sites.add(site)
+        legacy = next((s for s in layout['sites'] if s['site'] == site), None)
+        pair = next((s for s in pairs['sites'] if s['site'] == site), None)
+        require(legacy is not None and pair is not None and row['main'] == legacy['cannon'] == pair['main'] and
+                row['bridge'] == legacy['bridge'])
+        require(isinstance(row['groups'], list) and len(row['groups']) == 2)
+        for group, slots in zip(row['groups'], ('DEF', 'GHI')):
+            require(exact(group, ('computerId','computer','chest','slots')))
+            cid = group['computerId']
+            require(type(cid) is int and 0 <= cid <= 2147483647 and cid not in computers)
+            computers.add(cid)
+            claim(group['computer'])
+            claim(group['chest'])
+            require(adjacent(group['computer'], row['bridge']) and adjacent(group['computer'], group['chest']))
+            require(exact(group['slots'], slots))
+            for slot, p in group['slots'].items():
+                claim(p)
+                require(adjacent(p, group['chest']))
+                bindings[site+slot] = dict(zip('xyz', p), dimension='minecraft:overworld', owner='Erebor')
+            groups.append(group)
+    for group in groups:
+        require(all(not adjacent(p, other['chest']) for other in groups if other is not group for p in group['slots'].values()))
+    require(key in bindings)
+    return bindings[key]
 
 
 def shared_supply(bridge,layout,site,obj,proof):
