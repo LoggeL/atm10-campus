@@ -161,7 +161,7 @@ class CannonBridge:
 
     def handle(self, action, obj):
         with self.lock:
-            if action in ('erebor-inspect', 'erebor-prepare', 'erebor-supply', 'erebor-start', 'erebor-live', 'erebor-target-leases', 'erebor-group-proof'):
+            if action in ('erebor-inspect', 'erebor-prepare', 'erebor-supply', 'erebor-start', 'erebor-live', 'erebor-target-leases', 'erebor-group-proof', 'erebor-dispatch-grant', 'erebor-group-delivery'):
                 from campus_erebor import handle
                 return handle(self, action, obj)
             expected = {'probe':{'binding'}, 'bind':{'station','binding','nonce'}, 'discover':{'station','candidate'}, 'inspect':{'station'}, 'apply':{'station','desired'}, 'prepare':{'station','desired','nbtBase64','options','size'}, 'start':{'station','desired','options'}}
@@ -275,7 +275,7 @@ def serve_campus(handler, controller, bridge, auth):
         except (BrokenPipeError, ConnectionResetError, TimeoutError):
             # A disconnected caller cannot receive a second error response.
             log.debug('Campus client disconnected before HTTP %d', status)
-    if handler.path not in ('/campus/probe','/campus/bind','/campus/discover','/campus/inspect','/campus/apply','/campus/prepare','/campus/start','/campus/erebor-inspect','/campus/erebor-prepare','/campus/erebor-supply','/campus/erebor-start','/campus/erebor-live','/campus/erebor-target-leases','/campus/erebor-group-proof'):
+    if handler.path not in ('/campus/probe','/campus/bind','/campus/discover','/campus/inspect','/campus/apply','/campus/prepare','/campus/start','/campus/erebor-inspect','/campus/erebor-prepare','/campus/erebor-supply','/campus/erebor-start','/campus/erebor-live','/campus/erebor-target-leases','/campus/erebor-group-proof','/campus/erebor-dispatch-grant','/campus/erebor-group-delivery'):
         return reply(404, {'error':'Unbekannter Endpunkt.'})
     action = handler.path.rsplit('/',1)[1]
     site = '-'

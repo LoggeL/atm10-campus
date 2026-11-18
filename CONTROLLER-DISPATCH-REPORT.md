@@ -1,4 +1,76 @@
-# K12 continuation from c5291dc — PARTIAL, NOT ACTIVATED
+# K12 continuation from db1df73 — TESTED PROTOCOL INCREMENT, NOT ACTIVATED
+
+## Latest outcome
+
+Implemented concrete DEF controller dispatch state and authenticated delivery
+protocol source, but **not the complete production vertical slice**. No deployment
+was attempted: required runtime mapping and a connected production delivery client
+are absent in this checkout. A–C and every other site remain untouched.
+
+### Added
+
+- `controller/campus_dispatch.py`: complete DEF job grant, exact desired/size
+  authorization, eight-second expiry, single-use random delivery challenge,
+  native before/after stone delta matching the CC receipt, server-side aggregate
+  192-stone chest buffer cap, complete exact target-lease requirement for start.
+  In-memory state disappears on restart; no default grants or credentials.
+- Signed controller routes `erebor-dispatch-grant` / `erebor-group-delivery` retain
+  existing HMAC/nonce, serialized controller and paused-server handling. A valid
+  grant installs the real arbiter instead of a boolean test callback. The native
+  start path still performs its second gate check. Gate checks exact current
+  mapping and disk lease readback, not just remembered publication permission.
+- Delivery requires fresh full-group physical identity and three stopped,
+  zero-placement, zero-flight cannons. Native ordinary chest NBT is parsed with
+  coordinate-attributable replies; malformed/truncated replies and unverified
+  SophisticatedStorage inventory encoding fail closed. Existing physical proof
+  becomes verified only with matching authenticated native delivery evidence.
+- Dedicated feeder-auth `/delivery/begin` and `/delivery/commit` API source uses
+  persistent CAS claims, current loaded job snapshots, credential and phase
+  revalidation after awaits, production material demand cap, and explicit
+  `dispatchProtocol:1` opt-in. Caller cannot supply jobs, coordinates or baseline.
+- `controller/computercraft/erebor-group-delivery.lua`: one-shot #50 DEF exporter,
+  local back bridge/front chest, dedicated HTTPS POSTs, persistent pre-export
+  attempt marker, local inventory delta and server receipt. Failed or ambiguous
+  receipt never causes re-export. Not startup and not installed anywhere.
+
+### Verification
+
+- Full serial Node suite: **284 passed**, no failures/skips.
+- Full Python/Lua suite: **89 passed**, using isolated scratch lupa venv.
+- Logs: `/home/logge/.hermes/cache/scratch/k12-dispatch-node.log` and
+  `/home/logge/.hermes/cache/scratch/k12-dispatch-python.log`.
+- `git diff --check` passed. Tests use actual SQLite/Fastify, production Lua and
+  native SNBT parser; world/HTTP peripherals remain deterministic fixtures, not
+  live Minecraft delivery or progress evidence.
+
+### Precise outstanding blockers
+
+1. `campus.ereborGroupRequest` is deliberately NOT connected by production startup;
+   delivery routes therefore remain fail-closed. The new protocol's controller
+   actions are real signed routes, but application runtime integration is incomplete.
+2. Existing optional scheduler does NOT issue pre-prepare dispatch grants, wait
+   for authenticated CC receipt or wake immediately on receipt. Its ten-second
+   cadence cannot guarantee use of this eight-second grant/receipt window. Do not
+   solve this by lengthening or bypassing guards; integrate bounded event-driven
+   dispatch and existing independent renewal coherently.
+3. Production controller `erebor-supply` still rejects grouped requests. The
+   existing planner therefore cannot supply a production material permission yet.
+4. One-shot initial delivery is not sustained feeding or completion/receipt
+   reconciliation. Those lifecycle paths remain incomplete.
+5. No runtime mapping, provisioned feeder credential, exact component installation,
+   native own-chest delivery, same-upload D/E/F placement deltas or continuing
+   A–C placement evidence was collected. No live progress is claimed.
+
+No deployment, service/Minecraft restart, KubeJS reload, queue/world mutation,
+CC installation or credential provisioning occurred. Pre-existing untracked
+`scratch/` was left alone. The user requested prompt feature-branch publication;
+this is a partial source handoff, not a pilot release. Reusing program bytes is
+safe only with independently provisioned identity/chest/settings: never clone
+credentials or the original A–C computer's configuration.
+
+---
+
+# Earlier continuation from c5291dc — PARTIAL, NOT ACTIVATED
 
 The requested CONTROLLER-DISPATCH-REPORT.md did not exist in this checkout or the workspace search. This is the new explicit continuation record; it is not recovered prior evidence.
 

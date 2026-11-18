@@ -49,8 +49,19 @@ def handle(bridge, action, obj):
     layout = json.loads(Path(__file__).with_name('erebor-stations.json').read_text())
     if action == 'erebor-target-leases':
         return publish_target_leases(bridge, layout, obj)
+    if action == 'erebor-dispatch-grant':
+        return dispatch_grant(bridge, layout, obj)
+    if action == 'erebor-group-delivery':
+        return group_delivery(bridge, layout, obj)
     if action == 'erebor-group-proof':
-        return group_physical_proof(bridge, layout, obj)
+        result = group_physical_proof(bridge, layout, obj)
+        arbiter = vars(bridge).get('dispatch_arbiter')
+        if arbiter is not None:
+            arbiter._current(obj)
+            delivery = arbiter.proof()
+            if delivery and delivery['jobs'] == obj['jobs']:
+                result.update(verified=True,reason='authenticated-native-delivery')
+        return result
     if action == 'erebor-live':
         import time
         if not isinstance(obj,dict) or set(obj)!={'version'} or obj['version']!=layout['version']:
@@ -191,6 +202,82 @@ def handle(bridge, action, obj):
                 raise ValueError('Pilotstart nicht sicher oder Freigabe abgelaufen.')
         return start(bridge,b,desired,opts,observed,erebor_clear=clear,bounds=obj['size'])
     return prepare_schematic(bridge,b,desired,obj['nbtBase64'],opts,obj['size'],erebor_kind=kind,previous=obj.get('previous'))
+
+
+def dispatch_grant(bridge, layout, obj):
+    """Signed application assertion of its current complete persisted DEF jobs.
+
+    No public/CC request may invoke this route directly. The app must repeat its
+    persisted CAS/phase/binding checks before issuing the bounded grant. Native
+    guards independently validate geometry and exact loaded identity at start.
+    """
+    from campus_dispatch import DispatchArbiter
+    if not isinstance(obj,dict) or obj.get('version') != layout['version'] or obj.get('group') != 'DEF':
+        raise ValueError('Ungültige DEF-Freigabe.')
+    mapping = runtime_mapping()
+    row = next(r for r in mapping['sites'] if r['site'] == 'K12')
+    group = next(g for g in row['groups'] if set(g['slots']) == set('DEF'))
+    if obj.get('computerId') != group['computerId']:
+        raise ValueError('Pilotcomputer nicht bestätigt.')
+    for key,j in obj.get('jobs',{}).items():
+        binding = observer_binding(layout,key,runtime=True)
+        validate_optional_request(binding,dict(j,site=key,version=obj['version'],kind='stone'))
+    arbiter = vars(bridge).get('dispatch_arbiter') or DispatchArbiter()
+    result = arbiter.grant(obj)
+    bridge.dispatch_arbiter = arbiter
+    def gate(action, request, binding):
+        try:
+            if runtime_mapping() != mapping or not arbiter.authorize(action,request):
+                return False
+        except (OSError,ValueError):
+            return False
+        if action == 'erebor-start':
+            try:
+                lease = json.loads((bridge.base/'data/kubejs/config/erebor-runtime-leases.json').read_text())
+                if lease != arbiter.lease:
+                    return False
+            except (OSError,ValueError):
+                return False
+        return arbiter.authorize(action,request)
+    bridge.optional_dispatch_gate = gate
+    return result
+
+
+def group_delivery(bridge, layout, obj):
+    """Signed authenticated-CC relay, native before/after inventory verification.
+
+    The app authenticates the dedicated feeder credential and revalidates exact
+    persisted reservations before BOTH phases. Receipt bodies cannot assert jobs,
+    chest positions, materials or a baseline. Nothing here exports any material.
+    """
+    from campus_dispatch import chest_count
+    if not isinstance(obj,dict) or obj.get('phase') not in ('begin','commit'):
+        raise ValueError('Ungültige Lieferphase.')
+    fields = {'phase','site','version','group','computerId','chestSide'}
+    fields |= {'cap'} if obj['phase'] == 'begin' else {'challenge','receipt'}
+    if set(obj) != fields:
+        raise ValueError('Ungültige Lieferfelder.')
+    arbiter = vars(bridge).get('dispatch_arbiter')
+    if arbiter is None:
+        raise ValueError('Keine aktuelle persistierte Pilotfreigabe.')
+    grant = arbiter._current(obj)
+    jobs = {k:dict(file=j['desired']['file'],anchor=j['desired']['anchor'],size=j['size'],options=[2,False,False]) for k,j in grant['jobs'].items()}
+    identity = {k:obj[k] for k in ('site','version','group','computerId','chestSide')}
+    group_physical_proof(bridge,layout,dict(identity,jobs=jobs))
+    mapping = runtime_mapping()
+    group = next(g for r in mapping['sites'] if r['site'] == 'K12' for g in r['groups'] if set(g['slots']) == set('DEF'))
+    # An active consumer would make a net inventory delta ambiguous. Initial
+    # delivery is restricted to a stopped/unstarted full group.
+    for key in jobs:
+        o = bridge.inspect(observer_binding(layout,key,runtime=True))
+        if o.get('state') not in ('STOPPED','PAUSED') or o.get('amountPlaced') != 0 or o.get('flyingBlocks') != 0:
+            raise ValueError('Lieferung benötigt drei ungestartete Kanonen.')
+    native = chest_count(bridge,group['chest'])
+    if runtime_mapping() != mapping:
+        raise ValueError('Physische Zuordnung geändert.')
+    if obj['phase'] == 'begin':
+        return arbiter.begin(identity,native,obj['cap'])
+    return arbiter.commit(identity,obj['challenge'],obj['receipt'],native)
 
 
 def validate_optional_request(binding, obj):
@@ -387,7 +474,11 @@ def publish_target_leases(bridge, layout, obj):
     finally:
         if temporary is not None and temporary.exists():
             temporary.unlink()
-    return {'published':True,'lease':json.loads(target.read_text())}
+    result = {'published':True,'lease':json.loads(target.read_text())}
+    arbiter = vars(bridge).get('dispatch_arbiter')
+    if arbiter is not None:
+        arbiter.renew(result['lease'])
+    return result
 
 
 def shared_supply(bridge,layout,site,obj,proof):
