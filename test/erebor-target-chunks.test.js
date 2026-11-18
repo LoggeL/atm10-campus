@@ -11,6 +11,37 @@ class Pos{
  equals(p){return this.x===p.x&&this.y===p.y&&this.z===p.z;}distSqr(p){return (this.x-p.x)**2+(this.y-p.y)**2+(this.z-p.z)**2;}
 }
 class Cannon{}
+test('extended tracker observes both K24 groups only under their own feeder identity',()=>{
+ const expansion=JSON.parse(readFileSync(new URL('../src/erebor-fleet/expansion-groups.json',import.meta.url)));
+ const k09=JSON.parse(readFileSync(new URL('../src/erebor-fleet/k09-groups.json',import.meta.url)));
+ const groups=expansion.sites.find(r=>r.site==='K24').groups;
+ const classes={BlockPos:Pos,ChunkPos:class {},SchematicannonBlockEntity:Cannon,AllDataComponents:Components,
+  Comparator:{naturalOrder:()=>({})},TicketType:{create:()=>1},BuiltInRegistries:{BLOCK:{getKey:b=>b.id}}};
+ let tick,report;const blocks=new Map(),entities=new Map();
+ const key=p=>[p.x,p.y,p.z].join(',');
+ for(const [index,g] of groups.entries()){
+  const cp=g.computer.join(',');
+  blocks.set(cp,'computercraft:computer_advanced');
+  entities.set(cp,{saveWithoutMetadata:()=>({contains:()=>true,getString:()=> 'erebor-'+g.name,getBoolean:()=>true,getInt:()=>40+index})});
+  blocks.set(g.chest.join(','),'sophisticatedstorage:netherite_chest');
+  for(const pos of Object.values(g.slots)){
+   const m=machine('K24',new Pos(...pos),new Pos(...pos));m.mode='STOPPED';m.replaceMode=2;
+   entities.set(pos.join(','),m);
+  }
+ }
+ vm.runInNewContext(script,{Java:{loadClass:n=>classes[n.split('.').at(-1)]},
+  JsonIO:{read:p=>p.includes('expansion')?expansion:p.includes('k09')?k09:p.includes('parallel')?pairs:fleet,write:(_,r)=>{report=r;}},
+  ServerEvents:{tick:fn=>{tick=fn;}},console:{info(){},error(e){throw Error(e);}}});
+ const level={registryAccess:()=>({}),getChunkSource:()=>({getChunkNow:()=>true}),hasChunk:()=>false,
+  getBlockEntity:p=>entities.get(key(p)),getBlockState:p=>({getBlock:()=>({id:blocks.get(key(p)),getStateDefinition:()=>({getProperty:n=>n})}),getValue:()=>({name:()=> 'single'})})};
+ const poll=()=>{for(let i=0;i<80;i++)tick({server:{overworld:()=>level}});};
+ poll();assert.equal(Object.keys(report.stations).length,225);
+ for(const s of 'DEF')assert.equal(report.stations['K24'+s].feederId,40);
+ for(const s of 'GHI')assert.equal(report.stations['K24'+s].feederId,41);
+ entities.delete(groups[0].computer.join(','));poll();
+ for(const s of 'DEF')assert.equal(report.stations['K24'+s].state,undefined);
+ for(const s of 'GHI')assert.equal(report.stations['K24'+s].feederId,41);
+});
 test('stalled printer support temporarily tickets only the surveyed station and the validated cursor fringe',()=>{
  let tick;const held=[];
  const pos=new Pos(0,64,0),anchor=new Pos(16,64,16);

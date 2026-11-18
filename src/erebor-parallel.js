@@ -1,4 +1,4 @@
-import {k09,slotsFor} from './erebor-groups.js';
+import {groupSites,slotsFor} from './erebor-groups.js';
 import {readFileSync} from 'node:fs';
 import {isDeepStrictEqual as same} from 'node:util';
 import {cannonReset,emptyStopped} from './alignment.js';
@@ -7,7 +7,9 @@ import {publishedPlan} from './erebor-selection.js';
 import {tx} from './db.js';
 
 export const parallelLayout=JSON.parse(readFileSync(new URL('./erebor-fleet/parallel.json',import.meta.url)));
-Object.assign(parallelLayout.sites.find(s=>s.site===k09.site), ...k09.groups.map(g=>g.slots));
+for(const station of parallelLayout.sites){
+  for(const group of groupSites.get(station.site)??[])Object.assign(station,group.slots);
+}
 export function parallelFleet(db,production,choices,request,recordedFinish,resumePaused,verifyStone,massif){
   db.exec(`CREATE TABLE IF NOT EXISTS erebor_helpers(
     version INTEGER NOT NULL, site TEXT NOT NULL, slot TEXT NOT NULL, name TEXT,
@@ -56,7 +58,7 @@ export function parallelFleet(db,production,choices,request,recordedFinish,resum
       save.run(JSON.stringify(job),'Baut',v,site,slot);return;
     }
     if(!job && /[D-I]/.test(slot)){
-      const group=k09.groups.find(g=>Object.hasOwn(g.slots,slot));
+      const group=groupSites.get(site).find(g=>Object.hasOwn(g.slots,slot));
       const status=db.prepare('SELECT status_json FROM cannons WHERE name=?').get('erebor-'+group.name);
       const s=JSON.parse(status?.status_json||'null');
       if(!s?.chestSide||!Number.isInteger(s.computerId)||s.computerId!==signal.feederId||

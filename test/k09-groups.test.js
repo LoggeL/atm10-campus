@@ -1,17 +1,39 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {k09,slotsFor,supplyGroup,groupOf} from '../src/erebor-groups.js';
+import {k09,groupSites,slotsFor,supplyGroup,groupOf} from '../src/erebor-groups.js';
 import {parallelLayout} from '../src/erebor-parallel.js';
 import {availableMassifSlots} from '../src/erebor-balance.js';
 import {isEreborStation} from '../src/erebor-feeder.js';
 import {registerMassif} from '../src/erebor-massif.js';
 import {DatabaseSync} from 'node:sqlite';
 
+test('the 19 equipped stations have independent sets of nine slots, including the asymmetric K24 build',()=>{
+ assert.equal(groupSites.size,19);
+ assert.deepEqual(groupSites.get('K24').map(g=>g.name),['K24-W','K24-S']);
+ const all=Object.fromEntries([...'ABCDEFGHI'].map(s=>[s,s]));
+ const extras=new Set();
+ for(const station of parallelLayout.sites){
+  const groups=groupSites.get(station.site);
+  assert.equal(slotsFor(station.site).join(''),groups?'ABCDEFGHI':'ABC');
+  for(const [index,g] of (groups??[]).entries()){
+   assert.equal(groupOf('erebor-'+g.name),g);
+   assert.equal(isEreborStation('erebor-'+g.name),true);
+   assert.equal(Object.values(supplyGroup(all,g)).join(''),index?'GHI':'DEF');
+   for(const [s,position] of Object.entries(g.slots)){
+    assert.deepEqual(station[s],position);
+    assert.ok(!extras.has(position.join(',')));
+    extras.add(position.join(','));
+   }
+  }
+ }
+ assert.equal(extras.size,114);
+});
+
 test('K09 separates three inventories and does not count other groups as providers',()=>{
  const all=Object.fromEntries(slotsFor('K09').map(x=>[x,{file:x}]));
  const distance=(a,b)=>a.reduce((n,v,i)=>n+Math.abs(v-b[i]),0);
  assert.equal(Object.keys(supplyGroup(all,null)).join(''),'ABC');
- assert.equal(slotsFor('K10').join(''),'ABC');
+ assert.equal(slotsFor('K01').join(''),'ABC');
  assert.equal(isEreborStation('erebor-K10-N'),false);
  for(const [i,g] of k09.groups.entries()){
   assert.equal(groupOf('erebor-'+g.name),g);

@@ -85,7 +85,7 @@ test('three real queue entries start once, survive restart and reconcile the ass
     assert.deepEqual(started.map(([k])=>k),['K01','K01B','K01C']);
     assert.equal(new Set(started.map(([,n])=>n)).size,3);
     const progress=(await app.inject({url:path+'?site=K01',headers})).json();
-    assert.equal(progress.cannons.length,117);
+    assert.equal(progress.cannons.length,225);
     assert.deepEqual(progress.cannons.filter(c=>c.site==='K09').map(c=>c.slot),[...'ABCDEFGHI']);
     assert.deepEqual(progress.cannons.filter(r=>r.site==='K01').map(r=>[r.station,r.file]),started.map(([station,file])=>[station,file]));
     const supply=async()=>(await app.inject({url:'/api/cannons/erebor-K01/plan',headers})).json();

@@ -1,4 +1,4 @@
-import {groupOf,supplyGroup} from './erebor-groups.js';
+import {groupOf,groupSites,supplyGroup} from './erebor-groups.js';
 import {isDeepStrictEqual as same} from 'node:util';
 import {verifyAlignment} from './alignment.js';
 import {itemsFor,stackSize} from './materials.js';
@@ -55,7 +55,7 @@ export function limitSupplyReads(request){
  return (args,urgent=false)=>new Promise((resolve,reject)=>{
   const entry={args,urgent,at:Date.now(),resolve,reject};
   if(active<2)void run(entry);
-  else if(waiting.length<37)waiting.push(entry);
+  else if(waiting.length<37+2*groupSites.size)waiting.push(entry);
   else reject(new Error('Materialprüfung wartet auf freie Controller-Kapazität.'));
  });
 }
@@ -122,7 +122,7 @@ export function ereborFeeder(db,request,version,liveReport){
   try{return await read;}finally{pending.delete(key);}
  }
  const poll=async(row,opts)=>{
-  const extra=groupOf(row.name),site=extra?'K09':row.name.slice(-3).toUpperCase(),j=extra?null:jobAt(site),reported=JSON.parse(row.status_json||'{}')||{};
+  const extra=groupOf(row.name),site=extra?extra.name.split('-')[0]:row.name.slice(-3).toUpperCase(),j=extra?null:jobAt(site),reported=JSON.parse(row.status_json||'{}')||{};
   const assignment=j?parseInt(j.desired.file.slice(7).replaceAll('-','').slice(0,12),16):row.assignment;
   const base={...opts,cannon:row.name,assignment,intervals:{...opts.intervals,plan:5},done:false,items:[],blueprint:null,totals:{start:0,needed:0,kinds:0}};
   // The CC computer resets its per-job delivery limit when the assignment changes.

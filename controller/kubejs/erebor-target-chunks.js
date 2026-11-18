@@ -41,6 +41,20 @@
     })
   }
 
+  // BEGIN campus expansion groups
+  var expansion = JsonIO.read('kubejs/config/expansion-groups.json')
+  if (expansion && expansion.project === 'erebor-cannon-expansion' && expansion.version === survey.version) {
+    expansion.sites.forEach(function (site) {
+      site.groups.forEach(function (group) {
+        Object.keys(group.slots).forEach(function (slot) {
+          stations.push({site:site.site+slot,pos:position(group.slots[slot]),chest:group.chest,
+            feeder:group.computer,label:'erebor-'+group.name,active:false,lastError:-1200})
+        })
+      })
+    })
+  }
+  // END campus expansion groups
+
   function renew(level, chunks, station, row) {
     var pos = station.pos
     // Reading a sleeping station must not create a new chunk ticket.

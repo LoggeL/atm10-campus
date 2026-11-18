@@ -1,4 +1,4 @@
-import {slotsFor} from './erebor-groups.js';
+import {groupOf,slotsFor} from './erebor-groups.js';
 import {campusPage} from './campus-page.js';
 import {readFileSync} from 'node:fs';
 import {stationSource} from './erebor-me-order.js';
@@ -40,7 +40,7 @@ function checkedLayout(req,campus,permission='read') {
 }
 export function registerEreborFleet(app,campus) {
   campus.ereborNetworkView=async name=>{
-    const site=/^erebor-K09-[NS]$/.test(name)?'K09':/^erebor-(K\d{2})$/i.exec(name)?.[1]?.toUpperCase();
+    const site=groupOf(name)?.name.split('-')[0]??/^erebor-(K\d{2})$/i.exec(name)?.[1]?.toUpperCase();
     if(!site)return null;
     const network=(await campus.ereborLiveReport(parallelLayout.version))?.network;
     return network?.stations?.[site]?{...network.stations[site],at:network.at,source:network.source,power:network.power}:{stale:true,at:null};

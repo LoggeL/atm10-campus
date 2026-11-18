@@ -52,7 +52,7 @@ def handle(bridge, action, obj):
         if not isinstance(obj,dict) or set(obj)!={'version'} or obj['version']!=layout['version']:
             raise ValueError('Unbekannte Erebor-Version.')
         path=bridge.base/'data/kubejs/config/erebor-target-live.json'
-        if path.stat().st_size>300000:
+        if path.stat().st_size>1048576:
             raise ValueError('Ungültiger Erebor-Livebericht.')
         data=json.loads(path.read_text())
         if data.get('version')!=obj['version'] or not 0<=time.time()*1000-data.get('at',0)<45000:
@@ -77,16 +77,26 @@ def handle(bridge, action, obj):
         raise ValueError('Erebor-Standortplan oder Auftrag passt nicht.')
     key = obj['site']
     group = None
-    ext_slot = isinstance(key,str) and re.fullmatch(r'K09([D-I])',key)
-    ext_supply = action=='erebor-supply' and key in ('K09-N','K09-S')
+    ext_slot = isinstance(key,str) and re.fullmatch(r'(K\d{2})([D-I])',key)
+    ext_supply = action=='erebor-supply' and isinstance(key,str) and re.fullmatch(r'(K\d{2})-[NWES]',key)
     if ext_slot or ext_supply:
-        cfg=json.loads(Path(__file__).with_name('k09-groups.json').read_text())
-        if cfg['site']!='K09' or cfg['version']!=layout['version']: raise ValueError('K09-Version passt nicht.')
-        group=next(g for g in cfg['groups'] if (g['name']==key if ext_supply else ext_slot[1] in g['slots']))
+        parent=(ext_slot or ext_supply)[1]
+        if parent=='K09':
+            cfg=json.loads(Path(__file__).with_name('k09-groups.json').read_text())
+            sites=[cfg]
+        else:
+            path=Path(__file__).with_name('expansion-groups.json')
+            if not path.exists(): raise ValueError('Unbekannter Kanonenplatz.')
+            cfg=json.loads(path.read_text())
+            sites=cfg['sites']
+        station=next((s for s in sites if s['site']==parent),None)
+        if not station or cfg['version']!=layout['version']: raise ValueError('Unbekannter Kanonenplatz oder Standortplan.')
+        group=next((g for g in station['groups'] if (g['name']==key if ext_supply else ext_slot[2] in g['slots'])),None)
+        if not group: raise ValueError('Unbekannte Kanonengruppe.')
     helper = isinstance(key, str) and re.fullmatch(r'(K[0-9]{2})([BC])', key)
-    if ext_slot: helper=re.fullmatch(r'(K09)([D-I])',key)
+    if ext_slot: helper=ext_slot
     if ext_supply and set(obj)!={'site','version','targets','chestSide','computerId'}: raise ValueError('Gruppenauftrag erforderlich.')
-    parent = 'K09' if group else (helper[1] if helper else key)
+    parent = key[:3] if group else (helper[1] if helper else key)
     site = next((s for s in layout['sites'] if s['site'] == parent), None)
     if not site:
         raise ValueError('Unbekannter Kanonenplatz.')
