@@ -1,3 +1,4 @@
+import {campusPage} from './campus-page.js';
 import {readFileSync} from 'node:fs';
 import {stationSource} from './erebor-me-order.js';
 import {Worker} from 'node:worker_threads';
@@ -6,13 +7,12 @@ import {tx,now,logActivity} from './db.js';
 import {normalizeOptions} from './api-stations.js';
 import {zipStore} from './zip.js';
 import {parallelLayout} from './erebor-parallel.js';
-import {renderConnectionIssues,renderFleetIssues} from '../public/assets/connection-status.js';
 
 const folder=new URL('./erebor-fleet/',import.meta.url);
 const file=name=>readFileSync(new URL(name,folder));
 const layout=JSON.parse(file('stations.json'));
 const hubNames={A0:'Zentralhub A',A1:'A-Nordwest',A2:'A-Nordost',B0:'Zentralhub B',B1:'B-Südwest',B2:'B-Südost'};
-function linkPage(report) {
+function linkPage(report,actor) {
   const label=id=>hubNames[id]||id;
   const rows=Object.entries(layout.hubs).map(([id,pos])=>{
     const links=report.links.filter(l=>l.hub===id||l.id===id);
@@ -23,10 +23,10 @@ function linkPage(report) {
     return '<tr><th scope="row">'+label(id)+'</th><td>'+(head.position||pos).join(' / ')+'</td><td>'+links.map(name).join(', ')+'</td><td>'+
       (head.present===null?'Unbekannt':head.present?'Belegt: '+head.ports.length+'/8<br>'+ports:'Hub fehlt')+'</td><td>'+(pending.join(', ')||'Alle gekoppelt')+'</td></tr>';
   }).join('');
-  return '<!doctype html><html lang="de"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Erebor · Funkverbindungen</title><link rel="stylesheet" href="/assets/app.css"><main>'+
+  return campusPage('<!doctype html><html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Erebor · Funkverbindungen</title><link rel="stylesheet" href="/assets/app.css?v=20261114-status-1"></head><body><!-- campus-navigation --><main>'+
     '<a href="/app?project=erebor#cannon-coordinates">← Kanonenstandorte</a><h1>Funkverbindungen bei Erebor</h1><p>Mit dem ME Wireless Setup Kit beide Partner eines Paars rechtsklicken. Bei einer Kanone den Wireless Connector anklicken. Eine Hub-Verbindung wird nur einmal gekoppelt.</p>'+
     '<p>Gespeicherte Kopplungen aus der Welt. Abgerufen am '+new Date(report.surveyedAt).toLocaleString('de-DE',{timeZone:'Europe/Berlin'})+' Uhr (Berlin).</p>'+
-    '<div class="table-wrap"><table><thead><tr><th>Hub</th><th>X / Y / Z</th><th>Vorgesehene Partner</th><th>Gespeicherte Ports</th><th>Zu prüfen</th></tr></thead><tbody>'+rows+'</tbody></table></div></main></html>';
+    '<div class="table-wrap"><table><thead><tr><th>Hub</th><th>X / Y / Z</th><th>Vorgesehene Partner</th><th>Gespeicherte Ports</th><th>Zu prüfen</th></tr></thead><tbody>'+rows+'</tbody></table></div></main></body></html>',actor,'tech');
 }
 function checkedLayout(req,campus,permission='read') {
   const actor=requireActor(req,permission);
@@ -87,6 +87,8 @@ export function registerEreborFleet(app,campus) {
     });
   });
   app.get(prefix+'/dreierbetrieb',async(req,reply)=>{
+    requireActor(req,'read');
+    if(req.query.format!=='json')return reply.redirect('/app?project=erebor#cannons');
     checkedLayout(req,campus);
     const version=parallelLayout.version;
     const report=await campus.ereborLiveReport(version);
@@ -101,28 +103,11 @@ export function registerEreborFleet(app,campus) {
     }))}));
     reply.header('Cache-Control','private, no-store');
     const enabled=campus.ereborHelpers.isEnabled(version);
+    const queue=campus.db.prepare('SELECT version,enabled FROM erebor_queue_config WHERE id=1').get();
     const settings=supplySettings();
     const stoneOrders=JSON.parse(stationOptions.get('erebor-K02')?.options_json||'{}')?.stoneAutoCraft===true;
-    const supplyLabel=settings.filter(s=>s.configured).length+' von '+settings.length+' Standorten auf 16 Stacks und 64 Schießpulver eingestellt.';
     const resume=campus.db.prepare('SELECT site,slot,result,expires FROM erebor_resume WHERE version=? ORDER BY site,slot').all(version);
-    if(req.query.format==='json')return {version,enabled,at:report?.at||null,chestTracker:report?.chestTracker??null,chestController:report?.chestController??null,stations,diagnostics,power:report?.network?.power||[],supplySettings:settings,resume};
-    const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-    function status({slot,job,live}){
-      const label=live?.state ? (live.ready?'Materialkiste erkannt':'Materialkiste prüfen')+' · '+live.state+' / '+live.status :
-        report?'Kanone fehlt oder Chunk ungeladen':'Keine aktuelle Weltmeldung';
-      return '<div><b>'+slot+'</b> '+esc(label)+(live?.upload?' · '+esc(live.placed)+' Blöcke gesetzt':'')+
-        (job?'<br>'+esc(job.name||'')+' '+esc(job.message||'')+' · '+esc(job.completed)+' fertig':'')+'</div>';
-    }
-    return reply.type('text/html; charset=utf-8').send('<!doctype html><html lang="de"><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Erebor · Dreierbetrieb</title><link rel="stylesheet" href="/assets/app.css"><main>'+
-      '<a href="/app?project=erebor#cannon-coordinates">← Aufstellkoordinaten</a><h1>Erebor · Dreierbetrieb</h1><p>Alle Koordinaten in X / Y / Z. An jedem der 37 Standorte B und C direkt an die bestehende Materialkiste stellen. Der Stationscomputer versorgt alle drei Kanonen. Bei K09 steht C unter der Kiste. Für drei gleichzeitig laufende Pläne die Hauptkanone auf Automatik stellen. Kanoneneingänge leer lassen. Sobald der Tracker den Aufbau meldet, werden freie Abschnitte vergeben.</p>'+
-      '<p><a href="/assets/erebor-shared-v5.zip">Homebox-Paket V5 für Oak Netherite Chest mit Anleitung (.zip)</a></p><p>Vergabe neuer Cleanstone-Pläne an alle Zusatzkanonen: <b>'+(enabled?'aktiv':'pausiert')+'</b>. '+(req.actor?.via==='session'&&req.actor?.user?.role==='admin'?'<button id="toggle" data-enabled="'+(!enabled)+'" data-version="'+version+'">'+(enabled?'Neue Aufträge pausieren':'Neue Aufträge freigeben')+'</button> <button id="all-mains" data-enabled="true" data-version="'+version+'">Alle 37 Standorte im Dreierbetrieb starten</button> <output id="result"></output>':'')+'</p><script type="module" src="/assets/erebor-parallel.js"></script><p>'+esc(report?'Weltmeldung vom '+new Date(report.at).toLocaleString('de-DE',{timeZone:'Europe/Berlin'})+' Uhr':'Keine aktuelle Weltmeldung')+'</p>'+
-      '<p>'+esc(report?.chestController===5 && report?.chestTracker===5?'Oak Netherite Chest bereit – Homebox und Minecraft melden V5.':'Oak Netherite Chest wartet auf die V5-Weltmeldung von Homebox und Minecraft.')+'</p>'+
-      '<p id="fortsetzen">'+(req.actor?.via==='session'&&req.actor.user?.role==='admin'?'<button id="resume-paused" data-version="'+version+'">Pausierte Cleanstone-Kanonen fortsetzen</button> <a href="/api/projects/erebor/planfolge/drucker-reparatur.zip">Reparatur für suchende Drucker herunterladen</a> ':'')+'<output id="resume-result"></output></p>'+
-      '<p id="materialpuffer">'+(req.actor?.via==='session'&&req.actor.user?.role==='admin'?'<button id="set-supply">K01–K37 auf 16 Stacks und 64 Schießpulver stellen</button> ':'')+'<output id="supply-result">'+supplyLabel+'</output></p>'+
-      '<p id="steinproduktion">Stein über K02 im gemeinsamen ME nachbestellen · '+(stoneOrders?'aktiv':'aus')+' '+(req.actor?.via==='session'&&req.actor.user?.role==='admin'?'<button id="stone-orders" data-enable="'+(!stoneOrders)+'">'+(stoneOrders?'Steinbestellung ausschalten':'Stein automatisch nachbestellen')+'</button>':'')+' <output id="stone-result"></output></p>'+
-      '<p><a href="/assets/erebor-solid-v6.zip">Homebox V6 · Replace Solid with Any für A, B und C</a></p>'+
-      '<section data-fleet-faults>'+renderFleetIssues(diagnostics)+'</section><div class="table-wrap"><table><thead><tr>'+['Platz','A (vorhanden)','B (neu)','C (neu)','Gemeinsame Kiste','Status'].map(t=>'<th>'+t+'</th>').join('')+'</tr></thead><tbody>'+
-      stations.map(s=>'<tr><th>'+s.site+'</th>'+['main','B','C','chest'].map(k=>'<td>'+s[k].join(' / ')+'</td>').join('')+'<td><div data-site-fault="'+s.site+'">'+renderConnectionIssues(diagnostics.find(d=>d.name===s.site))+'</div>'+s.helpers.map(status).join('')+'</td></tr>').join('')+'</tbody></table></div></main></html>');
+    return {version,enabled,stoneOrders,autoLoad:!!queue?.enabled,staleQueue:!!queue&&queue.version!==version,at:report?.at||null,chestTracker:report?.chestTracker??null,chestController:report?.chestController??null,stations,diagnostics,power:report?.network?.power||[],supplySettings:settings,resume};
   });
   app.get(prefix+'/installer.zip',async(req,reply)=>{
     checkedLayout(req,campus);
@@ -144,7 +129,7 @@ export function registerEreborFleet(app,campus) {
     }).finally(()=>{current=null;});
     const report=await current;
     reply.header('Cache-Control','private, no-store');
-    if(req.query.format==='html')return reply.type('text/html; charset=utf-8').send(linkPage(report));
+    if(req.query.format==='html')return reply.type('text/html; charset=utf-8').send(linkPage(report,req.actor));
     return report;
   });
 }

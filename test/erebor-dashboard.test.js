@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
+import {massifProgress} from '../src/erebor-progress.js';
 import { dashboardData } from '../src/erebor-dashboard.js';
 
 test('dashboard separates published tasks, reports actual slot/home, and expires all native progress', () => {
@@ -25,7 +26,7 @@ test('dashboard separates published tasks, reports actual slot/home, and expires
         ['K01', 'K02'],
         report,
         jobs,
-        true,
+        massifProgress(db,12,['K01','K02']).filling,
         { enabled: () => true, lastBalancedAt: () => null },
         now,
       );

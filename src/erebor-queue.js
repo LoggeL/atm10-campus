@@ -1,10 +1,9 @@
 import {cannonProgressRows} from './cannon-progress-rows.js';
 import {publishedPlan,selectionStore,unstarted} from './erebor-selection.js';
 import {productionStore} from './erebor-production.js';
-import {productionCounts} from './erebor-counts.js';
+import {projectProgress,massifForecast} from './erebor-progress.js';
 import {availableMassifSlots} from './erebor-balance.js';
 import {dashboardData} from './erebor-dashboard.js';
-import {constructionCounter} from './erebor-bauzaehler.js';
 import {placementThroughput} from './erebor-throughput.js';
 import {registerMassif} from './erebor-massif.js';
 import {parallelFleet,parallelLayout} from './erebor-parallel.js';
@@ -395,37 +394,47 @@ export function registerEreborQueue(app,campus){
   return liveFetch;
  }
  campus.ereborLiveReport=liveReport;
- function status(report=null,focus=null){
-  const c=cfg(),p=project(),v=p?.current_version;
+ function assignments(version) {
   const mains=db.prepare('SELECT site,state FROM erebor_queue_sites ORDER BY site').all().map(r=>({site:r.site,...JSON.parse(r.state)}));
-  const helperJobs=v?helpers.list(v).map(r=>({...r,job:helpers.jobAt(v,r.site,r.slot)})):[];
-  const counts=p?productionCounts(db,production,p,sites,c?.version===v?mains:[],helperJobs):null;
-  let queue=null;
-  if(v&&sites.includes(focus)){
-   const {open,done,preferred}=production.ordered(project(),focus),state=c?read(focus):readyState(),job=state.job;
-   const waiting=choices.waiting(v).filter(r=>r.site===focus&&!done.has(r.name));
-   const nextNames=new Set(waiting.map(r=>r.name));
-   const promoted=[...new Set([...preferred,...nextNames])];
-   const busy=helpers.reserved(v,focus);
-   const pending=[...new Set([...promoted,...open.map(e=>e.name)])].filter(name=>name!==job?.desired.blueprint&&!busy.has(name));
-   queue={site:focus,pending,preferred:promoted,done:[...done].map(([name,at])=>({name,at})),counts:counts.stations[focus]};
-  }
-  return {queue,counts,cannons:c?.version===v?cannonProgressRows(mains,helperJobs,report):[],helpers:c?helpers.list(c.version):[],waiting:c?choices.waiting(c.version):[],enabled:!!c?.enabled,version:c?.version??v,stale:!!c&&c.version!==v,phase:c?(stages[c.phase]||'Fertig'):'Steinfüllung',stations:db.prepare('SELECT site,state FROM erebor_queue_sites ORDER BY site').all().map(r=>{
-   const s=JSON.parse(r.state),j=s.job,signal=report?.stations?.[r.site];
+  return {mains,helperJobs:version?helpers.jobs(version):[]};
+ }
+ function stationSummary(s,c,report){
+   const j=s.job,signal=report?.stations?.[s.site];
    const live=j?.loaded&&signal?.upload===j.desired.file?{state:signal.state,status:signal.status,placed:signal.placed,total:signal.total,fuel:signal.fuel,target:signal.target,chunks:signal.chunks?.length||0,at:report.at}:null;
    const native=signal?.state?{state:signal.state,status:signal.status,empty:signal.empty,placed:signal.placed,at:report.at}:null;
-   return {site:r.site,automatic:!!production.mode(c.version,r.site).enabled,status:s.status,live,native,nativeOptions:signal?.options??null,upload:j?.desired.file??null,kind:j?.phase??null,inserted:!!s.inserted,sha256:j?.desired.sha256||null,file:j?.desired.blueprint||null,anchor:j?.desired.anchor||null,blocks:j?.blocks??null,completed:s.completed,checked:s.checked||null};
-  })};
+   return {site:s.site,automatic:c?!!production.mode(c.version,s.site).enabled:false,status:s.status,live,native,nativeOptions:signal?.options??null,upload:j?.desired.file??null,kind:j?.phase??null,inserted:!!s.inserted,sha256:j?.desired.sha256||null,file:j?.desired.blueprint||null,anchor:j?.desired.anchor||null,blocks:j?.blocks??null,completed:s.completed,checked:s.checked||null};
+ }
+ function stationQueue(p,focus,state,waiting){
+  const version=p.current_version;
+  const {open,done,preferred}=production.ordered(p,focus);
+  const promoted=[...new Set([...preferred,...waiting.filter(r=>r.site===focus&&!done.has(r.name)).map(r=>r.name)])];
+  const busy=helpers.reserved(version,focus);
+  const pending=[...new Set([...promoted,...open.map(e=>e.name)])].filter(name=>name!==state?.job?.desired.blueprint&&!busy.has(name));
+  return {site:focus,pending,preferred:promoted,done:[...done].map(([name,at])=>({name,at}))};
+ }
+ function status(report=null,focus=null,ordersOnly=false){
+  const c=cfg(),p=project(),v=p?.current_version;
+  const header={enabled:!!c?.enabled,version:c?.version??v,stale:!!c&&c.version!==v,phase:c?(stages[c.phase]||'Fertig'):'Steinfüllung'};
+  const waiting=c?choices.waiting(c.version):[];
+  const hasSite=sites.includes(focus);
+  if(ordersOnly&&!hasSite)throw new HttpError(400,'Unbekannte Station.');
+  const state=hasSite&&c?read(focus):null;
+  const projectWaiting=c&&c.version===v?waiting:v?choices.waiting(v):[];
+  const queue=v&&hasSite?stationQueue(p,focus,state,projectWaiting):null;
+  if(ordersOnly)return {...header,queue,waiting:waiting.filter(r=>r.site===focus),stations:state?[stationSummary({...state,site:focus},c,report)]:[]};
+  const {mains,helperJobs}=assignments(v);
+  const counts=p?projectProgress(db,production,p,sites,[...(c?.version===v?mains:[]),...helperJobs]).counts:null;
+  if(queue)queue.counts=counts.stations[focus];
+  return {...header,queue,counts,waiting,stations:mains.map(s=>stationSummary(s,c,report)),
+   cannons:c?.version===v?cannonProgressRows(mains,helperJobs,report):[],
+   helpers:c?.version===v?helperJobs.map(({job,...row})=>row):c?helpers.list(c.version):[]};
  }
  function buildingProgress(req,reply,dashboard){
   requireActor(req,'read');
   const p=project();if(!p)throw new HttpError(404,'Erebor nicht verfügbar.');
-  const mains=cfg()?.version===p.current_version?db.prepare('SELECT site,state FROM erebor_queue_sites').all().map(r=>({site:r.site,...JSON.parse(r.state)})):[];
-  const helperJobs=helpers.list(p.current_version).map(r=>({...r,job:helpers.jobAt(p.current_version,r.site,r.slot)}));
-  const counts=productionCounts(db,production,p,sites,mains,helperJobs);
-  const published=!!db.prepare('SELECT 1 FROM erebor_massif_runs WHERE v=?').get(p.current_version);
-  const tiles=published?db.prepare('SELECT blocks,done,special,site,home FROM erebor_massif_tiles WHERE v=? AND done=0').all(p.current_version):null;
-  const counter=constructionCounter(production,p,sites,[...mains,...helperJobs],counts,published,tiles);
+  const assignmentsNow=assignments(p.current_version),helperJobs=assignmentsNow.helperJobs;
+  const mains=cfg()?.version===p.current_version?assignmentsNow.mains:[];
+  const {counter,filling}=projectProgress(db,production,p,sites,[...mains,...helperJobs]);
   // Only consume existing signed telemetry cache: this GET issues no controller commands.
   const report=liveCache?.version===p.current_version?liveCache:null;
   const jobs=new Map([...mains.map(r=>[r.site,r.job]),...helperJobs.map(r=>[r.site+r.slot,r.job])]);
@@ -434,12 +443,15 @@ export function registerEreborQueue(app,campus){
    return {...r,live:job?.tainted?null:r.live,workloadBlocks:['stone','build'].includes(job?.phase)?job.blocks:null};
   });
   counter.throughput=throughput.read(report,rows);
-  if(dashboard)Object.assign(counter,dashboardData(db,p.current_version,sites,report,jobs,published,massif));
+  if(dashboard){
+   Object.assign(counter,dashboardData(db,p.current_version,sites,report,jobs,filling,massif));
+   counter.forecast=massifForecast(db,p.current_version,filling,counter.balance.enabled);
+  }
   return reply.header('Cache-Control','private, no-store').send(counter);
  }
  app.get('/api/projects/erebor/bauzaehler',(req,reply)=>buildingProgress(req,reply,false));
  app.get('/api/projects/erebor/dashboard',(req,reply)=>buildingProgress(req,reply,true));
- app.get(base,async(req,reply)=>{requireActor(req,'read');const report=await liveReport(cfg()?.version);return reply.header('Cache-Control','private, no-store').send(status(report,req.query.site));});
+ app.get(base,async(req,reply)=>{requireActor(req,'read');const report=await liveReport(cfg()?.version);return reply.header('Cache-Control','private, no-store').send(status(report,req.query.site,req.query.view==='orders'));});
  app.get(base+'/drucker-reparatur.zip',async(req,reply)=>{
   requireActor(req,'admin');
   const version=cfg()?.version,report=await liveReport(version);

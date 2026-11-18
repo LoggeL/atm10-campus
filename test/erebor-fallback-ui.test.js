@@ -22,8 +22,7 @@ test('regular stone catalog is collapsed fallback; architecture and active job r
   assert.ok(html.indexOf('data-stone-id="ACTIVE"')<fallback,'active job stays outside fallback');
   assert.ok(html.indexOf('data-stone-id="ARCH"')<fallback,'architecture stays outside fallback');
   assert.ok(html.indexOf('data-stone-id="REGULAR"')>fallback,'regular plan retained inside fallback');
-  assert.match(get('cards').innerHTML,/Architektur-Baupläne/);
-  assert.match(get('cards').innerHTML,/<details><summary>Regulärer Cleanstone-Fallback/);
+  assert.match(get('cards').innerHTML,/Massiv-Baupläne und Sonderziele/);
   assert.match(html,/REGULAR.nbt/,'download retained');
   get('search').value='REGULAR';ui.rows();
   assert.match(get('bpRows').innerHTML,/data-stone-id="REGULAR"/,'search finds collapsed fallback');

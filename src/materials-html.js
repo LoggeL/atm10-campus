@@ -1,3 +1,4 @@
+import {campusPage} from './campus-page.js';
 import { readFileSync } from 'node:fs';
 
 const catalog = JSON.parse(readFileSync(new URL('../public/assets/material-icons/catalog.json', import.meta.url), 'utf8'));
@@ -14,7 +15,7 @@ function material(item) {
   return `<div class="material-label">${icon}<div><div class="material-name">${esc(info?.name || item)} ${connecting}</div><div class="mono muted">${esc(item)}</div></div></div>`;
 }
 
-export function materialsHtml(report, title, requestUrl) {
+export function materialsHtml(report, title, requestUrl, actor) {
   // Only links back to the current API route; preserve selection/snapshot/version/ME filters.
   const url = new URL(requestUrl, 'http://campus.local');
   const link = changes => {
@@ -29,11 +30,11 @@ export function materialsHtml(report, title, requestUrl) {
     <td class="num">${fmt(r.stacks)} × ${fmt(r.stack)}${r.rest ? ` + ${fmt(r.rest)}` : ''}</td>
     <td class="num material-extra">${fmt(r.planned)}</td><td class="num material-extra">${fmt(r.built)}</td>
     ${me ? `<td class="num">${fmt(r.me)}</td><td class="num">${fmt(r.short)}</td><td>${r.craftable ? 'Ja' : 'Nein'}</td>` : ''}</tr>`).join('');
-  return `<!doctype html>
+  return campusPage(`<!doctype html>
 <html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Materialliste · ${esc(title)}</title><link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><rect x='2' y='2' width='12' height='12' rx='3' fill='%2373d8e5'/></svg>"><link rel="stylesheet" href="/assets/app.css?v=20261114-status-1"></head>
 <body class="materials-page"><a class="skip-link" href="#main">Zum Inhalt</a>
-<header class="top"><a class="brand" href="/app">ATM10 Campus</a><span class="spacer"></span><a href="/viewer">3D-Viewer</a><a href="/app">Baupläne</a><a href="/app#cannons">Kanonen</a></header>
+<!-- campus-navigation -->
 <main id="main"><div class="page-heading"><h1>Materialliste</h1></div><p class="intro">${esc(title)}</p>
 <div class="toolbar"><input type="search" class="search" id="materialSearch" aria-label="Material suchen" placeholder="Material suchen …">
 <a class="btn" href="${link({format:'html', all: all ? 'false' : 'true'})}">${all ? 'Nur fehlende Materialien' : 'Gebautes zeigen'}</a>
@@ -48,5 +49,5 @@ ${t.blocked || t.unknown ? `<p class="notice">${fmt(t.blocked)} Zellen mit Masch
 ${me ? '<th scope="col" class="num">Im ME</th><th scope="col" class="num">Fehlt im ME</th><th scope="col">Im ME craftbar</th>' : ''}</tr></thead>
 <tbody>${rows || `<tr><td colspan="${me ? 8 : 5}" class="muted">Für diese Auswahl fehlen keine Materialien.</td></tr>`}<tr id="materialEmpty" class="hide"><td colspan="${me ? 8 : 5}" class="muted">Kein Material passt zur Suche.</td></tr></tbody></table></div>
 <p class="footnote">Blockbilder aus den Minecraft- und Modtexturen. Connecting-Bilder zeigen einen einzelnen Block; die Kennzeichnung nennt die benötigte Variante.</p>
-</main><script src="/assets/materials.js?v=20261114-status-1" defer></script></body></html>`;
+</main><script src="/assets/materials.js?v=20261114-status-1" defer></script></body></html>`,actor);
 }

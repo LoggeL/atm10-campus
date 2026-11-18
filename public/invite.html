@@ -20,6 +20,6 @@ fetch('/api/auth/invite/' + encodeURIComponent(code)).then(r => r.json()).then(j
 document.getElementById('f').addEventListener('submit', async ev => {
   ev.preventDefault();
   const r = await fetch('/api/auth/register', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ code, username: u.value, password: p.value }) });
-  if (r.ok) location.href = '/app'; else e.textContent = (await r.json()).error || 'Fehlgeschlagen.';
+  if (r.ok) location.href = '/erebor/dashboard'; else e.textContent = (await r.json()).error || 'Fehlgeschlagen.';
 });
 </script></body></html>

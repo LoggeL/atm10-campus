@@ -1,5 +1,7 @@
+import {states,borrowed,freshFleet,workloadDetails,stationCounts,slotDetail,forecastView} from './erebor-progress-view.js?v=20261114-status-1';
+import {esc,fmt} from './format.js?v=20261114-status-1';
+import {api,linkStation} from './campus-client.js?v=20261114-status-1';
 const el = id => document.getElementById(id);
-const fmt = n => Number.isFinite(n) ? n.toLocaleString('de-DE') : '–';
 function percent(done,total) {
   if (!(total > 0)) return '–';
   const value = 100*done/total;
@@ -9,12 +11,7 @@ function percent(done,total) {
 }
 const volume = n => n >= 1e6 ? fmt(Math.round(n/1e5)/10)+' Mio.' : fmt(n);
 const time = t => new Date(t).toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
-const esc = value => String(value ?? '').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-const states = {placing:'Baut',searching:'Sucht Ziel',waiting:'Wartet',handover:'Planwechsel',idle:'Frei',unknown:'Kein Signal',unverified:'Plan ungeprüft'};
-const reasons = {missingItem:'Material fehlt',missingBlock:'Baublock fehlt',noGunpowder:'Schießpulver fehlt',targetNotLoaded:'Zielchunk lädt',ready:'Startbereit'};
-let data = null, selected = 'K01', busy = false, showedFresh = false;
-const isFresh = () => data?.telemetryAt != null && Date.now()-data.telemetryAt < 45000;
-const borrowed = r => r.home && r.home !== r.site;
+let data = null, selected = new URL(location.href).searchParams.get('kanone') || 'K01', busy = false, showedFresh = false;
 const track = (done,total,active=0) => total > 0
   ? '<div class="track" aria-hidden="true"><i style="width:'+Math.min(100,100*done/total)+'%"></i><b style="width:'+Math.min(100,100*active/total)+'%"></b></div>' : '';
 function renderSummary(fleet) {
@@ -28,7 +25,7 @@ function renderSummary(fleet) {
   el('summary').innerHTML = '<article class="panel primary-panel"><h3>Massiv-Füllung</h3><div class="metric-line"><strong class="big">'+percent(done,total)+'</strong><span class="unit">der automatischen Teile erledigt</span></div>'+
     track(done,total,sum('inProgress'))+'<div class="facts"><span><b>'+fmt(done)+' / '+fmt(total)+'</b> Teile</span><span><b>'+fmt(sum('inProgress'))+'</b> zugewiesen</span><span><b>'+fmt(sum('open'))+'</b> frei</span></div>'+(f ? '<p class="meta volume">'+volume(sum('finishedBlocks'))+' von '+volume(sum('blocks'))+' Planblöcken in abgeschlossenen Teilen</p>' : '')+'</article>'+
     '<article class="panel"><h3>Kanonen im Einsatz</h3><div class="metric-line"><strong class="big">'+(known?fmt(working):'–')+'</strong><span class="unit">bauen · '+fleet.length+' Kanonen</span></div><div class="facts"><span><b>'+transfers+'</b> gebietsübergreifende Aufträge</span>'+
-    (isFresh() && throughput?.covered ? '<span><b>'+fmt(Math.round(throughput.blocksPerSecond))+'</b> Blöcke/s ('+fmt(throughput.covered)+' gemessen)</span>':'')+
+    (showedFresh && throughput?.covered ? '<span><b>'+fmt(Math.round(throughput.blocksPerSecond))+'</b> Blöcke/s ('+fmt(throughput.covered)+' / '+fmt(throughput.assigned)+' zugewiesenen Kanonen gemessen)</span>':'')+
     '</div><p class="meta">'+(known?fmt(known)+' mit Weltmeldung':'Weltmeldung ausstehend')+' · '+(data.balance.enabled?(data.balance.plannedAt?'Lastverteilung um '+time(data.balance.plannedAt):'Lastverteilung bereit'):'Massiv-Vergabe pausiert')+'</p></article>';
 }
 function renderTasks() {
@@ -47,14 +44,6 @@ function stationMatches(rows,filter) {
   if (filter==='unknown') return rows.some(r=>['unknown','unverified'].includes(r.state));
   return filter==='all' || rows.some(r=>r.state===filter);
 }
-function slotDetail(r) {
-  const why = r.state==='waiting' && reasons[r.reason] ? ' · '+reasons[r.reason] : '';
-  const assigned = r.tile || r.file;
-  const source = borrowed(r)?'<p class="meta borrow">Übernimmt einen Teil von '+esc(r.home)+'</p>':'';
-  const progress = r.placed != null ? '<p class="meta">'+fmt(r.placed)+(r.total==null?'':' / '+fmt(r.total))+' Blöcke laut Kanone</p>'+track(r.placed,r.total):'';
-  return '<div class="slot"><div class="slot-head"><span class="slot-name">Kanone '+esc(r.slot)+'</span><span>'+states[r.state]+why+'</span></div>'+
-    (assigned?'<p class="file">'+esc(assigned)+'</p>':'')+source+progress+'</div>';
-}
 function renderFleet(fleet) {
   const groups = new Map();
   for (const row of fleet) {
@@ -70,32 +59,31 @@ function renderFleet(fleet) {
       rows.map(r=>'<span class="chip '+r.state+'" title="'+states[r.state]+'">'+esc(r.slot)+'</span>').join('')+'</span></button>';
   }).join('');
   if(focused) [...el('fleet').children].find(b=>b.dataset.site===focused)?.focus({preventScroll:true});
+  linkStation(selected);
   el('empty').hidden = visible.length>0;
   el('detail').hidden = !selected;
-  if(selected) el('detail').innerHTML='<div class="detail-head"><h3>Station '+esc(selected)+'</h3><span class="meta">A / B / C</span></div>'+groups.get(selected).map(slotDetail).join('');
+  const expanded=el('detail').dataset.site===selected && el('detail').querySelector('details')?.open;
+  el('detail').dataset.site=selected;
+  if(selected) el('detail').innerHTML='<div class="detail-head"><h3>Station '+esc(selected)+'</h3><span class="meta">A / B / C</span></div>'+groups.get(selected).map(row=>slotDetail(row,showedFresh?data.throughput:null)).join('')+stationCounts(data.stations[selected])+'<a class="detail-action" href="/app?project=erebor&amp;kanone='+esc(selected)+'#overview">Bauaufträge für '+esc(selected)+' öffnen</a>';
+  if(expanded && selected)el('detail').querySelector('details').open=true;
 }
 function render() {
   if(!data)return;
-  showedFresh=isFresh();
-  const fleet=showedFresh?data.fleet:data.fleet.map(r=>({...r,state:'unknown',placed:null,total:null}));
+  const {fresh,rows:fleet}=freshFleet(data);
+  showedFresh=fresh;
   renderSummary(fleet);renderFleet(fleet);
 }
 async function refresh() {
   if (busy || document.hidden) return;
   busy=true;el('refresh').disabled=true;
   try {
-    const response=await fetch('/api/projects/erebor/dashboard',{cache:'no-store',signal:AbortSignal.timeout(20000)});
-    if(response.status===401){
-      el('error').innerHTML='Sitzung abgelaufen. <a href="/login">Bei Campus anmelden</a>.';
-      el('error').hidden=false;el('stamp').textContent='Anmeldung erforderlich';data=null;
-      for(const id of ['summary','fleet','tasks','detail'])el(id).replaceChildren();
-      return;
-    }
-    if(!response.ok)throw Error('HTTP '+response.status);
-    data=await response.json();el('error').hidden=true;
+    data=await api('/api/projects/erebor/dashboard');el('error').hidden=true;
+    el('forecast').innerHTML=forecastView(data.forecast);
     el('stamp').textContent='Stand '+time(data.capturedAt)+' Uhr';
-    renderTasks();render();
+    renderTasks();el('quantities').innerHTML=workloadDetails(data.massif,data.unassignedMassif);render();
   }catch(error){
+    el('forecast').innerHTML=forecastView({state:'offline'});
+    if(data){data.telemetryAt=null;render();}
     el('error').textContent='Projektstand konnte nicht aktualisiert werden ('+error.message+').';
     el('error').hidden=false;
   }finally{busy=false;el('refresh').disabled=false;}
@@ -103,12 +91,12 @@ async function refresh() {
 el('legend').innerHTML=[['placing','Baut'],['waiting','Sucht / wartet'],['handover','Planwechsel'],['idle','Frei'],['unverified','Ungeprüft'],['unknown','Kein Signal']].map(([kind,label])=>'<span><i class="dot '+kind+'"></i>'+label+'</span>').join('');
 el('fleet').addEventListener('click',e=>{
   const button=e.target.closest('button[data-site]');if(!button)return;
-  selected=button.dataset.site;render();
+  selected=button.dataset.site;const url=new URL(location.href);url.searchParams.set('kanone',selected);history.replaceState(null,'',url);render();
   if(matchMedia('(max-width:800px)').matches)el('detail').scrollIntoView({block:'nearest'});
 });
 el('filter').addEventListener('change',render);
 el('refresh').addEventListener('click',refresh);
 document.addEventListener('visibilitychange',()=>{if(!document.hidden){render();refresh();}});
 setInterval(refresh,15000);
-setInterval(()=>{if(showedFresh && !isFresh())render();},1000);
+setInterval(()=>{if(showedFresh && Date.now()-data.telemetryAt>=45000)render();},1000);
 refresh();

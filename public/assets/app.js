@@ -1,3 +1,6 @@
+import {setupAccountTools} from './campus-account.js?v=20261114-status-1';
+import {fleetEquipment} from './fleet-equipment.js?v=20261114-status-1';
+import {api} from './campus-client.js?v=20261114-status-1';
 import {setupEreborQueue} from './erebor-queue.js?v=20261114-status-1&revision=massif-remaining-1';
 import { createProjectBlueprints } from './project-blueprints.js?v=20261114-status-1&revision=fallback-details-1';
 import { createCannonSites } from './cannon-sites.js?v=20261114-status-1&fleet=20261110';
@@ -23,17 +26,6 @@ const ago = t => {
 const STATUS = { conflict: 'Konflikt', warning: 'Geändert seit Planung', ok: 'Offen', built: 'Gebaut', unknown: 'Kein Bestand' };
 const badge = s => `<span class="badge ${s}">${STATUS[s] || s}</span>`;
 
-async function api(path, opts = {}) {
-  const headers = { 'x-campus-csrf': '1', ...(opts.headers || {}) };
-  let body = opts.body;
-  if (body && !(body instanceof Blob) && !(body instanceof ArrayBuffer) && typeof body !== 'string') { body = JSON.stringify(body); headers['content-type'] = 'application/json'; }
-  const signal = opts.signal || (!opts.method || opts.method === 'GET' ? AbortSignal.timeout(20_000) : undefined);
-  const r = await fetch(path, { ...opts, signal, headers, body });
-  if (r.status === 401) { location.href = '/login'; throw new Error('Nicht angemeldet'); }
-  const j = r.headers.get('content-type')?.includes('json') ? await r.json() : null;
-  if (!r.ok) { const e = new Error(j?.error || r.statusText); e.data = j; e.status = r.status; throw e; }
-  return j;
-}
 function toast(msg, err) {
   const t = document.createElement('div'); t.className = 'toast' + (err ? ' err' : ''); t.textContent = msg;
   t.setAttribute('role', err ? 'alert' : 'status'); (document.querySelector('dialog[open]') || document.body).append(t); setTimeout(() => t.remove(), err ? 7000 : 3500);
@@ -69,23 +61,24 @@ configureBlueprintProject();
 
 
 // ---------- tabs ----------
-document.querySelectorAll('nav.tabs [data-tab]').forEach(b => b.addEventListener('click', e => {
-  e.preventDefault(); closeDrawer(); showTab(b.dataset.tab);
-}));
 function showTab(tab) {
   if (tab === 'admin' && me?.user?.role !== 'admin') tab = 'overview';
   activeTab = tab;
+  const coordinates=$('orderCoordinates');
+  coordinates.hidden=!['overview','coordinates'].includes(tab);
+  coordinates.href=tab==='coordinates'?'#overview':'#coordinates';
+  coordinates.textContent=tab==='coordinates'?'Zur Baufolge':'Bauplan-Koordinaten';
   $('blueprintProjectBar').classList.toggle('hide',!['overview','coordinates','cannons','cannon-coordinates'].includes(tab));
-  document.querySelectorAll('nav.tabs [data-tab]').forEach(b => {
-    if (b.dataset.tab === (tab==='cannon-coordinates'?'cannons':tab)) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current');
+  document.querySelectorAll('.campus-nav a').forEach(link=>{
+    const parent={coordinates:'overview','cannon-coordinates':'cannons'};
+    if(link.dataset.tab===(parent[tab]||tab))link.setAttribute('aria-current','page');
+    else link.removeAttribute('aria-current');
   });
+  document.querySelector('.campus-more').open=false;
   document.querySelectorAll('[data-pane]').forEach(p => p.classList.toggle('hide', p.dataset.pane !== tab));
-  const extra = {agent:'Agent-Zugang', activity:'Aktivität', admin:'Verwaltung'};
-  $('moreMenu').classList.toggle('active', !!extra[tab]);
-  $('moreLabel').textContent = extra[tab] || 'Mehr';
   document.querySelectorAll('.menu[open]').forEach(d => d.open = false);
   polling?.refreshNow('navigation');
-  history.replaceState(null, '', '#' + tab);
+
   refreshQueue.resume();
 }
 document.addEventListener('click', e => document.querySelectorAll('.menu[open]').forEach(d => { if (!d.contains(e.target)) d.open = false; }));
@@ -347,14 +340,18 @@ function flushPendingCannons() {
     if(c)renderCannonCard(c,sequence);else removeCannonCard(name,sequence);
   }
 }
+const equipment=fleetEquipment($('fleetEquipment'),{admin:isAdmin,notify:toast});
+$('individualEquipment').addEventListener('toggle',()=>{if($('individualEquipment').open && activeTab==='cannons')void guard(loadCannons)();});
 async function loadCannons(force = false) {
   if (cannonLoad) {
     if (!force) return cannonLoad;
     await cannonLoad.catch(() => {});
   }
   const loading = cannonLoad = (async () => {
-    await loadStock();
-    return refreshCannons();
+    const erebor=blueprintProject==='erebor';
+    $('fleetEquipment').hidden=!erebor;
+    await Promise.all([loadStock(),erebor?equipment.refresh():null,
+      !erebor||$('individualEquipment').open?refreshCannons():null]);
   })();
   try { return await loading; } finally { if (cannonLoad === loading) cannonLoad = null; }
 }
@@ -379,7 +376,7 @@ async function refreshCannons() {
   const parent = cannonParent();
   let faults=document.getElementById('fleet-connection-faults');
   if(!faults){faults=document.createElement('section');faults.id='fleet-connection-faults';parent.before(faults);}
-  faults.innerHTML=renderFleetIssues(list);
+  faults.innerHTML=blueprintProject==='erebor'?'':renderFleetIssues(list);
   for (const c of list) if (!renderCannonCard(c, sequence)) refreshQueue.request('cannon:' + c.name);
   for (const old of [...parent.querySelectorAll('[data-cannon]')]) {
     if (!list.some(c => c.name === old.dataset.cannon) && !removeCannonCard(old.dataset.cannon, sequence)) refreshQueue.request('cannon:' + old.dataset.cannon);
@@ -558,98 +555,9 @@ $('cannonList').addEventListener('click', guard(async e => {
     busyCannons.delete(name); b.disabled = false; b.blur(); refreshQueue.request('cannon:' + name); refreshQueue.resume();
   }
 }));
-document.querySelectorAll('[data-goto]').forEach(a => a.addEventListener('click', e => { e.preventDefault(); showTab(a.dataset.goto); }));
 
-// ---------- tokens ----------
-const SCOPES = { write: 'Lesen + Schreiben', read: 'Nur lesen', station: 'Station (ME-Computer)', erebor_supply: 'Erebor-Materialpuffer' };
-async function loadTokens() {
-  const list = await api('/api/tokens');
-  $('tokRows').innerHTML = list.map(t => `<tr><td>${esc(t.name)}</td><td>${SCOPES[t.scope] || esc(t.scope)}</td><td class="mono">${esc(t.prefix)}…</td><td>${esc(when(t.createdAt))}</td><td>${esc(ago(t.lastUsedAt))}</td>
-    <td>${t.revokedAt ? '<span class="muted">widerrufen</span>' : `<button class="small danger" data-revoke="${t.id}">Widerrufen</button>`}</td></tr>`).join('') || '<tr><td colspan="6" class="muted">Noch keine Tokens.</td></tr>';
-  $('tokRows').querySelectorAll('[data-revoke]').forEach(b => b.onclick = guard(async () => {
-    if (!confirm('Token widerrufen? Agents mit diesem Token verlieren sofort den Zugriff.')) return;
-    await api('/api/tokens/' + b.dataset.revoke, { method: 'DELETE' }); loadTokens();
-  }));
-  $('agentSnippet').textContent = agentSnippet('atc_…');
-}
-function agentSnippet(token) {
-  const u = location.origin;
-  return `# ATM10 Campus API (Doku: ${u}/docs, OpenAPI: ${u}/api/openapi.json)
-export CAMPUS_URL=${u}
-export CAMPUS_TOKEN=${token}
-
-# Was ist live, was ist geplant, wo knallt es?
-curl -s -H "Authorization: Bearer $CAMPUS_TOKEN" $CAMPUS_URL/api/status
-
-# Bauplan lesen (Text-Schichten) und blockgenau ändern: erst dryRun, dann mit baseVersion speichern
-curl -s -H "Authorization: Bearer $CAMPUS_TOKEN" "$CAMPUS_URL/api/blueprints/01_Technikhof_P01/layers?y=64..66"
-curl -s -X POST -H "Authorization: Bearer $CAMPUS_TOKEN" -H "content-type: application/json" $CAMPUS_URL/api/blueprints/01_Technikhof_P01/edits \\
-  -d '{"dryRun":true,"edits":[{"op":"replace","match":"minecraft:*_planks","block":"minecraft:spruce_planks"}]}'
-
-# Oder ganze NBT holen, extern bearbeiten, mit baseVersion zurückspielen (409 = jemand war schneller)
-curl -s -H "Authorization: Bearer $CAMPUS_TOKEN" -o 01_Technikhof_P01.nbt $CAMPUS_URL/api/blueprints/01_Technikhof_P01/download
-curl -s -X PUT -H "Authorization: Bearer $CAMPUS_TOKEN" -H "content-type: application/octet-stream" \\
-  --data-binary @01_Technikhof_P01.nbt "$CAMPUS_URL/api/blueprints/01_Technikhof_P01/nbt?baseVersion=1&note=Dach+angepasst"`;
-}
-$('tokCreate').onclick = guard(async () => {
-  const name = $('tokName').value.trim();
-  if (!name) { toast('Bitte einen Namen angeben.', true); return; }
-  const t = await api('/api/tokens', { method: 'POST', body: { name, scope: $('tokScope').value } });
-  $('tokNew').classList.remove('hide');
-  $('tokNew').innerHTML = `<p>Neuer Token <strong>${esc(t.name)}</strong>. Jetzt kopieren, er wird nicht noch einmal angezeigt:</p><div class="secret" id="tokVal">${esc(t.token)}</div><div class="row"><button class="small" id="tokCopy">Kopieren</button><button class="small" id="tokCopySnippet">Agent-Anleitung mit Token kopieren</button></div>`;
-  $('tokCopy').onclick = () => navigator.clipboard.writeText(t.token).then(() => toast('Kopiert.'));
-  if(t.scope==='erebor_supply'){
-    $('tokCopySnippet').remove();
-    const hint=document.createElement('p');
-    hint.textContent='Für Codex auf Windows: Kopiere den Token und speichere ihn in der Benutzervariable CAMPUS_SUPPLY_TOKEN. Über „Widerrufen“ kannst du den Zugriff jederzeit beenden.';
-    $('tokNew').append(hint);
-  }else{
-    $('tokCopySnippet').onclick = () => navigator.clipboard.writeText(agentSnippet(t.token)).then(() => toast('Kopiert.'));
-  }
-  $('tokName').value = ''; loadTokens();
-});
-
-// ---------- activity ----------
-const ACTIONS = { 'blueprint.create': 'Bauplan angelegt', 'blueprint.version': 'Neue Version', 'blueprint.meta': 'Metadaten geändert', 'blueprint.archive': 'Archiviert', 'snapshot.capture': 'Snapshot erfasst', 'package.import': 'HTML importiert', 'token.create': 'Token erzeugt', 'token.revoke': 'Token widerrufen', 'invite.create': 'Einladung erzeugt', 'auth.register': 'Account angelegt', 'auth.login': 'Angemeldet', 'user.update': 'Account geändert', 'cannon.assign': 'Kanone zugewiesen', 'cannon.transfer': 'Auftrag verschoben', 'cannon.delete': 'Kanone entfernt', 'cannon.start': 'Kanone gestartet' };
-async function loadActivity() {
-  const list = await api('/api/activity?limit=200');
-  $('actRows').innerHTML = list.filter(a => a.action !== 'auth.login').map(a => `<tr><td>${esc(when(a.at))}</td><td>${esc(a.user || 'System')}</td><td>${esc(a.via)}</td><td>${esc(ACTIONS[a.action] || a.action)}</td><td class="mono">${esc(a.target || '')}</td>
-    <td class="cell-note">${esc(a.detail ? Object.entries(a.detail).filter(([k, v]) => v != null && typeof v !== 'object').map(([k, v]) => k + ': ' + v).join(', ') : '')}</td></tr>`).join('') || '<tr><td colspan="6" class="muted">Noch keine Änderungen.</td></tr>';
-}
-
-// ---------- admin ----------
-async function loadAdmin() {
-  const [inv, users, snaps] = await Promise.all([api('/api/invites'), api('/api/users'), api('/api/snapshots')]);
-  const selectedBase=$('impBase').value;
-  $('impBase').innerHTML = '<option value="">Planungsstand: neuester Live-Snapshot</option>' + snaps.snapshots.map(s => `<option value="${s.id}">Planungsstand: #${s.id} ${esc(s.source === 'live' ? 'Live' : s.label)} (${esc(when(s.worldTime))})</option>`).join('');
-  if([...$('impBase').options].some(option=>option.value===selectedBase))$('impBase').value=selectedBase;
-  $('invRows').innerHTML = inv.map(i => `<tr><td>${esc(i.note || '–')}</td><td>${esc(i.role)}</td><td>${esc(when(i.createdAt))}</td><td>${esc(when(i.expiresAt))}</td><td>${esc(i.usedBy || '–')}</td>
-    <td>${!i.usedAt && new Date(i.expiresAt) > new Date() ? `<button class="small danger" data-inv="${i.id}">Zurückziehen</button>` : ''}</td></tr>`).join('') || '<tr><td colspan="6" class="muted">Noch keine Einladungen.</td></tr>';
-  $('invRows').querySelectorAll('[data-inv]').forEach(b => b.onclick = guard(async () => { await api('/api/invites/' + b.dataset.inv, { method: 'DELETE' }); loadAdmin(); }));
-  $('userRows').innerHTML = users.map(u => `<tr><td>${esc(u.username)}</td><td>${esc(u.role)}</td><td>${esc(when(u.createdAt))}</td><td>${u.disabledAt ? 'gesperrt' : 'aktiv'}</td>
-    <td>${u.id === me.user.id ? '<span class="muted">du</span>' : `<button class="small" data-user="${u.id}" data-dis="${u.disabledAt ? 0 : 1}">${u.disabledAt ? 'Entsperren' : 'Sperren'}</button>`}</td></tr>`).join('');
-  $('userRows').querySelectorAll('[data-user]').forEach(b => b.onclick = guard(async () => { await api('/api/users/' + b.dataset.user, { method: 'PATCH', body: { disabled: b.dataset.dis === '1' } }); loadAdmin(); }));
-}
-$('invCreate').onclick = guard(async () => {
-  const r = await api('/api/invites', { method: 'POST', body: { note: $('invNote').value, role: $('invRole').value, days: Number($('invDays').value) } });
-  $('invNew').classList.remove('hide');
-  $('invNew').innerHTML = `<p>Einladungslink (${r.days} Tage, einmalig nutzbar):</p><div class="secret">${esc(r.url)}</div><button class="small" id="invCopy">Kopieren</button>`;
-  $('invCopy').onclick = () => navigator.clipboard.writeText(r.url).then(() => toast('Kopiert.'));
-  $('invNote').value = ''; loadAdmin();
-});
-$('impGo').onclick = guard(async () => {
-  const f = $('impFile').files[0];
-  if (!f) { toast('Bitte eine HTML-Datei wählen.', true); return; }
-  $('impGo').disabled = true;
-  try {
-    const q = new URLSearchParams();
-    if ($('impForce').checked) q.set('force', '1');
-    if ($('impBase').value) q.set('baseSnapshot', $('impBase').value);
-    const r = await api('/api/import/html?' + q, { method: 'POST', body: f, headers: { 'content-type': 'text/html' } });
-    $('impOut').classList.remove('hide');
-    $('impOut').textContent = `Import ${r.uiVersion || ''}: ${r.created.length} neu, ${r.updated.length} aktualisiert, ${r.unchanged.length} unverändert, ${r.skippedConflicts.length} Konflikte, ${r.errors.length} Fehler\n\n` + JSON.stringify({ skippedConflicts: r.skippedConflicts, errors: r.errors, notInImport: r.notInImport, warnings: r.warnings }, null, 2);
-    toast('Import abgeschlossen.'); loadStatus();
-  } finally { $('impGo').disabled = false; }
+const { configure: configureAccount, loadTokens, loadActivity, loadAdmin } = setupAccountTools({
+  currentUser: () => me.user, when, ago, guard, toast, loadStatus
 });
 
 // ---------- server updates ----------
@@ -695,7 +603,6 @@ document.addEventListener('visibilitychange', () => refreshQueue.resume());
 $('drawer').addEventListener('close', () => refreshQueue.resume());
 $('editDialog').addEventListener('close', () => refreshQueue.resume());
 
-$('logout').onclick = guard(async () => { await api('/api/auth/logout', { method: 'POST' }); polling?.close(); location.href = '/login'; });
 
 function routeFromHash() {
   const tab = location.hash.slice(1), bpLink = /^bp=(.+)$/.exec(tab);
@@ -712,11 +619,7 @@ window.addEventListener('hashchange', () => { if (me) routeFromHash(); });
     campusArchived=!!collections.find(p=>p.id==='campus')?.archivedAt;
     $('blueprintProject').querySelector('[value="campus"]').textContent=campusArchived?'Campus (Archiv)':'Campus';
     if(blueprintProject==='campus'&&campusArchived&&['','#overview'].includes(location.hash)){location.replace('/projects?id=campus');return;}
-    $('who').textContent = me.user.username;
-    if (me.user.role === 'admin') {
-      $('adminTab').classList.remove('hide');
-      $('tokScope').add(new Option(SCOPES.erebor_supply,'erebor_supply'));
-    }
+    configureAccount();
     polling=connectPolling({refresh:refreshVisible,onState:renderPollingState,immediate:false});
     routeFromHash();
     if (!['#overview','#coordinates'].includes(location.hash)) $('liveLine').textContent='Gespeicherter Weltbestand im Reiter Live-Bestand.';

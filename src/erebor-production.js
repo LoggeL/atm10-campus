@@ -54,9 +54,10 @@ export function productionStore(db) {
     return files;
   }
 
+  const finished=(version,site)=>new Map(finishedRows.all(version,site).map(r=>[r.name,r.finished_at]));
   function ordered(project,site) {
     const version=project.current_version;
-    const done=new Map(finishedRows.all(version,site).map(r=>[r.name,r.finished_at]));
+    const done=finished(version,site);
     const priority=priorities.all(version,site).map(r=>r.name);
     const files=catalog(project,site), byName=new Map(files.map(f=>[f.name,f]));
     const preferred=priority.filter(name=>byName.has(name)&&!done.has(name));
@@ -101,7 +102,7 @@ export function productionStore(db) {
   }
   migrate();
   return {
-    catalog,
+    catalog, finished,
     ordered,
     done:(v,site,name)=>!!db.prepare('SELECT 1 FROM erebor_finished_plans WHERE version=? AND site=? AND name=?').get(v,site,name),
     finish(v,site,name,at){if(name)finish.run(v,site,name,at);db.prepare('DELETE FROM erebor_priority WHERE version=? AND site=? AND name=?').run(v,site,name??'');},

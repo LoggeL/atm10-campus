@@ -3,55 +3,28 @@
 <title>ATM10 Campus</title><link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><rect x='2' y='2' width='12' height='12' rx='3' fill='%2373d8e5'/></svg>"><link rel="stylesheet" href="/assets/app.css?v=20261114-status-1&amp;revision=site-status"><link rel="stylesheet" href="/assets/blueprint-preview.css?v=20261114-status-1"><link rel="stylesheet" href="/assets/erebor-console.css?v=20261114-status-1&amp;revision=compact-abc-1"></head>
 <body>
 <a class="skip-link" href="#main">Zum Inhalt</a>
-<header class="top">
-  <a class="brand" href="/app">ATM10 Campus</a><span class="spacer"></span>
-  <a id="viewerLink" href="/viewer">3D-Viewer</a><a href="/api/materials?format=html">Materialliste</a>
-  <details class="menu" id="accountMenu"><summary>Konto</summary><div class="menu-content"><span class="muted" id="who"></span><button id="logout">Abmelden</button></div></details>
-</header>
-<nav class="tabs" aria-label="Campus">
-  <a data-tab="overview" href="#overview" aria-current="page">Baupläne</a>
-  <a data-tab="coordinates" href="#coordinates">Koordinaten</a>
-  <a href="/projects">Bauprojekte</a>
-  <a href="/erebor/dashboard">Dashboard</a>
-  <a href="/erebor/bauzaehler">Bauzähler</a>
-  <a data-tab="cannons" href="#cannons">Kanonen</a>
-  <a data-tab="snapshots" href="#snapshots">Live-Bestand</a>
-  <details class="menu" id="moreMenu"><summary id="moreLabel">Mehr</summary><div class="menu-content">
-    <a data-tab="agent" href="#agent">Agent-Zugang</a><a data-tab="activity" href="#activity">Aktivität</a>
-    <a data-tab="admin" href="#admin" class="hide" id="adminTab">Verwaltung</a><a href="/docs">API-Dokumentation</a>
-  </div></details>
-</nav>
+<!-- campus-navigation -->
 <main id="main">
   <div class="refresh-status" id="refreshStatus" aria-busy="false">
     <div class="refresh-timing"><span id="refreshLabel">Aktualisierung alle 30 s</span><progress id="refreshProgress" max="1" value="0" aria-label="Zeit bis zur nächsten Aktualisierung"></progress></div>
     <span class="refresh-last" id="refreshLast" role="status">Noch nicht aktualisiert</span>
     <button class="small" id="refreshNow">Jetzt aktualisieren</button>
   </div>
-  <div class="toolbar" id="blueprintProjectBar"><label class="row">Bauprojekt <select id="blueprintProject" aria-label="Bauprojekt wählen"><option value="erebor">Erebor</option><option value="campus">Campus (Archiv)</option></select></label><a id="blueprintProjectLink" href="/projects?id=erebor">Projekt öffnen</a> <a href="/projects#archiv">Projektarchiv</a></div>
+  <div class="toolbar" id="blueprintProjectBar"><label class="row">Bauprojekt <select id="blueprintProject" aria-label="Bauprojekt wählen"><option value="erebor">Erebor</option><option value="campus">Campus (Archiv)</option></select></label><a id="blueprintProjectLink" href="/projects?id=erebor">Projekt öffnen</a> <a id="orderCoordinates" href="#coordinates">Bauplan-Koordinaten</a></div>
   <section data-pane="overview">
-    <div class="page-heading"><h1>Baupläne</h1><button class="primary" id="newBp">Neuer Bauplan</button></div>
+    <div class="page-heading"><h1>Bauaufträge</h1><button class="primary" id="newBp">Neuer Bauplan</button></div>
     <div class="summary-line" id="cards" aria-label="Campus-Status"></div>
     <section id="ereborQueue" class="hide" aria-labelledby="ereborQueueTitle">
-      <p><a href="/assets/erebor-me-auftrag.html">ME-Auftrag für die vier Connecting-Blöcke</a></p>
-      <div class="fleet-headed"><div><p class="eyebrow">EREBOR · BAULEITUNG</p><h2 id="ereborQueueTitle">Kanonen</h2></div><details class="fleet-settings"><summary>Nachlegen für alle Kanonen</summary><p data-summary role="status">Planfolge wird geladen …</p><div class="row"><button type="button" class="hide" data-prepare>Nachlegen aktivieren</button><button type="button" class="hide" data-pause>Nachlegen pausieren</button></div></details></div>
-      <div class="fleet-actions"><button type="button" class="primary" data-resume-fleet disabled>Pausierte Cleanstone-Kanonen fortsetzen</button><output data-resume-status></output></div>
-      <details><summary>Flotten-Katalog und Massiv · getrennte Register (Details)</summary><p data-global-counts aria-label="Gesamte Flotte: getrennte Planregister">Zähler unbekannt</p>
-      <p class="muted">Offen = noch nicht zugewiesen; zugewiesen umfasst wartende und aktive Drucker (A/B/C), nicht nur laufende Kanonen. Katalog und Massiv sind getrennte Planregister, keine addierbare Gesamtgeometrie. Regulärer Cleanstone bleibt als Fallback erhalten; Architektur und Aushub sind eigene Bauphasen.</p></details>
-      <div class="fleet-layout"><nav class="fleet-nav" aria-label="Kanone auswählen"><div class="fleet-grid" data-sites></div><p class="fleet-legend"><i></i> Baut <i></i> Bereit <i></i> Wartet</p></nav>
-      <section class="fleet-station" aria-label="Ausgewählte Kanone">
-        <div class="fleet-station-heading"><div><p class="eyebrow">AUSGEWÄHLTE KANONE</p><h3 data-station-name>K01</h3></div><span class="fleet-pill" data-native>Wird geladen</span></div>
-        <div class="fleet-metrics"><div><span>Massiv-Kacheln noch zu bauen (offen + zugewiesen, A/B/C)</span><b data-massif-remaining role="status">Unbekannt</b></div></div>
-        <div class="fleet-job"><span class="eyebrow">EINGELEGT</span><strong data-job>Wird geprüft …</strong></div>
-        <div data-cannon-strip></div>
-        <div class="fleet-metrics fleet-main-details"><div hidden><span>Gesetzte Blöcke</span><b data-placed>·</b></div><div><span>Treibstoff A</span><b data-fuel>·</b></div><div><span>Zielchunk A</span><b data-target>·</b></div></div>
-        <p class="fleet-waiting" data-waiting hidden></p>
-        <details><summary>Stations-Katalog / Fallback · Zählerdetails</summary><p data-station-counts aria-label="Ausgewählte Station: getrennte Planregister">Zähler unbekannt</p></details>
-        <div class="fleet-actions"><button type="button" class="primary" data-auto aria-pressed="false" disabled>Automatik starten</button><button type="button" data-start disabled>Einmal starten</button></div>
-        <p class="muted fleet-hint" data-hint role="status"></p>
-      </section></div><div class="fleet-catalog-title"><h3 data-catalog-heading>Baupläne für K01</h3></div><div class="fleet-lists" aria-label="Abschnitte anzeigen">
-      <button type="button" data-list="open" aria-pressed="true">Architektur & Fallback: offen</button>
-      <button type="button" data-list="done" aria-pressed="false">Architektur & Fallback: erledigt</button></div>
-      <details><summary>Katalogzählung (inkl. regulärem Fallback)</summary><p>Offen + zugewiesen: <span data-open-count></span> · Erledigt: <span data-done-count></span>. Nicht zur Massiv-Restmenge addieren.</p></details>
+      <div class="fleet-headed"><label class="row">Station <select data-station-picker aria-label="Station für Bauaufträge"></select></label>
+        <a data-progress-link href="/erebor/dashboard">Baufortschritt ansehen</a></div>
+      <div class="fleet-job"><h2 id="ereborQueueTitle">Baufolge</h2><p><span data-native></span> · <strong data-job>Wird geprüft …</strong></p>
+        <p data-waiting hidden></p><p class="muted"><span data-fuel></span> · Zielchunk A <span data-target></span></p>
+        <div class="fleet-actions"><button type="button" data-auto aria-pressed="false" disabled>Automatik starten</button><button type="button" data-start disabled>Einmal starten</button></div>
+        <p class="muted" data-hint role="status"></p>
+      </div>
+      <h3 data-catalog-heading>Abschnitte</h3><div class="fleet-lists" aria-label="Baufolge filtern">
+        <button type="button" data-list="open" aria-pressed="true">Offene Baupläne</button><button type="button" data-list="done" aria-pressed="false">Abgeschlossene Baupläne</button>
+      </div>
     </section>
     <div class="toolbar">
       <input class="search" id="search" type="search" placeholder="Bauplan suchen …" aria-label="Bauplan suchen">
@@ -83,26 +56,27 @@
   </section>
 
   <section data-pane="cannons" class="hide">
-    <div class="page-heading"><h1>Kanonen</h1></div>
-    <nav class="cannon-subnav" aria-label="Kanonenbereiche"><a href="#cannons" aria-current="page">Steuerung</a><a href="#cannon-coordinates">Aufstellkoordinaten</a></nav>
-    <p class="intro">Wo müssen die Kanonen stehen? Unter <a href="#cannon-coordinates">Aufstellkoordinaten</a> findest du die geplanten Plätze für dein Bauprojekt.</p>
+    <div class="page-heading"><h1>Stationstechnik</h1></div>
+    <nav class="cannon-subnav" aria-label="Kanonenbereiche"><a href="#cannons" aria-current="page">Geräte &amp; Versorgung</a><a href="#cannon-coordinates">Aufstellkoordinaten</a></nav>
+    <div id="fleetEquipment"></div>
     <p class="intro" id="meLine">ME-Bestand wird geladen …</p>
+    <details id="individualEquipment"><summary>Stationscomputer einzeln konfigurieren</summary>
       <details id="ccSetup"><summary>Kanone verbinden</summary>
         <ol class="steps">
-          <li>Unter <a href="#agent" data-goto="agent">Agent-Zugang</a> einen Token mit Scope <b>Station (ME-Computer)</b> anlegen. Der darf nur lesen und Bestand/Status melden, keine Baupläne ändern.</li>
+          <li>Unter <a href="#agent">Agent-Zugang</a> einen Token mit Scope <b>Station (ME-Computer)</b> anlegen. Der darf nur lesen und Bestand/Status melden, keine Baupläne ändern.</li>
           <li>Aufbau: <span class="mono">ME-Kabel → ME Bridge → Computer → Kiste → Schematicannon</span>. ME Bridge und Kiste hängen beide direkt am Computer oder beide am selben Wired-Modem-Netz. Eine einfache Kiste oder ein Fass nehmen, keine Doppelkiste. Die Kiste berührt die Kanone an einer beliebigen Seite, die Kanone zieht Blöcke und Schießpulver daraus. Die ME Bridge braucht einen ME-Kanal.</li>
           <li>Am Computer eingeben: <div class="secret" id="ccInstall"></div> Token und Kanonen-Namen eintippen, fertig. Das Script startet bei jedem Neustart und aktualisiert sich selbst.</li>
           <li>Die App sucht die Kanone automatisch beim Minecraft-Computer und seiner Versorgungskiste. Sobald sie eindeutig erkannt ist, genügt die Bauplan-Auswahl: Bei eingeschalteter Automatik setzt der Server den Rest-Plan mit Zielkoordinaten und Einstellungen ein, sobald die Kanone vollständig gestoppt ist. Falls die Suche nicht gelingt, zeigt die Karte den Grund und <b>Erneut suchen</b>. Eine manuelle Position ist unter „Verbindung und Diagnose“ als erweiterte Option verfügbar.</li>
           <li>Die automatische Vorbereitung übernimmt auch die gespeicherten Einstellungen. Sobald der Bauplan eingesetzt und die Kanone live bestätigt ist, als Admin <b>Kanone starten</b> wählen. Eine pausierte Kanone lässt sich mit <b>Fortsetzen</b> weiterbauen. Stoppen und Zurücksetzen erfolgt im Spiel. Fehlt Material, wartet die Kanone bei ausgeschaltetem „Fehlende Materialien überspringen“ auf Nachschub.</li>
         </ol>
       </details>
-    <div id="cannonList"></div>
+    <div id="cannonList"></div></details>
     <p class="footnote">Admins starten oder setzen Kanonen hier fort. Stoppen und Zurücksetzen erfolgt im Spiel. Der Baustand stammt aus dem zuletzt gespeicherten Weltstand.</p>
   </section>
 
   <section data-pane="cannon-coordinates" class="hide">
-    <div class="page-heading"><h1>Kanonen · Aufstellkoordinaten</h1></div>
-    <nav class="cannon-subnav" aria-label="Kanonenbereiche"><a href="#cannons">Steuerung</a><a href="#cannon-coordinates" aria-current="page">Aufstellkoordinaten</a></nav>
+    <div class="page-heading"><h1>Stationsaufstellung</h1></div>
+    <nav class="cannon-subnav" aria-label="Kanonenbereiche"><a href="#cannons">Geräte &amp; Versorgung</a><a href="#cannon-coordinates" aria-current="page">Aufstellkoordinaten</a></nav>
     <div id="cannonSites"><p>Aufstellkoordinaten werden geladen …</p></div>
   </section>
 
