@@ -26,11 +26,7 @@ export function registerGroupFeeders(app,campus){
   if(!station||JSON.parse(station.options_json||'{}').paused)fail(409,'Standort-Materialzufuhr ist gesperrt.');
   return JSON.stringify([config,rows,station.options_json]);
  };
- app.post('/api/erebor/groups/:site/:group/plan',async req=>{
-  const credential=/^Bearer (\S+)$/.exec(req.headers.authorization||'')?.[1];
-  const b=credential&&lookup.get(req.params.site,req.params.group,hash(credential));
-  if(!b)fail(401,'Gruppen-Anmeldung erforderlich.');
-  if(req.body?.computerId!==b.computer_id||req.body?.chestSide!==b.chest_side)fail(403,'Computer oder Kiste passt nicht zur Gruppe.');
+ const execute=async b=>{
   const before=snapshot(b),claim=randomBytes(24).toString('hex'),time=Date.now();
   const changed=db.prepare('UPDATE erebor_group_feeders SET claim=?,claim_until=? WHERE site=? AND group_id=? AND token_hash=? AND claim_until<=?').run(claim,time+30000,b.site,b.group_id,b.token_hash,time);
   if(!changed.changes)fail(409,'Materialprüfung läuft bereits.');
@@ -42,8 +38,20 @@ export function registerGroupFeeders(app,campus){
    if(!current||current.claim!==claim||current.claim_until<=Date.now()||snapshot(b)!==before)fail(409,'Gruppenauftrag während der Prüfung geändert.');
    return plan;
   }finally{db.prepare('UPDATE erebor_group_feeders SET claim=NULL,claim_until=0 WHERE site=? AND group_id=? AND claim=?').run(b.site,b.group_id,claim);}
+ };
+ app.post('/api/erebor/groups/:site/:group/plan',async req=>{
+  const credential=/^Bearer (\S+)$/.exec(req.headers.authorization||'')?.[1];
+  const b=credential&&lookup.get(req.params.site,req.params.group,hash(credential));
+  if(!b)fail(401,'Gruppen-Anmeldung erforderlich.');
+  if(req.body?.computerId!==b.computer_id||req.body?.chestSide!==b.chest_side)fail(403,'Computer oder Kiste passt nicht zur Gruppe.');
+  return execute(b);
  });
- return {register(mapping){
+ return {plan(mapping){
+  // Trusted in-process scheduler only; never exposed as an alternate HTTP auth path.
+  const b=db.prepare('SELECT * FROM erebor_group_feeders WHERE site=? AND group_id=?').get(mapping.site,mapping.group);
+  if(!b||b.version!==mapping.version||b.computer_id!==mapping.computerId||b.chest_side!==mapping.chestSide)fail(409,'Keine passende provisionierte Pilotbindung.');
+  return execute(b);
+ },register(mapping){
   const {site,group,version,computerId,chestSide}=mapping;
   if(site!=='K12'||!['DEF','GHI'].includes(group)||!Number.isSafeInteger(version)||version<1||!Number.isSafeInteger(computerId)||computerId<0||!['front','back','left','right','top','bottom'].includes(chestSide))fail(400,'Ungültige Pilotbindung.');
   const token=randomBytes(32).toString('base64url');

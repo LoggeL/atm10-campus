@@ -1,3 +1,4 @@
+import {pilotScheduler} from './erebor-pilot.js';
 import {cannonProgressRows} from './cannon-progress-rows.js';
 import {publishedPlan,selectionStore,unstarted} from './erebor-selection.js';
 import {productionStore} from './erebor-production.js';
@@ -73,6 +74,8 @@ export function registerEreborQueue(app,campus){
  const verifyStone=config.worldSources.live?(p,verifyStone)=>generate(p,{verifyStone}):null;
  const helpers=parallelFleet(db,production,choices,request,recordedFinish,resumePaused,verifyStone,massif);
  campus.ereborHelpers=helpers;
+ const pilot=pilotScheduler(db,massif,request,mapping=>campus.ereborGroupFeeders.plan(mapping));
+ campus.ereborPilot=pilot;
  function available(p,site){
   const busy=helpers.reserved(p.current_version,site);
   const {open,done}=production.ordered(p,site);
@@ -367,6 +370,12 @@ export function registerEreborQueue(app,campus){
    if(current(c.version)){
     const report=await liveReport(c.version);
     await helpers.tick(p,report,()=>c.phase==='stone'&&helpers.isEnabled(c.version),read,renew,()=>liveReport(c.version));
+    // Explicit trusted source configuration only. Optional pilot failures must
+    // never stop legacy A–C service or promote an observe-only mapping.
+    if(config.ereborPilot && renew()){
+     try{campus.ereborPilotStatus=await pilot.tick(config.ereborPilot);}
+     catch(e){campus.ereborPilotStatus={state:'blocked',message:e.message};}
+    }
    }
    if(current(c.version)&&cfg().enabled&&!massif.enabled(c.version)&&c.phase!=='finished'&&!helpers.list(c.version).some(r=>r.name)&&sites.every(site=>{const s=read(site);return s.exhausted&&!s.job;})){
     const phase=({stone:'clear',clear:'build',build:'finished'})[c.phase];

@@ -47,6 +47,8 @@ def validate_clear(data, size):
 def handle(bridge, action, obj):
     from campus_schematic import prepare_schematic
     layout = json.loads(Path(__file__).with_name('erebor-stations.json').read_text())
+    if action == 'erebor-target-leases':
+        return publish_target_leases(bridge, layout, obj)
     if action == 'erebor-live':
         import time
         if not isinstance(obj,dict) or set(obj)!={'version'} or obj['version']!=layout['version']:
@@ -173,11 +175,12 @@ def handle(bridge, action, obj):
     return prepare_schematic(bridge,b,desired,obj['nbtBase64'],opts,obj['size'],erebor_kind=kind,previous=obj.get('previous'))
 
 
-def observer_binding(layout, key):
-    """Validate the entire opt-in map before exposing any new native read target.
+def observer_binding(layout, key, *, runtime=False):
+    """Validate the complete opt-in map before resolving an optional address.
 
-    This file is intentionally separate from scheduling and material identities.
-    A mapping never authorizes prepare/start/supply, target tickets or mode edits.
+    The default observation file grants no runtime capability. Only the trusted
+    lease publisher passes runtime=True, selecting a separate K12-only file.
+    Neither map enables prepare/start/supply mutations.
     """
     def require(ok):
         if not ok:
@@ -189,7 +192,7 @@ def observer_binding(layout, key):
     def adjacent(a, b):
         return sum(abs(x-y) for x,y in zip(a,b)) == 1
 
-    path = Path(__file__).with_name('erebor-observers.json')
+    path = Path(__file__).with_name('erebor-runtime-tracker.json' if runtime else 'erebor-observers.json')
     if not path.exists():
         raise ValueError('Keine Zusatzkanone zur Beobachtung freigegeben.')
     require(path.stat().st_size <= 32768)
@@ -197,8 +200,10 @@ def observer_binding(layout, key):
     require(exact(config, ('schema','version','mode','sites')))
     require(type(config['schema']) is int and config['schema'] == 1 and
             type(config['version']) is int and config['version'] == layout['version'] and
-            config['mode'] == 'observe-only')
+            config['mode'] == ('leased-targets' if runtime else 'observe-only'))
     require(isinstance(config['sites'], list) and 1 <= len(config['sites']) <= 37)
+    if runtime:
+        require(len(config['sites']) == 1 and isinstance(config['sites'][0], dict) and config['sites'][0].get('site') == 'K12')
     pairs = json.loads(Path(__file__).with_name('erebor-parallel.json').read_text())
     require(pairs['version'] == layout['version'])
     # Protect all pre-existing physical objects, not merely the selected site.
@@ -236,6 +241,61 @@ def observer_binding(layout, key):
         require(all(not adjacent(p, other['chest']) for other in groups if other is not group for p in group['slots'].values()))
     require(key in bindings)
     return bindings[key]
+
+
+def publish_target_leases(bridge, layout, obj):
+    """Called only through signed, nonce-checked, controller-locked dispatch.
+
+    Validated mapping is a separate install capability; observation never grants it.
+    The Campus scheduler, not CC or a browser, supplies exact persisted jobs.
+    """
+    import os
+    import tempfile
+    import time
+    def require(ok):
+        if not ok:
+            raise ValueError('Ungültige K12-Ziel-Lease.')
+    def vector(p):
+        return isinstance(p, list) and len(p) == 3 and all(type(n) is int for n in p)
+    now = int(time.time()*1000)
+    require(isinstance(obj, dict) and set(obj) == {'schema','version','phase','at','expiresAt','jobs'})
+    require(type(obj['schema']) is int and obj['schema'] == 1 and type(obj['version']) is int and obj['version'] == layout['version'] and obj['phase'] == 'stone')
+    require(type(obj['at']) is int and type(obj['expiresAt']) is int and 0 <= now-obj['at'] < 10000 and now < obj['expiresAt'] <= obj['at']+10000)
+    jobs = obj['jobs']
+    require(isinstance(jobs, dict) and set(jobs) in ({'K12'+s for s in 'DEF'}, {'K12'+s for s in 'GHI'}, {'K12'+s for s in 'DEFGHI'}))
+    files = set()
+    for key, j in jobs.items():
+        binding = observer_binding(layout, key, runtime=True)
+        require(isinstance(j, dict) and set(j) == {'file','anchor','size','options'})
+        require(isinstance(j['file'], str) and re.fullmatch(r'campus_[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}\.nbt',j['file']) and j['file'] not in files)
+        files.add(j['file'])
+        require(vector(j['anchor']) and vector(j['size']) and all(0 < n <= 256 for n in j['size']))
+        require(-64 <= j['anchor'][1] and j['anchor'][1]+j['size'][1] <= 320 and all(abs(n) <= 30000000 for n in j['anchor']))
+        require(j['options'] == [2,False,False] and type(j['options'][0]) is int and all(type(n) is bool for n in j['options'][1:]))
+        p = [binding[k] for k in 'xyz']
+        require(all(sum((j['anchor'][i]+d[i]-p[i])**2 for i in range(3)) < 65536
+                    for d in ((x,y,z) for x in (0,j['size'][0]-1) for y in (0,j['size'][1]-1) for z in (0,j['size'][2]-1))))
+    directory = bridge.base/'data/kubejs/config'
+    # The live consumer must use the identical explicit mapping, not merely a
+    # similarly named or observation-only controller file.
+    mapping = Path(__file__).with_name('erebor-runtime-tracker.json').read_text()
+    require(json.loads((directory/'erebor-runtime-tracker.json').read_text()) == json.loads(mapping))
+    target = directory/'erebor-runtime-leases.json'
+    if target.exists():
+        previous = json.loads(target.read_text())
+        require(previous.get('expiresAt',0) <= now or set(previous.get('jobs',{})) <= set(jobs))
+        require(previous.get('at',0) <= obj['at'])
+    temporary = None
+    try:
+        with tempfile.NamedTemporaryFile(mode='w', dir=directory, prefix='.erebor-leases-', delete=False) as f:
+            temporary = Path(f.name)
+            json.dump(obj,f,separators=(',',':')); f.flush(); os.fsync(f.fileno())
+        os.replace(temporary,target)
+        require(json.loads(target.read_text()) == obj)
+    finally:
+        if temporary is not None and temporary.exists():
+            temporary.unlink()
+    return {'published':True,'lease':json.loads(target.read_text())}
 
 
 def shared_supply(bridge,layout,site,obj,proof):

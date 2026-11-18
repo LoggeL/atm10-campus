@@ -223,7 +223,43 @@ export function registerMassif(app,campus,stations,availableSlots=()=>[]){
   }
   return anchors;
  };
- return {enabled,reserve,occupied,lastBalancedAt:v=>balance?.version===v?balance.at:null,restore(v,site,slot,tile){const r=rowFor.get(v,tile);if(!r||r.site!==site||r.slot!==slot||r.done)throw Error('Massiv-Auftrag nicht mehr reserviert.');return load(v,site,slot,r);},
+ // Internal scheduler capability only; no HTTP route or default runtime mapping.
+ function reserveGroup(v,site,group,positions){
+  if(site!=='K12'||!['DEF','GHI'].includes(group)||Object.keys(positions||{}).sort().join('')!==group||new Set(Object.values(positions||{}).map(p=>JSON.stringify(p))).size!==3||
+     Object.values(positions).some(p=>!Array.isArray(p)||p.length!==3||p.some(n=>!Number.isSafeInteger(n)||Math.abs(n)>30000000)||p[1]<-64||p[1]>=320))throw Error('Ungültige Pilotgruppe');
+  if(!current(v)||!enabled(v))return null;
+  const incomplete=Symbol('incomplete');
+  try{return tx(db,()=>{
+   const result={};
+   for(const slot of group){
+    const pos=positions[slot];
+    const reachable=r=>r.y>=-64&&r.y+r.sy<=320&&[r.sx,r.sy,r.sz].every(n=>Number.isSafeInteger(n)&&n>0)&&
+     [0,r.sx-1].every(dx=>[0,r.sy-1].every(dy=>[0,r.sz-1].every(dz=>
+      (r.x+dx-pos[0])**2+(r.y+dy-pos[1])**2+(r.z+dz-pos[2])**2<65536)));
+    const helper=db.prepare('SELECT name,job FROM erebor_helpers WHERE version=? AND site=? AND slot=?').get(v,site,slot);
+    let r=db.prepare('SELECT * FROM erebor_massif_tiles WHERE v=? AND site=? AND slot=? AND done=0').get(v,site,slot);
+    if(helper?.job){
+     if(!r||!reachable(r))throw Error('Pilotreservierung stimmt nicht');
+     const plan=load(v,site,slot,r),job=JSON.parse(helper.job);
+     if(job.massif!==r.tile||JSON.stringify(job.desired)!==JSON.stringify(plan.job.desired)||JSON.stringify(job.size)!==JSON.stringify(plan.job.size))throw Error('Pilotauftrag stimmt nicht');
+     result[slot]={...plan,job};continue;
+    }
+    if(helper?.name||r)throw Error('Unvollständige Pilotreservierung');
+    const anchors=db.prepare(`SELECT json_extract(state,'$.job.desired.anchor') anchor FROM erebor_queue_sites WHERE json_extract(state,'$.job.massif') IS NULL
+      UNION ALL SELECT json_extract(job,'$.desired.anchor') FROM erebor_helpers WHERE version=? AND json_extract(job,'$.massif') IS NULL`).all(v).map(r=>r.anchor);
+    r=db.prepare('SELECT * FROM erebor_massif_tiles WHERE v=? AND site IS NULL AND done=0 AND special=0 ORDER BY (home=?) DESC,priority,tile').all(v,site)
+     .find(r=>reachable(r)&&![...Array(Math.ceil(r.sy/16))].some((_,i)=>anchors.includes(JSON.stringify([r.x,r.y+i*16,r.z]))));
+    if(!r)throw incomplete;
+    db.prepare('UPDATE erebor_massif_tiles SET site=?,slot=? WHERE v=? AND tile=? AND site IS NULL AND done=0').run(site,slot,v,r.tile);
+    const plan=load(v,site,slot,r),job={...plan.job,source:{massif:r.tile}};
+    db.prepare(`INSERT INTO erebor_helpers(version,site,slot,name,job,message) VALUES(?,?,?,?,?,'Pilot reserviert')
+      ON CONFLICT(version,site,slot) DO UPDATE SET name=excluded.name,job=excluded.job,message=excluded.message`).run(v,site,slot,job.desired.blueprint,JSON.stringify(job));
+    result[slot]={...plan,job};
+   }
+   return result;
+  });}catch(e){if(e===incomplete)return null;throw e;}
+ }
+ return {enabled,reserve,reserveGroup,occupied,lastBalancedAt:v=>balance?.version===v?balance.at:null,restore(v,site,slot,tile){const r=rowFor.get(v,tile);if(!r||r.site!==site||r.slot!==slot||r.done)throw Error('Massiv-Auftrag nicht mehr reserviert.');return load(v,site,slot,r);},
   finish(v,tile,site,slot){
    const updated=db.prepare('UPDATE erebor_massif_tiles SET done=1 WHERE v=? AND tile=? AND site=? AND slot=? AND done=0').run(v,tile,site,slot);
    const m=/^X(\d+)_Z(\d+)_/.exec(tile);
