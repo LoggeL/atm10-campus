@@ -27,6 +27,18 @@ test('Bauzähler page and read API retain authentication and never contact the c
   assert.equal(response.json().massif,null);assert.equal(response.json().targetTotal,null);
   assert.equal(response.json().stages.stone.total,0);
   assert.equal(db.prepare('SELECT total_changes() n').get().n,before);assert.equal(calls,0);
+  db.prepare('INSERT INTO erebor_massif_runs(v) VALUES(12)').run();
+  const insert=db.prepare('INSERT INTO erebor_massif_tiles(v,tile,blocks,done,special,home,site) VALUES(?,?,?,?,?,?,?)');
+  insert.run(12,'SOLID',100,0,0,'K01',null);
+  insert.run(12,'CAVITY_LUFT',40,0,0,'K02','K01');
+  insert.run(12,'BE',9,0,1,'K01',null);
+  insert.run(12,'DONE',999,1,0,'K01',null);
+  insert.run(11,'OLD',888,0,0,'K01',null);
+  const changes=db.prepare('SELECT total_changes() n').get().n;
+  const published=await app.inject({url:'/api/projects/erebor/bauzaehler',headers});
+  assert.deepEqual(published.json().massif.workload,{grossBlocks:140,assignedBlocks:40,manualBlocks:9});
+  assert.deepEqual(published.json().stations.K01.massif.workload,published.json().massif.workload);
+  assert.equal(db.prepare('SELECT total_changes() n').get().n,changes);assert.equal(calls,0);
   assert.equal((await app.inject({method:'POST',url:'/api/projects/erebor/bauzaehler',headers,payload:{}})).statusCode,404);
  }finally{await app.close();app.campus.db.close();rmSync(dir,{recursive:true,force:true});}
 });
