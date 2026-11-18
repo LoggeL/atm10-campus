@@ -1,5 +1,6 @@
+import {slotsFor} from './erebor-groups.js';
 export function cannonProgressRows(mains,helpers,report){
- return mains.flatMap(main=>['A','B','C'].map(slot=>{
+ return mains.flatMap(main=>slotsFor(main.site).map(slot=>{
   const station=slot==='A'?main.site:main.site+slot;
   const job=slot==='A'?main.job:helpers.find(h=>h.site===main.site&&h.slot===slot)?.job;
   const signal=report?.stations?.[station];

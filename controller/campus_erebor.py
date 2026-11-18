@@ -76,8 +76,17 @@ def handle(bridge, action, obj):
     if not isinstance(obj, dict) or set(obj) != required or obj['version'] != layout['version']:
         raise ValueError('Erebor-Standortplan oder Auftrag passt nicht.')
     key = obj['site']
+    group = None
+    ext_slot = isinstance(key,str) and re.fullmatch(r'K09([D-I])',key)
+    ext_supply = action=='erebor-supply' and key in ('K09-N','K09-S')
+    if ext_slot or ext_supply:
+        cfg=json.loads(Path(__file__).with_name('k09-groups.json').read_text())
+        if cfg['site']!='K09' or cfg['version']!=layout['version']: raise ValueError('K09-Version passt nicht.')
+        group=next(g for g in cfg['groups'] if (g['name']==key if ext_supply else ext_slot[1] in g['slots']))
     helper = isinstance(key, str) and re.fullmatch(r'(K[0-9]{2})([BC])', key)
-    parent = helper[1] if helper else key
+    if ext_slot: helper=re.fullmatch(r'(K09)([D-I])',key)
+    if ext_supply and set(obj)!={'site','version','targets','chestSide','computerId'}: raise ValueError('Gruppenauftrag erforderlich.')
+    parent = 'K09' if group else (helper[1] if helper else key)
     site = next((s for s in layout['sites'] if s['site'] == parent), None)
     if not site:
         raise ValueError('Unbekannter Kanonenplatz.')
@@ -91,7 +100,10 @@ def handle(bridge, action, obj):
         row = next((s for s in extra['sites'] if s['site'] == parent), None)
         if extra['version'] != layout['version'] or not row or row['main'] != site['cannon']:
             raise ValueError('Zusatzposition passt nicht zur Hauptkanone.')
-        x,y,z = row[helper[2]]
+        x,y,z = (group['slots'] if group else row)[helper[2]]
+    if ext_supply:
+        x,y,z=next(iter(group['slots'].values()))
+        site={**site, 'chest':group['chest'],'computer':group['computer'],'cannon':[x,y,z]}
     b = {'x':x, 'y':y, 'z':z, 'dimension':'minecraft:overworld', 'owner':'Erebor'}
     if action == 'erebor-inspect':
         return {'observed':bridge.inspect(b)}
@@ -109,7 +121,7 @@ def handle(bridge, action, obj):
         # Erebor's startup.lua sets the station name at boot. Verify the installed
         # label and physical computer ID in the same world read as the schematic.
         proof = proof_command(candidate).replace('{ComputerId:'+str(obj['computerId'])+'}',
-                '{ComputerId:'+str(obj['computerId'])+',Label:"erebor-'+site['site']+'"}')
+                '{ComputerId:'+str(obj['computerId'])+',Label:"erebor-'+(group['name'] if ext_supply else site['site'])+'"}')
         if site['inventoryBlock'] == 'minecraft:chest':
             # The tracker selects a candidate. The RCON command still proves the
             # exact block and single-chest state together with every other guard.
@@ -119,10 +131,10 @@ def handle(bridge, action, obj):
                 live={}
             slots=live.get('stations',{})
             if live.get('chestTracker')==5 and any(slots.get(parent+s,{}).get('chestBlock')==
-                    'sophisticatedstorage:netherite_chest' for s in ('','B','C')):
+                    'sophisticatedstorage:netherite_chest' for s in (group['slots'] if ext_supply else ('','B','C'))):
                 proof=proof.replace(' minecraft:chest[type=single]', ' sophisticatedstorage:netherite_chest[type=single]')
         if 'targets' in obj:
-            return shared_supply(bridge,layout,site,obj,proof)
+            return shared_supply(bridge,layout,site,obj,proof,group)
         # A large native inventory can turn a single inspection into dozens of
         # RCON calls. Stop starting more calls once this feeder read is late.
         import time
@@ -167,14 +179,19 @@ def handle(bridge, action, obj):
     return prepare_schematic(bridge,b,desired,obj['nbtBase64'],opts,obj['size'],erebor_kind=kind,previous=obj.get('previous'))
 
 
-def shared_supply(bridge,layout,site,obj,proof):
+def shared_supply(bridge,layout,site,obj,proof,group=None):
     """Use the tracker's printer state plus one live physical inventory check for the group."""
     import time
     from campus_discovery import condition
     targets=obj['targets']
     extra=json.loads(Path(__file__).with_name('erebor-parallel.json').read_text())
     row=next((r for r in extra['sites'] if r['site']==site['site']),None)
-    if (not isinstance(targets,dict) or not 1<=len(targets)<=3 or set(targets)-{'A','B','C'} or
+    if group:
+        members = list(group['slots'].items())
+        row = {'chest': group['chest'], 'main': members[0][1]}
+    else:
+        members = list(zip('ABC', (row[k] for k in ('main', 'B', 'C')))) if row else []
+    if (not isinstance(targets,dict) or not 1<=len(targets)<=3 or set(targets)-dict(members).keys() or
             extra['version']!=layout['version'] or not row or row.get('chest')!=site['chest'] or row['main']!=site['cannon']):
         raise ValueError('Unbekannte gemeinsame Materialkiste.')
     report=handle(bridge,'erebor-live',{'version':layout['version']})
@@ -197,7 +214,7 @@ def shared_supply(bridge,layout,site,obj,proof):
         return match[0].replace(' if loaded',' unless loaded') if ' if loaded' in match[0] else ''
     proof=re.sub(r' if loaded (-?\d+) (-?\d+) (-?\d+)',inside,proof)
     proof=re.sub(r' unless block (-?\d+) (-?\d+) (-?\d+) create:schematicannon',inside,proof)
-    for slot,coords in [('A',row['main']),('B',row['B']),('C',row['C'])]:
+    for slot,coords in members:
         if sum(abs(a-b) for a,b in zip(coords,row['chest']))!=1:
             raise ValueError('Kanone grenzt nicht an die Materialkiste.')
         p=pos(coords)

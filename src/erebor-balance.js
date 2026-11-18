@@ -1,3 +1,4 @@
+import {slotsFor} from './erebor-groups.js';
 // Preferences only. The database reservation rechecks each candidate against live work.
 export function planMassifWork(tiles, slots) {
   const load = slots.map(() => 0);
@@ -65,7 +66,7 @@ export function availableMassifSlots(stations, report, version, mains, support, 
     return [];
   const slots = [];
   for (const station of stations) {
-    for (const slot of ['A', 'B', 'C']) {
+    for (const slot of slotsFor(station.site).filter(s=>s<='C'||station[s])) {
       const main = slot === 'A';
       if (main ? !mains.has(station.site) : !support) continue;
       const signal = report.stations?.[main ? station.site : station.site + slot];

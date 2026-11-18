@@ -32,6 +32,15 @@
     })
   }
 
+  var k09 = JsonIO.read('kubejs/config/k09-groups.json')
+  if(k09 && k09.version===survey.version && k09.site==='K09') {
+    k09.groups.forEach(function(g) {
+      Object.keys(g.slots).forEach(function(slot) {
+        stations.push({site:'K09'+slot,pos:position(g.slots[slot]),chest:g.chest,feeder:g.computer,label:'erebor-'+g.name,active:false,lastError:-1200})
+      })
+    })
+  }
+
   function renew(level, chunks, station, row) {
     var pos = station.pos
     // Reading a sleeping station must not create a new chunk ticket.
@@ -43,6 +52,15 @@
       row.chestBlock = String(Registries.BLOCK.getKey(chestState.getBlock()))
       row.ready = supplyChests.indexOf(row.chestBlock) >= 0 &&
         String(chestState.getValue(chestState.getBlock().getStateDefinition().getProperty('type')).name()).toLowerCase() === 'single'
+    }
+    if(station.feeder) {
+      var fp=position(station.feeder)
+      if(!chunks.getChunkNow(fp.getX() >> 4,fp.getZ() >> 4)) return false
+      var computer=level.getBlockEntity(fp)
+      if(!computer || String(Registries.BLOCK.getKey(level.getBlockState(fp).getBlock()))!=='computercraft:computer_advanced')return false
+      var tag=computer.saveWithoutMetadata(level.registryAccess())
+      if(!tag || !tag.contains('ComputerId') || String(tag.getString('Label'))!==station.label || !tag.getBoolean('On'))return false
+      row.feederId=Number(tag.getInt('ComputerId'))
     }
     var item = c.inventory.getStackInSlot(0)
     row.upload=String(item.get(Components.SCHEMATIC_FILE)||'')

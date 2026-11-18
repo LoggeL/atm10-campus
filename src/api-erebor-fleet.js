@@ -1,3 +1,4 @@
+import {slotsFor} from './erebor-groups.js';
 import {campusPage} from './campus-page.js';
 import {readFileSync} from 'node:fs';
 import {stationSource} from './erebor-me-order.js';
@@ -39,7 +40,7 @@ function checkedLayout(req,campus,permission='read') {
 }
 export function registerEreborFleet(app,campus) {
   campus.ereborNetworkView=async name=>{
-    const site=/^erebor-(K\d{2})$/i.exec(name)?.[1]?.toUpperCase();
+    const site=/^erebor-K09-[NS]$/.test(name)?'K09':/^erebor-(K\d{2})$/i.exec(name)?.[1]?.toUpperCase();
     if(!site)return null;
     const network=(await campus.ereborLiveReport(parallelLayout.version))?.network;
     return network?.stations?.[site]?{...network.stations[site],at:network.at,source:network.source,power:network.power}:{stale:true,at:null};
@@ -98,7 +99,7 @@ export function registerEreborFleet(app,campus) {
       const status=JSON.parse(row?.status_json||'null');
       return {name:s.site,online:!!row?.last_seen_at&&Date.now()-Date.parse(row.last_seen_at)<180000,status,network:await campus.ereborNetworkView('erebor-'+s.site)};
     }));
-    const stations=parallelLayout.sites.map(pair=>({...pair,helpers:['B','C'].map(slot=>({
+    const stations=parallelLayout.sites.map(pair=>({...pair,helpers:slotsFor(pair.site).slice(1).map(slot=>({
       slot,job:jobs.find(j=>j.site===pair.site&&j.slot===slot)||null,live:report?.stations?.[pair.site+slot]||null
     }))}));
     reply.header('Cache-Control','private, no-store');

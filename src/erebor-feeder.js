@@ -1,10 +1,11 @@
+import {groupOf,supplyGroup} from './erebor-groups.js';
 import {isDeepStrictEqual as same} from 'node:util';
 import {verifyAlignment} from './alignment.js';
 import {itemsFor,stackSize} from './materials.js';
 import {setTimeout as delay} from 'node:timers/promises';
 import {createHash} from 'node:crypto';
 
-export const isEreborStation=name=>/^erebor-K(?:0[1-9]|[12][0-9]|3[0-7])$/i.test(name);
+export const isEreborStation=name=>!!groupOf(name)||/^erebor-K(?:0[1-9]|[12][0-9]|3[0-7])$/i.test(name);
 export const needsSolidReplacement=desired=>desired?.blueprint?.includes('_MASSIV_')&&!desired.blueprint.includes('_LUFT_');
 
 // Installed V5 controllers prepare stone in mode 0. V6 and manually
@@ -121,7 +122,7 @@ export function ereborFeeder(db,request,version,liveReport){
   try{return await read;}finally{pending.delete(key);}
  }
  const poll=async(row,opts)=>{
-  const site=row.name.slice(-3).toUpperCase(),j=jobAt(site),reported=JSON.parse(row.status_json||'{}')||{};
+  const extra=groupOf(row.name),site=extra?'K09':row.name.slice(-3).toUpperCase(),j=extra?null:jobAt(site),reported=JSON.parse(row.status_json||'{}')||{};
   const assignment=j?parseInt(j.desired.file.slice(7).replaceAll('-','').slice(0,12),16):row.assignment;
   const base={...opts,cannon:row.name,assignment,intervals:{...opts.intervals,plan:5},done:false,items:[],blueprint:null,totals:{start:0,needed:0,kinds:0}};
   // The CC computer resets its per-job delivery limit when the assignment changes.
@@ -130,14 +131,14 @@ export function ereborFeeder(db,request,version,liveReport){
   if(!Number.isInteger(reported.computerId)||!reported.chestSide||!(Math.abs(Date.now()-Date.parse(reported.at))<180000))return held('Wartet auf aktuelle Computer-ID und Kistenseite.');
   try{
    const live=await liveReport(version);
-   const group=groupJobs(site);
-   if(live?.sharedChest===4&&(group.B||group.C||live.stations?.[site+'B']?.state||live.stations?.[site+'C']?.state)){
+   const group=supplyGroup(groupJobs(site),extra);
+   if(live?.sharedChest===4&&(extra||group.B||group.C||live.stations?.[site+'B']?.state||live.stations?.[site+'C']?.state)){
     const targets=groupTargets(group,site,live);
     if(!Object.keys(targets).length)return held('Wartet auf den ersten eingelegten Bauplan.');
     const waiting=Object.keys(targets).some(slot=>['missingBlock','missingItem','noGunpowder'].includes(live.stations?.[site+(slot==='A'?'':slot)]?.status));
-    const result=await supplyRead({site,version,computerId:reported.computerId,chestSide:reported.chestSide,targets},waiting);
+    const result=await supplyRead({site:extra?.name??site,version,computerId:reported.computerId,chestSide:reported.chestSide,targets},waiting);
     const station=stationAt.get(row.name),after=JSON.parse(station?.status_json||'null');
-    if(!same(targets,groupTargets(groupJobs(site),site,live))||station?.options_json!==row.options_json||
+    if(!same(targets,groupTargets(supplyGroup(groupJobs(site),extra),site,live))||station?.options_json!==row.options_json||
        after?.computerId!==reported.computerId||after?.chestSide!==reported.chestSide||
        !Number.isFinite(result.at)||Math.abs(Date.now()/1000-result.at)>10)
      return held('Aufträge oder Standort während der Materialprüfung geändert.');

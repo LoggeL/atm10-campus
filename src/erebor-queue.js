@@ -1,3 +1,4 @@
+import {groupOf,slotsFor} from './erebor-groups.js';
 import {cannonProgressRows} from './cannon-progress-rows.js';
 import {publishedPlan,selectionStore,unstarted} from './erebor-selection.js';
 import {productionStore} from './erebor-production.js';
@@ -87,7 +88,8 @@ export function registerEreborQueue(app,campus){
  const read=site=>JSON.parse(db.prepare('SELECT state FROM erebor_queue_sites WHERE site=?').get(site).state);
  const persist=(site,s)=>db.prepare('UPDATE erebor_queue_sites SET state=? WHERE site=?').run(JSON.stringify(s),site);
  campus.ereborStationBinding=name=>{
-  const [x,y,z]=layout.sites.find(s=>s.site===name.slice(-3).toUpperCase()).cannon;
+  const extra=groupOf(name);
+  const [x,y,z]=extra?Object.values(extra.slots)[0]:layout.sites.find(s=>s.site===name.slice(-3).toUpperCase()).cannon;
   return {x,y,z,dimension:'minecraft:overworld',owner:'Erebor'};
  };
  campus.ereborFeeder=ereborFeeder(db,request,layout.version,liveReport);
@@ -458,7 +460,7 @@ export function registerEreborQueue(app,campus){
   if(!report||version!==project()?.current_version||report.version!==layout.version)throw new HttpError(503,'Keine aktuelle Erebor-Weltmeldung.');
   const commands=[];
   const ints=v=>'[I;'+v.join(',')+']';
-  for(const p of parallelLayout.sites)for(const slot of ['A','B','C']){
+  for(const p of parallelLayout.sites)for(const slot of slotsFor(p.site)){
    const s=report.stations?.[slot==='A'?p.site:p.site+slot];
    if(s?.state!=='RUNNING'||s.status!=='searching'||!s.aligned||s.target!==null||s.chunks?.length!==0)continue;
    const job=slot==='A'?read(p.site).job:helpers.jobAt(version,p.site,slot);
@@ -483,7 +485,7 @@ export function registerEreborQueue(app,campus){
  app.get(base+'/drucker/:slot',async(req,reply)=>{
   requireActor(req,'read');
   const key=req.params.slot,site=key.slice(0,3),slot=key.slice(3),version=cfg()?.version;
-  if(!sites.includes(site)||!['A','B','C'].includes(slot)||version!==project()?.current_version)throw new HttpError(404,'Unbekannter Erebor-Drucker.');
+  if(!sites.includes(site)||!slotsFor(site).includes(slot)||version!==project()?.current_version)throw new HttpError(404,'Unbekannter Erebor-Drucker.');
   const liveKey=slot==='A'?site:key;
   const signal=(await liveReport(version))?.stations?.[liveKey];
   if(signal?.state!=='RUNNING'||signal.status!=='searching')throw new HttpError(409,'Die Kanone sucht gerade nicht.');
@@ -528,7 +530,7 @@ export function registerEreborQueue(app,campus){
   const save=db.prepare('INSERT INTO erebor_resume VALUES(?,?,?,?,?,NULL) ON CONFLICT(version,site,slot) DO UPDATE SET upload=excluded.upload, expires=excluded.expires,result=NULL');
   const queued=tx(db,()=>{
    const slots=[];
-   for(const site of sites)for(const slot of ['A','B','C']){
+   for(const site of sites)for(const slot of slotsFor(site)){
     const signal=report.stations[slot==='A'?site:site+slot];
     if(!signal?.ready||signal.state!=='PAUSED'||!signal.upload)continue;
     const job=slot==='A'?read(site).job:helpers.jobAt(v,site,slot);

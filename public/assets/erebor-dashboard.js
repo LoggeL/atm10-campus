@@ -64,7 +64,8 @@ function renderFleet(fleet) {
   el('detail').hidden = !selected;
   const expanded=el('detail').dataset.site===selected && el('detail').querySelector('details')?.open;
   el('detail').dataset.site=selected;
-  if(selected) el('detail').innerHTML='<div class="detail-head"><h3>Station '+esc(selected)+'</h3><span class="meta">A / B / C</span></div>'+groups.get(selected).map(row=>slotDetail(row,showedFresh?data.throughput:null)).join('')+stationCounts(data.stations[selected])+'<a class="detail-action" href="/app?project=erebor&amp;kanone='+esc(selected)+'#overview">Bauaufträge für '+esc(selected)+' öffnen</a>';
+  if(selected) el('detail').innerHTML='<div class="detail-head"><h3>Station '+esc(selected)+'</h3><span class="meta">'+groups.get(selected).map(r=>esc(r.slot)).join(' / ')+'</span></div>'+groups.get(selected).map(row=>slotDetail(row,showedFresh?data.throughput:null)).join('')+stationCounts(data.stations[selected])+'<a class="detail-action" href="/app?project=erebor&amp;kanone='+esc(selected)+'#overview">Bauaufträge für '+esc(selected)+' öffnen</a>'+
+    (selected==='K09'?'<a class="detail-action" download href="/assets/erebor-k09-ausbau.zip">Homebox-Installer für K09 Nord und Süd</a>':'');
   if(expanded && selected)el('detail').querySelector('details').open=true;
 }
 function render() {

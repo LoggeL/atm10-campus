@@ -38,7 +38,7 @@ test('Bauzähler page and read API retain authentication and never contact the c
   db.prepare("INSERT INTO build_projects(id,current_version,plan_json,created_at,updated_at) VALUES('erebor',12,'{}','now','now')").run();
   assert.match((await app.inject({url:'/erebor/dashboard',headers})).body,/Baufortschritt/);
   const dashboard=await app.inject({url:'/api/projects/erebor/dashboard',headers});
-  assert.equal(dashboard.statusCode,200);assert.equal(dashboard.json().fleet.length,111);
+  assert.equal(dashboard.statusCode,200);assert.equal(dashboard.json().fleet.length,117);
   assert.equal(dashboard.json().filling,null);assert.equal(dashboard.json().telemetryAt,null);
   const before=db.prepare('SELECT total_changes() n').get().n;
   const response=await app.inject({url:'/api/projects/erebor/bauzaehler',headers});

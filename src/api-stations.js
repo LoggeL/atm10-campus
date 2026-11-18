@@ -1,3 +1,4 @@
+import {groupOf} from './erebor-groups.js';
 import {supportsAlignment} from './feeder-version.js';
 // ME stock and Schematicannon feeders: CC:Tweaked computers with an Advanced Peripherals ME Bridge
 // report AE2 stock and fetch per cannon what still has to go into the chest next to it.
@@ -94,6 +95,11 @@ export function registerStationRoutes(app, campus, mat, alignment, schematics) {
     let r = getRow(checkName(name));
     if (!r) {
       db.prepare('INSERT INTO cannons (name, assignment, created_at, updated_at) VALUES (?, ?, ?, ?)').run(name, nextAssignment(0), now(), now());
+      if(groupOf(name)){
+        const parent=getRow('erebor-K09');
+        const opts=normalizeOptions(JSON.parse(parent?.options_json||'{}'));
+        db.prepare('UPDATE cannons SET options_json=? WHERE name=?').run(JSON.stringify({...opts,autoCraft:false,stoneAutoCraft:false}),name);
+      }
       r = getRow(name);
     }
     return r;
