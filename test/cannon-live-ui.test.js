@@ -12,7 +12,7 @@ function appFixture() {
   const old={dataset:{cannon:'test'},querySelector:()=>protectedCard?{}:null,contains:()=>false,querySelectorAll:()=>[],replaceWith:()=>{replacements++;}};
   const list={querySelectorAll:()=>[old]};
   const context=vm.createContext({me:{user:{role:'admin'}},document:{activeElement:{},createElement:()=>({content:{firstElementChild:{querySelectorAll:()=>[]}}})},
-    $:id=>{assert.equal(id,'cannonList');return list;},
+    $:id=>id==='cannonList'?list:{addEventListener(){}}, fleetEquipment:()=>({refresh(){}}), toast(){},
     api:url=>new Promise(resolve=>reads.push({url,resolve})),
     cannonPicker:{update:c=>modal.push(c)},updateCannonPicker:(card,c)=>updates.push(['picker',c]),updateCannonLive:(card,c)=>updates.push(['progress',c]),
     renderCannon:()=>'<article></article>',alignmentCard:()=>'',ago:()=>'',refreshQueue:{request:key=>requests.push(key)}});

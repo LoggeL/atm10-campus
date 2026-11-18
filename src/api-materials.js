@@ -75,7 +75,7 @@ export function registerMaterialRoutes(app, campus) {
   const stockFor = q => (flag(q.me, true) ? latestStock(campus.db) : null);
 
   const send = (reply, q, report, title, fileBase, requestUrl) => {
-    if (q.format === 'html') return reply.type('text/html; charset=utf-8').header('Cache-Control', 'no-store').send(materialsHtml(report, title, requestUrl));
+    if (q.format === 'html') return reply.type('text/html; charset=utf-8').header('Cache-Control', 'no-store').send(materialsHtml(report, title, requestUrl, reply.request.actor));
     if (q.format === 'text') return reply.type('text/plain; charset=utf-8').send(materialsText(report, title));
     if (q.format === 'csv') {
       return reply.type('text/csv; charset=utf-8').header('Content-Disposition', `attachment; filename="${fileBase}-material.csv"`).send(materialsCsv(report));

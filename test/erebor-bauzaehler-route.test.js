@@ -16,8 +16,21 @@ test('Bauzähler page and read API retain authentication and never contact the c
   const login=await app.inject({method:'POST',url:'/api/auth/register',payload:{code:'counter-bootstrap',username:'counter',password:'counter-test-password'}});
   assert.equal(login.statusCode,200);
   const headers={cookie:login.headers['set-cookie'].split(';')[0]};
+  assert.equal((await app.inject({url:'/',headers})).headers.location,'/erebor/dashboard');
+  const publicDocs=await app.inject('/docs');
+  assert.equal(publicDocs.statusCode,200);assert.doesNotMatch(publicDocs.body,/data-tab="admin"|data-logout/);
+  app.campus.db.prepare("INSERT INTO snapshots(source,label,captured_at,world_stamp,dir,summary_json) VALUES('live','fixture',?,0,?,'{}')").run(new Date().toISOString(),dir);
+  for(const url of ['/app','/projects','/erebor/dashboard','/docs','/api/materials?format=html']){
+    const resource=await app.inject({url,headers});
+    assert.equal(resource.statusCode,200,url);
+    assert.match(resource.body,/class="campus-nav"/,url);
+    assert.match(resource.body,/data-tab="admin"/,url);
+    assert.match(resource.body,/data-logout/,url);
+  }
+  const equipment=await app.inject({url:'/api/projects/erebor/cannon-sites/dreierbetrieb',headers});
+  assert.equal(equipment.headers.location,'/app?project=erebor#cannons');
   const page=await app.inject({url:'/erebor/bauzaehler',headers});
-  assert.equal(page.statusCode,200);assert.match(page.body,/nicht addiert/);
+  assert.equal(page.statusCode,302);assert.equal(page.headers.location,'/erebor/dashboard');
   // Empty project state must be explicit, not invented zero totals.
   const result=await app.inject({url:'/api/projects/erebor/bauzaehler',headers});
   assert.equal(result.statusCode,404);assert.equal(calls,0);
@@ -42,6 +55,8 @@ test('Bauzähler page and read API retain authentication and never contact the c
   insert.run(11,'OLD',888,0,0,'K01',null);
   const changes=db.prepare('SELECT total_changes() n').get().n;
   const published=await app.inject({url:'/api/projects/erebor/bauzaehler',headers});
+  const unified=(await app.inject({url:'/api/projects/erebor/dashboard',headers})).json();
+  for(const key of ['massif','stages','stations','unassignedMassif'])assert.deepEqual(unified[key],published.json()[key]);
   assert.deepEqual(published.json().massif.workload,{grossBlocks:140,assignedBlocks:40,manualBlocks:9});
   assert.deepEqual(published.json().stations.K01.massif.workload,published.json().massif.workload);
   assert.equal(db.prepare('SELECT total_changes() n').get().n,changes);assert.equal(calls,0);

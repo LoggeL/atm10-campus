@@ -16,7 +16,7 @@ test('planned cannon coordinates use the cannon block, not schematic anchors, an
  assert.match(html,/X 196 \/ Y 96 \/ Z -10018/);assert.doesNotMatch(html,/298|999/);
  assert.match(html,/Noch keine veröffentlicht/);assert.match(html,/area=cannon:K19/);
  const fault=renderCannonSites(project,prepared,{},[{name:'K01',online:true,status:{message:'ME Bridge offline',state:'error'}}]);
- assert.match(fault,/1\/1 Stationen/);assert.match(fault,/Versorgung gestört/);
+ assert.doesNotMatch(fault,/1\/1 Stationen/);assert.match(fault,/Versorgung gestört/);
 });
 
 test('a changed project version cannot show old package readiness next to new coordinates',()=>{

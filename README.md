@@ -12,6 +12,12 @@ Web-App auf der HomeBox für das Campus-Redesign unseres ATM10-Servers:
 - **Login per Einladung**, persönliche **API-Tokens** für Agents (`/docs`, `/api/openapi.json`).
 - **Schematics direkt in die Kanone**: Rest-Plan mit Bauplan-Zielkoordinaten und Kanonen-Einstellungen automatisch vorbereiten, neue Versionen bei vollständigem Stopp übernehmen. Browser-Admins starten oder setzen den bestätigten Plan mit „Starten“ / „Fortsetzen“ fort; Play im Spiel bleibt verfügbar.
 
+## Orientierung in der App
+
+Nach der Anmeldung öffnet sich das [Dashboard](https://campus.logge.top/erebor/dashboard). Es zeigt den Fortschritt je Bauaufgabe, die Aufträge der 37 Stationen und die Übernahmen zwischen Baugebieten. Aus den Stationsdetails kommst du zu den [Bauaufträgen](https://campus.logge.top/app#overview) mit der passenden Stationsauswahl.
+
+Unter [Stationstechnik](https://campus.logge.top/app#cannons) liegen Flottensteuerung, Materialversorgung, Einzelgeräte und Aufstellkoordinaten. [Bauprojekte](https://campus.logge.top/projects) enthält die Projektpläne, Karten und das Archiv. Weltaufnahmen, Materialliste, 3D-Viewer und Zugänge sind im Menü **Werkzeuge** erreichbar.
+
 ## Viewer-Assets
 
 Die Materialtexturen und das Titelbild sind mit Codex (imagegen) erzeugt; Quellen und Prompts liegen in `assets-src/` (`PROMPTS.md`).
@@ -78,7 +84,7 @@ Mounts: Volume `atm10-campus-data` → `/data`, Bind `~/minecraft/atm10/data/wor
 
 ## Automatische Schematic-Vorbereitung (Create 1.21.1-6.0.10)
 
-Im Kanonen-Tab den Bauplan wählen: Die Auswahl zeigt angefangene Bauten zuerst, und ein Klick auf „Bauen“ bereitet den Plan vor und startet die Kanone sofort. Das klappt nur bei einer gestoppten, zurückgesetzten Kanone; eine aktive Kanone behält ihren Auftrag. Schlägt ein Schritt fehl, startet nichts von selbst. Feeder 1.4.0 meldet seine Computer-ID und die angeschlossene Kistenseite. Die App sucht den Computer in den gespeicherten Weltblöcken des Campus-Ausschnitts und ordnet die Kanone über diese Kiste zu. Die Host-Brücke prüft Computer, Kiste und Kanone unmittelbar im Spiel. Neue, eindeutig erkannte Stationen erhalten automatisch die Schematic-Vorbereitung; eine zuvor ausdrücklich deaktivierte Automatik bleibt aus. Bei fehlenden oder mehrdeutigen Verbindungen zeigt die Karte den Grund und „Erneut suchen“. Die manuelle Positionseingabe bleibt unter den erweiterten Einstellungen verfügbar.
+Unter Stationstechnik bei den Einzelgeräten den Bauplan wählen: Die Auswahl zeigt angefangene Bauten zuerst, und ein Klick auf „Bauen“ bereitet den Plan vor und startet die Kanone sofort. Das klappt nur bei einer gestoppten, zurückgesetzten Kanone; eine aktive Kanone behält ihren Auftrag. Schlägt ein Schritt fehl, startet nichts von selbst. Feeder 1.4.0 meldet seine Computer-ID und die angeschlossene Kistenseite. Die App sucht den Computer in den gespeicherten Weltblöcken des Campus-Ausschnitts und ordnet die Kanone über diese Kiste zu. Die Host-Brücke prüft Computer, Kiste und Kanone unmittelbar im Spiel. Neue, eindeutig erkannte Stationen erhalten automatisch die Schematic-Vorbereitung; eine zuvor ausdrücklich deaktivierte Automatik bleibt aus. Bei fehlenden oder mehrdeutigen Verbindungen zeigt die Karte den Grund und „Erneut suchen“. Die manuelle Positionseingabe bleibt unter den erweiterten Einstellungen verfügbar.
 
 Die App erzeugt und überträgt den Rest-Plan mit den Zielkoordinaten der Bauplanversion und den gewählten Ersetzungs-/Material-/Maschinenschutz-Einstellungen. „Bauplan und Position“ öffnet den Bauplan; eine Positionsänderung wird als neue Version gespeichert. Ausrichtung und Spiegelung entsprechen der NBT. Automatische Rest-Pläne verwenden den Live-Bestand der Oberwelt. Der automatische Aufbau erwartet eine direkt angeschlossene einzelne Kiste mit genau einer benachbarten Kanone. Netzwerk-Peripherie und mehrdeutige Aufbauten benötigen eine manuelle Zuordnung. Neue oder versetzte Blöcke werden erst nach dem nächsten Speichern der Welt gefunden.
 

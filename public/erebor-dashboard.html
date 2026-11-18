@@ -5,19 +5,11 @@
     <meta name="viewport" content="width=device-width,initial-scale=1" />
     <meta name="theme-color" content="#101916" />
     <title>Erebor · Baudashboard | ATM10 Campus</title>
-    <link rel="stylesheet" href="/assets/erebor-dashboard.css" />
+    <link rel="stylesheet" href="/assets/erebor-dashboard.css?v=20261114-status-1" />
   </head>
   <body>
     <a href="#main" class="skip">Zum Inhalt</a>
-    <header>
-      <nav class="shell">
-        <a class="brand" href="/app"><span class="mark" aria-hidden="true"></span>ATM10 Campus</a
-        ><span class="navlinks"
-          ><a href="/app?project=erebor">Baupläne</a><a href="/erebor/dashboard" aria-current="page">Dashboard</a
-          ><a href="/erebor/bauzaehler">Bauzähler</a></span
-        >
-      </nav>
-    </header>
+    <!-- campus-navigation -->
     <main class="shell" id="main">
       <div class="heading">
         <div>
@@ -74,10 +66,11 @@
           <aside id="detail" aria-label="Stationsdetails"></aside>
         </div>
       </section>
-      <footer>
-        <a href="/app?project=erebor">Zur Bauverwaltung</a><a href="/erebor/bauzaehler">Detaillierte Bauzähler</a>
-      </footer>
+      <details class="more-counts">
+        <summary>Blockmengen und Zählgrundlage</summary>
+        <div id="quantities"></div>
+      </details>
     </main>
-    <script type="module" src="/assets/erebor-dashboard.js"></script>
+    <script type="module" src="/assets/erebor-dashboard.js?v=20261114-status-1"></script>
   </body>
 </html>

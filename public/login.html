@@ -13,6 +13,6 @@
 document.getElementById('f').addEventListener('submit', async ev => {
   ev.preventDefault();
   const r = await fetch('/api/auth/login', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ username: u.value, password: p.value }) });
-  if (r.ok) location.href = '/app'; else e.textContent = (await r.json()).error || 'Anmeldung fehlgeschlagen.';
+  if (r.ok) location.href = '/erebor/dashboard'; else e.textContent = (await r.json()).error || 'Anmeldung fehlgeschlagen.';
 });
 </script></body></html>

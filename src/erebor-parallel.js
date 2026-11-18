@@ -23,6 +23,10 @@ export function parallelFleet(db,production,choices,request,recordedFinish,resum
   function list(version){
     return db.prepare('SELECT site,slot,name,completed,message FROM erebor_helpers WHERE version=? ORDER BY site,slot').all(version);
   }
+  function jobs(version) {
+    return db.prepare('SELECT site,slot,name,completed,message,job FROM erebor_helpers WHERE version=? ORDER BY site,slot').all(version)
+      .map(row=>({...row,job:row.job?JSON.parse(row.job):null}));
+  }
   async function service(p,pair,slot,signal,at,enabled,main,current){
     const site=pair.site,key=site+slot,v=p.current_version;
     const row=lookup.get(v,site,slot);
@@ -133,7 +137,7 @@ export function parallelFleet(db,production,choices,request,recordedFinish,resum
     }catch(e){if(current())set(e.message);}
   }
   const jobAt=(version,site,slot)=>JSON.parse(lookup.get(version,site,slot)?.job||'null');
-  return {reserved,list,isEnabled,switchAll,jobAt,async tick(p,report,enabled,read,current,refresh){
+  return {reserved,list,jobs,isEnabled,switchAll,jobAt,async tick(p,report,enabled,read,current,refresh){
     if(report?.version!==parallelLayout.version||report.sharedChest!==4||!report.stations)return;
     for(const pair of parallelLayout.sites){
       for(const slot of slots){
