@@ -1,0 +1,30 @@
+✔ absent opt-in preserves three slots (1.24835ms)
+✔ explicit measured mapping prepares isolated groups, never enables runtime (0.565722ms)
+✔ fails closed: missing mapping (0.247861ms)
+✔ fails closed: duplicate computer (0.180927ms)
+✔ fails closed: duplicate chest feed (0.170016ms)
+✔ fails closed: duplicate group (0.137355ms)
+✔ fails closed: duplicate coordinate (0.153906ms)
+✔ fails closed: duplicate slot (0.156121ms)
+✔ fails closed: remote cannon (0.156461ms)
+✔ fails closed: stale telemetry (0.947321ms)
+✔ fails closed: future telemetry (0.155229ms)
+✔ fails closed: wrong version (0.098503ms)
+✔ fails closed: unknown bridge health (0.086962ms)
+✔ fails closed: wrong chest (0.108631ms)
+✔ fails closed: changed feed (0.115725ms)
+✔ fails closed: missing consumer (0.109203ms)
+✔ fails closed: ambiguous direction (0.086621ms)
+✔ fails closed: malformed opt-in (0.092031ms)
+✔ fails closed: overlapping consumers (0.156371ms)
+✔ rejects an unassigned loaded cannon (0.238904ms)
+✔ only the exact group receives its independently confirmed job (0.263159ms)
+✔ rejects duplicate upload across groups and mismatched job identity (0.339842ms)
+ℹ tests 22
+ℹ suites 0
+ℹ pass 22
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 55.065383

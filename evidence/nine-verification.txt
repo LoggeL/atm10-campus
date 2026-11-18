@@ -1,0 +1,24 @@
+LOCAL verification, 2026-11-18
+Base: acd24f5271b0f2c4b59fa595a6581faf05b5960a
+Node v24.18.0
+
+node --test test/erebor-nine-preflight.test.js
+22 pass, 0 fail (evidence/preflight-green.log)
+RED captured before guard implementation: malformed opt-in and overlapping
+consumers both failed (evidence/preflight-red.log).
+
+node --test --test-concurrency=1 test/*.test.js
+244 pass, 0 fail, 0 skipped, duration_ms 43500.703752
+Full local output: evidence/node-suite.log (ignored, retained in worktree).
+
+/home/logge/.hermes/cache/scratch/erebor-nine-tests/bin/python -m unittest discover -s test -p '*_test.py'
+65 tests, OK, 0.844 seconds; Python 3.12.13 + lupa 2.8.
+Initial ambient Python attempt: missing lupa, 2 import errors. Resolved only in
+isolated scratch venv. Full outputs retained under evidence/ (gitignored).
+
+CLI actually exercised: explicit enabled:false returned legacy A/B/C (exit 0);
+enabled:true with missing identity blocked (exit 1).
+git diff --check passed.
+
+No push/PR/deploy, live configuration/queue/Minecraft write, reload or restart.
+No nine-cannon hardware test or runtime support claimed.

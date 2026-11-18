@@ -1,0 +1,68 @@
+✔ absent opt-in preserves three slots (1.184241ms)
+✔ explicit measured mapping prepares isolated groups, never enables runtime (0.590968ms)
+✔ fails closed: missing mapping (0.253361ms)
+✔ fails closed: duplicate computer (0.175576ms)
+✔ fails closed: duplicate chest feed (0.17195ms)
+✔ fails closed: duplicate group (0.153034ms)
+✔ fails closed: duplicate coordinate (0.159266ms)
+✔ fails closed: duplicate slot (3.406691ms)
+✔ fails closed: remote cannon (0.336235ms)
+✔ fails closed: stale telemetry (1.293674ms)
+✔ fails closed: future telemetry (0.257228ms)
+✔ fails closed: wrong version (0.108652ms)
+✔ fails closed: unknown bridge health (0.088364ms)
+✔ fails closed: wrong chest (0.144649ms)
+✔ fails closed: changed feed (0.151211ms)
+✔ fails closed: missing consumer (0.164596ms)
+✔ fails closed: ambiguous direction (0.105486ms)
+✖ fails closed: malformed opt-in (0.464903ms)
+✖ fails closed: overlapping consumers (0.234997ms)
+✔ rejects an unassigned loaded cannon (0.238383ms)
+✔ only the exact group receives its independently confirmed job (0.315396ms)
+✔ rejects duplicate upload across groups and mismatched job identity (0.34949ms)
+ℹ tests 22
+ℹ suites 0
+ℹ pass 20
+ℹ fail 2
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 64.680302
+
+✖ failing tests:
+
+test at test/erebor-nine-preflight.test.js:48:42
+✖ fails closed: malformed opt-in (0.464903ms)
+  AssertionError [ERR_ASSERTION]: Missing expected exception.
+      at TestContext.<anonymous> (file:///home/logge/.hermes/workspace/campus-nine-preflight/test/erebor-nine-preflight.test.js:49:37)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1325:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:911:18)
+      at Test.postRun (node:internal/test_runner/test:1465:19)
+      at Test.run (node:internal/test_runner/test:1390:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:911:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: undefined,
+    operator: 'throws',
+    diff: 'simple'
+  }
+
+test at test/erebor-nine-preflight.test.js:48:42
+✖ fails closed: overlapping consumers (0.234997ms)
+  AssertionError [ERR_ASSERTION]: Missing expected exception.
+      at TestContext.<anonymous> (file:///home/logge/.hermes/workspace/campus-nine-preflight/test/erebor-nine-preflight.test.js:49:37)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1325:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:911:18)
+      at Test.postRun (node:internal/test_runner/test:1465:19)
+      at Test.run (node:internal/test_runner/test:1390:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:911:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: undefined,
+    operator: 'throws',
+    diff: 'simple'
+  }
