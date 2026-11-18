@@ -66,14 +66,18 @@ export function ereborFeeder(db,request,version,liveReport){
  const stationAt=db.prepare('SELECT status_json,options_json FROM cannons WHERE name=?');
  let legacyUntil=0;
  const supplyRead=limitSupplyReads(request);
- const helperRows=db.prepare('SELECT slot,job FROM erebor_helpers WHERE site=? AND version=? AND job IS NOT NULL ORDER BY slot');
- function groupJobs(site){
-  const jobs={},main=jobAt(site);
+ // This identity owns only the original physical chest. Persisted optional
+ // reservations must never become consumers of its material lease.
+ const helperRows=db.prepare("SELECT slot,job FROM erebor_helpers WHERE site=? AND version=? AND slot IN ('B','C') AND job IS NOT NULL ORDER BY slot");
+ const optionalRows=db.prepare("SELECT slot,job FROM erebor_helpers WHERE site=? AND version=? AND job IS NOT NULL ORDER BY slot");
+ function groupJobs(site,binding){
+  const jobs={},main=binding?null:jobAt(site);
   // A counter discontinuity invalidates completion evidence. The host can still
   // independently prove the identity of the loaded stone plan for material supply.
   const eligible=job=>job?.loaded&&(!job.tainted||isStationStone(job,site));
   if(eligible(main))jobs.A=main;
-  for(const r of helperRows.all(site,version)){
+  for(const r of (binding?optionalRows:helperRows).all(site,version)){
+   if(binding&&!binding.group.includes(r.slot))continue;
    const job=JSON.parse(r.job);
    if(eligible(job))jobs[r.slot]=job;
   }
@@ -120,8 +124,8 @@ export function ereborFeeder(db,request,version,liveReport){
   pending.set(key,read);
   try{return await read;}finally{pending.delete(key);}
  }
- const poll=async(row,opts)=>{
-  const site=row.name.slice(-3).toUpperCase(),j=jobAt(site),reported=JSON.parse(row.status_json||'{}')||{};
+ const poll=async(row,opts,binding)=>{
+  const site=binding?.site||row.name.slice(-3).toUpperCase(),j=binding?null:jobAt(site),reported=JSON.parse(row.status_json||'{}')||{};
   const assignment=j?parseInt(j.desired.file.slice(7).replaceAll('-','').slice(0,12),16):row.assignment;
   const base={...opts,cannon:row.name,assignment,intervals:{...opts.intervals,plan:5},done:false,items:[],blueprint:null,totals:{start:0,needed:0,kinds:0}};
   // The CC computer resets its per-job delivery limit when the assignment changes.
@@ -130,18 +134,20 @@ export function ereborFeeder(db,request,version,liveReport){
   if(!Number.isInteger(reported.computerId)||!reported.chestSide||!(Math.abs(Date.now()-Date.parse(reported.at))<180000))return held('Wartet auf aktuelle Computer-ID und Kistenseite.');
   try{
    const live=await liveReport(version);
-   const group=groupJobs(site);
-   if(live?.sharedChest===4&&(group.B||group.C||live.stations?.[site+'B']?.state||live.stations?.[site+'C']?.state)){
+   const group=groupJobs(site,binding);
+   if(binding&&binding.version!==version)return held('Gruppenversion stimmt nicht überein.');
+   if((binding&&live?.sharedChest===4)||live?.sharedChest===4&&(group.B||group.C||live.stations?.[site+'B']?.state||live.stations?.[site+'C']?.state)){
     const targets=groupTargets(group,site,live);
     if(!Object.keys(targets).length)return held('Wartet auf den ersten eingelegten Bauplan.');
     const waiting=Object.keys(targets).some(slot=>['missingBlock','missingItem','noGunpowder'].includes(live.stations?.[site+(slot==='A'?'':slot)]?.status));
-    const result=await supplyRead({site,version,computerId:reported.computerId,chestSide:reported.chestSide,targets},waiting);
-    const station=stationAt.get(row.name),after=JSON.parse(station?.status_json||'null');
-    if(!same(targets,groupTargets(groupJobs(site),site,live))||station?.options_json!==row.options_json||
+    const result=await supplyRead({site,version,computerId:reported.computerId,chestSide:reported.chestSide,targets,...(binding?{group:binding.group}:{})},waiting);
+    const station=binding?row:stationAt.get(row.name),after=JSON.parse(station?.status_json||'null');
+    if(!same(targets,groupTargets(groupJobs(site,binding),site,live))||station?.options_json!==row.options_json||
        after?.computerId!==reported.computerId||after?.chestSide!==reported.chestSide||
        !Number.isFinite(result.at)||Math.abs(Date.now()/1000-result.at)>10)
      return held('Aufträge oder Standort während der Materialprüfung geändert.');
     const entries=Object.entries(result.confirmed||{});
+    if(binding&&entries.length!==Object.keys(targets).length)return held('Nicht alle Gruppenaufträge wurden bestätigt.');
     if(!entries.length||entries.some(([slot,r])=>!targets[slot]||r.file!==targets[slot].file||!Number.isSafeInteger(r.placed)||r.placed<0))
      return held('Materialbedarf der Gruppe ist unbestätigt.');
     const amounts=new Map();
@@ -192,7 +198,7 @@ export function ereborFeeder(db,request,version,liveReport){
    return {...base,state:base.options.paused?'paused':'feeding',alignment:{enabled:true,state:'aligned',leaseSeconds:10,probeAttempts:attempt,probeMode:confirmation?'compact':'full'},blueprint:{id:j.desired.blueprint,name:j.desired.blueprint,version,origin:j.desired.anchor,size:j.size},items,totals:{start:total,needed:total,kinds:items.length}};
   }catch(e){return held(e.message);}
  };
- const feeder=async(row,opts)=>{const plan=await poll(row,opts);views.set(row.name,{plan,at:Date.now()});return plan;};
+ const feeder=async(row,opts,binding)=>{const plan=await poll(row,opts,binding);views.set(row.name,{plan,at:Date.now()});return plan;};
  // Cached samples serve only the read-only dashboard and background monitoring.
  // A material lease or an explicit plan change always takes a new live sample.
  feeder.sample=site=>{const o=samples.get(site);return o&&Math.abs(Date.now()/1000-o.at)<5?o:null;};

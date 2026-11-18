@@ -1,3 +1,4 @@
+import {registerGroupFeeders} from './erebor-group-feeders.js';
 import {campusPage} from './campus-page.js';
 import Fastify from 'fastify';
 import cookie from '@fastify/cookie';
@@ -187,6 +188,7 @@ export async function buildServer(config = defaultConfig) {
   const schematics = createSchematics(campus, materials);
   const alignment = registerAlignment(app, campus, schematics);
   registerStationRoutes(app, campus, materials, alignment, schematics);
+  registerGroupFeeders(app,campus); // no provisioned identities by default
 
   // ---------- viewer data ----------
   const snapParam = q => (q.snapshot && q.snapshot !== 'none' ? campus.getSnapshot(Number(q.snapshot)).id : q.snapshot === 'none' ? null : campus.latestSnapshot('live')?.id ?? null);
