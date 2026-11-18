@@ -32,6 +32,58 @@
     })
   }
 
+  // Explicit K12 pilot only. This is a local, validated controller mapping,
+  // not permission to dispatch, feed, change mode, or load sleeping chunks.
+  var additions = []
+  function same(a,b) { return JSON.stringify(a) === JSON.stringify(b) }
+  function adjacent(a,b) { return a.reduce(function(n,v,i){return n+Math.abs(v-b[i])},0) === 1 }
+  function requireMap(ok) { if (!ok) throw Error('Invalid K12 tracker mapping') }
+  try {
+    var extra = JsonIO.read('kubejs/config/erebor-runtime-tracker.json')
+    if (extra && extra.mode === 'leased-targets') {
+      requireMap(extra.schema===1 && extra.version===survey.version && extra.sites.length===1)
+      var pilot=extra.sites[0]
+      var legacy=survey.sites.filter(function(s){return s.site==='K12'})[0]
+      var pair= pairs && pairs.sites.filter(function(s){return s.site==='K12'})[0]
+      requireMap(pilot.site==='K12' && legacy && pair && pairs.version===survey.version &&
+        same(pilot.main,legacy.cannon) && same(pilot.main,pair.main) && same(pilot.bridge,legacy.bridge) && pilot.groups.length===2)
+      var occupied={}, computers={}
+      survey.sites.forEach(function(s){['cannon','computer','chest','bridge'].forEach(function(k){occupied[s[k].join(',')]=true})})
+      pairs.sites.forEach(function(s){['B','C'].forEach(function(k){occupied[s[k].join(',')]=true})})
+      function claim(p) {
+        requireMap(Array.isArray(p) && p.length===3 && p.every(function(n){return typeof n==='number' && isFinite(n) && Math.floor(n)===n && Math.abs(n)<=30000000}))
+        requireMap(!occupied[p.join(',')]);occupied[p.join(',')]=true
+      }
+      pilot.groups.forEach(function(g,i){
+        requireMap(typeof g.computerId==='number' && Math.floor(g.computerId)===g.computerId && g.computerId>=0 && g.computerId<=2147483647 && !computers[g.computerId])
+        computers[g.computerId]=true;claim(g.computer);claim(g.chest)
+        requireMap(adjacent(g.computer,pilot.bridge) && adjacent(g.computer,g.chest))
+        var names=i===0?['D','E','F']:['G','H','I']
+        requireMap(same(Object.keys(g.slots).sort(),names))
+        names.forEach(function(slot){
+          var p=g.slots[slot];claim(p);requireMap(adjacent(p,g.chest))
+          additions.push({site:pilot.site+slot,pos:position(p),chest:g.chest,leased:true,active:false,lastError:-1200})
+        })
+      })
+      pilot.groups.forEach(function(g){pilot.groups.forEach(function(other){
+        if(g!==other)Object.keys(g.slots).forEach(function(s){requireMap(!adjacent(g.slots[s],other.chest))})
+      })})
+    }
+  } catch (e) { additions=[];console.info('Erebor K12 tracker mapping rejected: '+e) }
+  stations=stations.concat(additions)
+  var runtimeLeases=null
+  function hasRuntimeLease(station,row) {
+    var l=runtimeLeases, now=Date.now()
+    if (!l || l.schema!==1 || l.version!==survey.version || l.phase!=='stone' ||
+        typeof l.at!=='number' || typeof l.expiresAt!=='number' || !isFinite(l.at) || !isFinite(l.expiresAt) ||
+        l.at>now || now-l.at>=10000 || l.expiresAt<=now || l.expiresAt-l.at>10000 || l.expiresAt<=l.at) return false
+    var job=l.jobs && l.jobs[station.site]
+    return !!job && row.ready===true && row.owner==='Erebor' && row.aligned===true &&
+      /^campus_[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}\.nbt$/.test(row.upload) &&
+      job.file===row.upload && same(job.anchor,row.anchor) && same(job.size,row.size) &&
+      same(job.options,[2,false,false]) && same(row.options,job.options)
+  }
+
   function renew(level, chunks, station, row) {
     var pos = station.pos
     // Reading a sleeping station must not create a new chunk ticket.
@@ -39,7 +91,12 @@
     var c = level.getBlockEntity(pos)
     if (!(c instanceof Cannon)) return false
     if (station.chest || station.pair) {
-      var chestState = level.getBlockState(position(station.chest || station.pair.chest))
+      var chest=station.chest || station.pair.chest
+      if (station.leased && !chunks.getChunkNow(chest[0] >> 4,chest[2] >> 4)) {
+        row.ready=false
+        return false
+      }
+      var chestState = level.getBlockState(position(chest))
       row.chestBlock = String(Registries.BLOCK.getKey(chestState.getBlock()))
       row.ready = supplyChests.indexOf(row.chestBlock) >= 0 &&
         String(chestState.getValue(chestState.getBlock().getStateDefinition().getProperty('type')).name()).toLowerCase() === 'single'
@@ -53,7 +110,7 @@
     var campusInput=String(item.id)==='create:schematic' &&
       String(item.get(Components.SCHEMATIC_OWNER))==='Erebor' && /^campus_[0-9a-f-]{36}\.nbt$/.test(row.upload)
     var preserveDigReceipt=Number(c.replaceMode)===3 && row.status==='finished'
-    if (((row.empty && !preserveDigReceipt) || (campusInput && [0,1].indexOf(Number(c.replaceMode))>=0)) && Number(c.replaceMode)!==2) {
+    if (!station.leased && ((row.empty && !preserveDigReceipt) || (campusInput && [0,1].indexOf(Number(c.replaceMode))>=0)) && Number(c.replaceMode)!==2) {
       c.replaceMode=2
       c.setChanged()
       c.sendData()
@@ -85,6 +142,10 @@
       station.previous=null
     }
     row.finish=station.finish||null
+    if (station.leased) {
+      row.runtimeLease=hasRuntimeLease(station,row)
+      if (!row.runtimeLease) return false
+    }
     if (!c.printer.isLoaded() || c.printer.isErrored()) return false
     var running = String(c.state.name()) === 'RUNNING'
     var blocked = String(c.state.name()) === 'PAUSED' && String(c.statusMsg) === 'targetNotLoaded'
@@ -98,6 +159,14 @@
     var anchor = item.get(Components.SCHEMATIC_ANCHOR), bounds = item.get(Components.SCHEMATIC_BOUNDS)
     if (!anchor || !bounds || !anchor.equals(c.printer.getAnchor()) || pos.distSqr(anchor) >= 256*256) return false
     if ([bounds.getX(),bounds.getY(),bounds.getZ()].some(function(n){return n<=0 || n>128})) return false
+    // New slots require a conservative proof for the complete deployed volume,
+    // not merely the origin or a hand-picked cursor. Legacy behavior is unchanged.
+    if (station.leased) {
+      for (var dx=0; dx<2; dx++) for (var dy=0; dy<2; dy++) for (var dz=0; dz<2; dz++) {
+        var corner=new BlockPos(anchor.getX()+dx*(bounds.getX()-1),anchor.getY()+dy*(bounds.getY()-1),anchor.getZ()+dz*(bounds.getZ()-1))
+        if (pos.distSqr(corner)>=256*256 || Math.abs(corner.getX()-pos.getX())>255) return false
+      }
+    }
 
     // Check world positions against the deployed volume. Create's initial
     // printer cursor (-1,0,0) isn't a target. Only the X/Z chunk matters.
@@ -153,6 +222,11 @@ function campusReadNetwork(level,survey) {
   ServerEvents.tick(function (event) {
     if (++ticks % 10 !== 0) return
     var level = event.server.overworld(), chunks = level.getChunkSource()
+    runtimeLeases=null
+    if (additions.length) {
+      try { runtimeLeases=JsonIO.read('kubejs/config/erebor-runtime-leases.json') }
+      catch (e) { /* A broken/missing renewal immediately fails closed. */ }
+    }
     var report={}
     stations.forEach(function (station) {
       try {

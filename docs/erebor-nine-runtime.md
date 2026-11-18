@@ -61,12 +61,56 @@ A safe prepare/start path must be integrated together with:
 
 Do not relax the existing B/C regex or redirect six cannons to the original
 A/B/C chest to work around these missing integrations. K24 and all other sites
-remain untouched. The requested future 19-station installation is not a batch
-activation instruction; retain the original “über 200 Blöcke” wording without
-inventing a different geometric constraint.
+remain untouched until K12 proves real progress. The authorized staged rollout is
+K12, K27, K24, K23, K11, K29, K28, K16, K15, K07, K10, K13, K18, K17,
+K04, K06, K22, K09 and K32. Subsequent batches require verified mappings;
+retain the original “über 200 Blöcke” wording without inventing a different
+geometric constraint.
 
 ## Regression checks
 
 - `python -m unittest discover -s test -p erebor_observer_test.py`
 - `python -m unittest discover -s test -p '*_test.py'` (requires `lupa`)
 - `node --test --test-concurrency=1 test/*.test.js`
+
+## Tracker lease consumer increment (not deployed or activated)
+
+`controller/kubejs/erebor-target-chunks.js` now has an opt-in K12-only tracker
+consumer exercised in the Node VM fixture against real checked-in surveys. This
+is source preparation for runtime, **not an end-to-end runtime release**.
+
+- Its optional mapping is **separate** from controller observation:
+  `kubejs/config/erebor-runtime-tracker.json`, using the observer example's
+  physical shape but `mode: "leased-targets"`. It accepts exactly the K12 pilot,
+  validates all six positions/groups atomically against legacy hardware, and
+  rejects the entire addition on any malformed final group. An observe-only
+  mapping never enables target tickets.
+- The mapped slots retain independent upload, native options/anchor/bounds,
+  placement and finish-transition telemetry through the existing report. They
+  never inherit legacy automatic mode rewriting. Sleeping slots/chests remain
+  unticketed and unread.
+- `kubejs/config/erebor-runtime-leases.json` is a trusted **local controller
+  output**, not a client API or bearer token. The consumer requires
+  `{schema:1, version:12, phase:"stone", at:<ms>, expiresAt:<ms>, jobs:{...}}`.
+  Each keyed physical slot (for example `K12D`) must have exact
+  `{file, anchor, size, options:[2,false,false]}` matching fresh native identity,
+  aligned Erebor input and a ready local chest. Lease duration is at most ten
+  seconds; future, stale, expired, missing and invalid renewals fail closed.
+- New-slot target tickets retain the existing ten-second native TTL and only
+  cover current in-volume targets/in-flight blocks. A conservative eight-corner
+  full-volume range gate rejects an in-range origin with an out-of-range far
+  edge. Existing A/B/C behavior is unchanged.
+
+There is deliberately **no lease writer and no installed runtime config yet**.
+The authenticated writer must first derive exact jobs and phase from atomic
+queue/helper/Massiv reservations, verify file SHA-256 and physical supply
+proofs, and safely replace the controller-local lease file. A fixture lease is
+not authorization to emit such a file on the live host. Group-specific feeder
+authentication/caps and guarded prepare/start still need integration; the
+controller continues rejecting D–I mutation routes. Shared ZIP/installer assets
+were not rebuilt because this incomplete increment must not auto-deploy.
+
+Regression: `test/erebor-runtime-tracker.test.js`; it executes the production
+tracker from opt-in mapping through identity collection, lease grant, target
+renewal and expiry, including malformed-map, identity, phase and range denials.
+These are simulated native objects, not real-world placement evidence.
