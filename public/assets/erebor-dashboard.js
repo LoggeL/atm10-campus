@@ -1,4 +1,4 @@
-import {states,borrowed,freshFleet,workloadDetails,stationCounts,slotDetail} from './erebor-progress-view.js?v=20261114-status-1';
+import {states,borrowed,freshFleet,workloadDetails,stationCounts,slotDetail,forecastView} from './erebor-progress-view.js?v=20261114-status-1';
 import {esc,fmt} from './format.js?v=20261114-status-1';
 import {api,linkStation} from './campus-client.js?v=20261114-status-1';
 const el = id => document.getElementById(id);
@@ -78,9 +78,11 @@ async function refresh() {
   busy=true;el('refresh').disabled=true;
   try {
     data=await api('/api/projects/erebor/dashboard');el('error').hidden=true;
+    el('forecast').innerHTML=forecastView(data.forecast);
     el('stamp').textContent='Stand '+time(data.capturedAt)+' Uhr';
     renderTasks();el('quantities').innerHTML=workloadDetails(data.massif,data.unassignedMassif);render();
   }catch(error){
+    el('forecast').innerHTML=forecastView({state:'offline'});
     if(data){data.telemetryAt=null;render();}
     el('error').textContent='Projektstand konnte nicht aktualisiert werden ('+error.message+').';
     el('error').hidden=false;

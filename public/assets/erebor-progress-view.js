@@ -124,3 +124,45 @@ export function slotDetail(r, throughput) {
     '</div>'
   );
 }
+
+export function forecastView(estimate) {
+  const label = '<h3>ETA der Massiv-Füllung</h3>';
+  const messages = {
+    unknown: 'Noch keine automatischen Massiv-Teile veröffentlicht.',
+    sampling: 'Für eine Schätzung fehlen noch genügend bestätigte Abschlüsse.',
+    inactive: 'Seit 30 Minuten wurde kein weiterer Teil abgeschlossen.',
+    paused: 'Die Vergabe neuer Massiv-Aufträge ist pausiert.',
+    complete: 'Alle veröffentlichten automatischen Massiv-Teile sind fertig.',
+    offline: 'Die Prognose konnte nicht aktualisiert werden.',
+  };
+  if (estimate?.state !== 'estimated') return label + '<p>' + messages[estimate?.state ?? 'unknown'] + '</p>';
+  const hours = Math.ceil(estimate.seconds / 3600);
+  let duration;
+  if (estimate.seconds < 3600) duration = Math.max(1, Math.ceil(estimate.seconds / 60)) + ' min';
+  else if (hours < 48) duration = hours + ' Std.';
+  else duration = Math.floor(hours / 24) + ' Tage' + (hours % 24 ? ' ' + (hours % 24) + ' Std.' : '');
+  const roundedTime = Math.ceil(estimate.finishAt / 900000) * 900000;
+  const finish = new Intl.DateTimeFormat('de-DE', {
+    timeZone: 'Europe/Berlin',
+    weekday: 'short',
+    day: '2-digit',
+    month: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(roundedTime);
+  return (
+    label +
+    '<p class="eta-line"><strong>Noch ca. ' +
+    duration +
+    '</strong><span>Voraussichtlich ' +
+    esc(finish) +
+    ' Uhr (Berlin)</span></p>' +
+    '<p class="meta">' +
+    fmt(Math.round(estimate.blocksPerHour)) +
+    ' Planblöcke/h · ' +
+    fmt(estimate.completedParts) +
+    ' bestätigte Teile in ' +
+    fmt(Math.round(estimate.windowSeconds / 60)) +
+    ' min. Gilt für die veröffentlichten Festgestein- und Hohlraumteile.</p>'
+  );
+}

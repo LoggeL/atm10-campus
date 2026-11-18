@@ -506,3 +506,10 @@ footer {
 .detail-action{display:inline-block;margin-top:7px;text-underline-offset:3px}
 
 .slot progress { width: 100%; height: .5rem; accent-color: var(--accent, #74c5a5); }
+
+.forecast { margin-top: 16px; }
+.forecast:empty { display: none; }
+.forecast h3 { color: var(--muted); }
+.eta-line { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 16px; margin: 8px 0; }
+.eta-line strong { font-size: clamp(23px, 3vw, 31px); color: #c9f2ad; }
+.forecast .meta { margin: 4px 0 0; }

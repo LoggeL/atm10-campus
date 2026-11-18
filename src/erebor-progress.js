@@ -114,3 +114,35 @@ export function projectProgress(db, production, project, sites, active) {
     filling: published ? rock.filling : null,
   };
 }
+
+// Completed plan volume and unfinished plan volume use the same unit. The rolling
+// wall-clock window includes pauses and plan changes and survives a server restart.
+export function massifForecast(db, version, filling, enabled, now = Date.now()) {
+  if (!filling || filling.solid.total + filling.cavity.total === 0) return { state: 'unknown' };
+  const remainingBlocks =
+    filling.solid.blocks + filling.cavity.blocks - filling.solid.finishedBlocks - filling.cavity.finishedBlocks;
+  if (filling.solid.done + filling.cavity.done === filling.solid.total + filling.cavity.total)
+    return { state: 'complete', remainingBlocks: 0 };
+  if (!(remainingBlocks > 0)) return { state: 'unknown' };
+  if (!enabled) return { state: 'paused', remainingBlocks };
+
+  const published = db.prepare('SELECT created FROM erebor_massif_runs WHERE v=?').get(version);
+  const started = Date.parse(published?.created);
+  const since = Math.max(now - 2 * 3600000, Number.isFinite(started) ? started : 0);
+  const windowSeconds = (now - since) / 1000;
+  const receipts = db
+    .prepare(
+      `SELECT count(*) AS parts, coalesce(sum(t.blocks),0) AS blocks, max(f.finished_at) AS latest
+    FROM erebor_massif_tiles t JOIN erebor_finished_plans f
+    ON f.version=t.v AND f.site=t.site AND f.name='EREBOR_STEIN_' || t.site || '_MASSIV_' || t.tile || '_V' || t.v
+    WHERE t.v=? AND t.done=1 AND t.special=0 AND f.finished_at BETWEEN ? AND ?`,
+    )
+    .get(version, new Date(since).toISOString(), new Date(now).toISOString());
+  const sample = { remainingBlocks, windowSeconds, completedParts: receipts.parts };
+  if (windowSeconds < 900 || receipts.parts < 2 || !receipts.blocks) return { state: 'sampling', ...sample };
+  if (now - Date.parse(receipts.latest) > 30 * 60000) return { state: 'inactive', ...sample };
+
+  const blocksPerHour = (receipts.blocks * 3600) / windowSeconds;
+  const seconds = Math.ceil((remainingBlocks * windowSeconds) / receipts.blocks);
+  return { state: 'estimated', ...sample, blocksPerHour, seconds, finishAt: now + seconds * 1000 };
+}

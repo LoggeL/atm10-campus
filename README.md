@@ -14,7 +14,7 @@ Web-App auf der HomeBox für das Campus-Redesign unseres ATM10-Servers:
 
 ## Orientierung in der App
 
-Nach der Anmeldung öffnet sich das [Dashboard](https://campus.logge.top/erebor/dashboard). Es zeigt den Fortschritt je Bauaufgabe, die Aufträge der 37 Stationen und die Übernahmen zwischen Baugebieten. Aus den Stationsdetails kommst du zu den [Bauaufträgen](https://campus.logge.top/app#overview) mit der passenden Stationsauswahl.
+Nach der Anmeldung öffnet sich das [Dashboard](https://campus.logge.top/erebor/dashboard). Es zeigt den Fortschritt je Bauaufgabe, die Aufträge der 37 Stationen und die Übernahmen zwischen Baugebieten. Die ETA der automatischen Massiv-Füllung rechnet mit dem bestätigten Blockvolumen der letzten zwei Stunden. Aus den Stationsdetails kommst du zu den [Bauaufträgen](https://campus.logge.top/app#overview) mit der passenden Stationsauswahl.
 
 Unter [Stationstechnik](https://campus.logge.top/app#cannons) liegen Flottensteuerung, Materialversorgung, Einzelgeräte und Aufstellkoordinaten. [Bauprojekte](https://campus.logge.top/projects) enthält die Projektpläne, Karten und das Archiv. Weltaufnahmen, Materialliste, 3D-Viewer und Zugänge sind im Menü **Werkzeuge** erreichbar.
 

@@ -1,7 +1,7 @@
 import {cannonProgressRows} from './cannon-progress-rows.js';
 import {publishedPlan,selectionStore,unstarted} from './erebor-selection.js';
 import {productionStore} from './erebor-production.js';
-import {projectProgress} from './erebor-progress.js';
+import {projectProgress,massifForecast} from './erebor-progress.js';
 import {availableMassifSlots} from './erebor-balance.js';
 import {dashboardData} from './erebor-dashboard.js';
 import {placementThroughput} from './erebor-throughput.js';
@@ -443,7 +443,10 @@ export function registerEreborQueue(app,campus){
    return {...r,live:job?.tainted?null:r.live,workloadBlocks:['stone','build'].includes(job?.phase)?job.blocks:null};
   });
   counter.throughput=throughput.read(report,rows);
-  if(dashboard)Object.assign(counter,dashboardData(db,p.current_version,sites,report,jobs,filling,massif));
+  if(dashboard){
+   Object.assign(counter,dashboardData(db,p.current_version,sites,report,jobs,filling,massif));
+   counter.forecast=massifForecast(db,p.current_version,filling,counter.balance.enabled);
+  }
   return reply.header('Cache-Control','private, no-store').send(counter);
  }
  app.get('/api/projects/erebor/bauzaehler',(req,reply)=>buildingProgress(req,reply,false));
