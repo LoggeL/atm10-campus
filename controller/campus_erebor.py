@@ -78,14 +78,21 @@ def handle(bridge, action, obj):
     if not isinstance(obj, dict) or set(obj) != required or obj['version'] != layout['version']:
         raise ValueError('Erebor-Standortplan oder Auftrag passt nicht.')
     key = obj['site']
-    if isinstance(key, str) and re.fullmatch(r'K[0-9]{2}[D-I]', key):
-        # New physical addresses are observations, NOT scheduler/feed capability.
-        # Reject mutation before looking up opt-in config or touching the world.
-        if action != 'erebor-inspect':
+    optional = isinstance(key, str) and re.fullmatch(r'(K[0-9]{2})([D-I])', key)
+    optional_binding = None
+    gate = None
+    if optional:
+        if action == 'erebor-inspect':
+            return {'observerOnly': True, 'observed': bridge.inspect(observer_binding(layout, key))}
+        gate = vars(bridge).get('optional_dispatch_gate')
+        if action not in ('erebor-prepare', 'erebor-start') or not callable(gate):
             raise ValueError('Zusatzkanonen D–I sind nur zur Beobachtung freigegeben.')
-        return {'observerOnly': True, 'observed': bridge.inspect(observer_binding(layout, key))}
+        optional_binding = observer_binding(layout, key, runtime=True)
+        validate_optional_request(optional_binding, obj)
+        if gate(action, obj, optional_binding) is not True:
+            raise ValueError('Zusatzkanonen D–I sind nur zur Beobachtung freigegeben.')
     helper = isinstance(key, str) and re.fullmatch(r'(K[0-9]{2})([BC])', key)
-    parent = helper[1] if helper else key
+    parent = optional[1] if optional else helper[1] if helper else key
     site = next((s for s in layout['sites'] if s['site'] == parent), None)
     if not site:
         raise ValueError('Unbekannter Kanonenplatz.')
@@ -100,7 +107,7 @@ def handle(bridge, action, obj):
         if extra['version'] != layout['version'] or not row or row['main'] != site['cannon']:
             raise ValueError('Zusatzposition passt nicht zur Hauptkanone.')
         x,y,z = row[helper[2]]
-    b = {'x':x, 'y':y, 'z':z, 'dimension':'minecraft:overworld', 'owner':'Erebor'}
+    b = optional_binding or {'x':x, 'y':y, 'z':z, 'dimension':'minecraft:overworld', 'owner':'Erebor'}
     if action == 'erebor-inspect':
         return {'observed':bridge.inspect(b)}
     if action == 'erebor-supply':
@@ -171,16 +178,47 @@ def handle(bridge, action, obj):
             if not desired['blueprint'].startswith('EREBOR_') or '_AUSHUB_' not in desired['blueprint'] or bridge.file_hash(b['owner'],desired['file'])!=desired['sha256']:
                 raise ValueError('Aushubdatei nicht bestätigt.')
             validate_clear((bridge.base/'data/schematics/uploaded'/b['owner']/desired['file']).read_bytes(),obj['size'])
+        if optional:
+            import time
+            at = observed.get('at')
+            if (type(at) not in (int, float) or not 0 <= time.time()-at < 10
+                    or observed.get('amountPlaced') != 0 or observed.get('flyingBlocks') != 0
+                    or observed.get('state') not in ('STOPPED', 'PAUSED')
+                    or observed.get('status') in ('noGunpowder','targetNotLoaded','missingBlock','missingItem','skipping')
+                    or not callable(gate) or gate(action, obj, b) is not True):
+                raise ValueError('Pilotstart nicht sicher oder Freigabe abgelaufen.')
         return start(bridge,b,desired,opts,observed,erebor_clear=clear,bounds=obj['size'])
     return prepare_schematic(bridge,b,desired,obj['nbtBase64'],opts,obj['size'],erebor_kind=kind,previous=obj.get('previous'))
+
+
+def validate_optional_request(binding, obj):
+    """Native constraints independent of the future trusted group arbiter.
+
+    The arbiter must prove complete-group reservations, physical identity,
+    authenticated delivery and sustained target renewal; it is NOT installed by
+    this module and no observation/runtime mapping substitutes for it.
+    """
+    from campus_start import validate_target
+    options = dict(replace_mode=2, skip_missing=False, replace_block_entities=False)
+    if obj.get('kind') != 'stone' or 'previous' in obj or not obj.get('desired', {}).get('blueprint', '').startswith('EREBOR_STEIN_K12_'):
+        raise ValueError('Pilot benötigt einen eigenen Cleanstone-Auftrag.')
+    validate_target(binding, obj['desired'], options)
+    anchor, size = obj['desired']['anchor'], obj['size']
+    if (not isinstance(size, list) or len(size) != 3 or any(type(n) is not int or not 0 < n <= 256 for n in size)
+            or anchor[1]+size[1] > 320):
+        raise ValueError('Ungültige Pilotabmessungen.')
+    p = [binding[k] for k in 'xyz']
+    if any(sum((anchor[i]+d[i]-p[i])**2 for i in range(3)) >= 65536
+           for d in ((x,y,z) for x in (0,size[0]-1) for y in (0,size[1]-1) for z in (0,size[2]-1))):
+        raise ValueError('Pilotvolumen außerhalb der Reichweite.')
 
 
 def observer_binding(layout, key, *, runtime=False):
     """Validate the complete opt-in map before resolving an optional address.
 
     The default observation file grants no runtime capability. Only the trusted
-    lease publisher passes runtime=True, selecting a separate K12-only file.
-    Neither map enables prepare/start/supply mutations.
+    lease publisher/guarded dispatch passes runtime=True, selecting a separate
+    K12-only file. Neither map alone enables prepare/start/supply mutations.
     """
     def require(ok):
         if not ok:

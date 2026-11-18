@@ -43,9 +43,17 @@ coordinator test are deterministic adapters, NOT Minecraft observations.
 
 ## Remaining runtime gates — do not deploy as an activated pilot
 
-1. Python controller still deliberately rejects optional prepare/start mutations
-   and grouped supply. `erebor-group-proof` is a required protocol gate but has
-   **no controller implementation**, so it cannot authorize a live start.
+1. Python controller now has a tested D–I native prepare/start dispatch seam,
+   requiring a separately injected trusted `optional_dispatch_gate` and the complete
+   K12 runtime mapping. It reuses the existing native hash/owner/file/options/
+   anchor/printer guards and adds full-volume/build-height validation, zero-placement
+   start checks, fresh non-future inspection and a second gate check immediately
+   before native start. **No gate implementation is installed or supplied here.**
+   Its contract is to independently validate complete-group reservations, physical
+   identity, authenticated delivery and sustained renewal on each call. A boolean
+   from a deterministic test adapter is not production proof. Observation and lease
+   mappings alone still cannot authorize mutation. Grouped supply and
+   `erebor-group-proof` still have no controller implementation.
 2. Authenticated CC POST transport, exact physical identity/chest readback and
    measured group delivery must be implemented and verified on #50/#51 without
    altering the original feeder. No CC program/settings/credentials were changed.

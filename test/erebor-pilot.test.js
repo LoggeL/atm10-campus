@@ -13,7 +13,7 @@ function fixture(){
 }
 import {pilotScheduler} from '../src/erebor-pilot.js';
 
-for(const mode of ['success','prepare-denied','lease-denied','supply-denied','physical-proof-denied','paused-during-inspect','credential-revoked','job-changed','claim-stolen'])test('scheduler guarded dispatch: '+mode,async()=>{
+for(const mode of ['success','stale-start-inspection','future-start-inspection','prepare-denied','lease-denied','supply-denied','physical-proof-denied','paused-during-inspect','credential-revoked','job-changed','claim-stolen'])test('scheduler guarded dispatch: '+mode,async()=>{
  const f=fixture();try{
   f.db.exec(`CREATE TABLE erebor_queue_config(id INTEGER,version INTEGER,enabled INTEGER,phase TEXT); INSERT INTO erebor_queue_config VALUES(1,12,1,'stone'); CREATE TABLE cannons(name TEXT,options_json TEXT); INSERT INTO cannons VALUES('erebor-K12','{}');`);
   for(const t of ['ONE','TWO','THREE'])f.add(t);
@@ -25,6 +25,7 @@ for(const mode of ['success','prepare-denied','lease-denied','supply-denied','ph
    if(mode==='job-changed')f.db.exec("UPDATE erebor_helpers SET job='null' WHERE slot='D'");
    if(mode==='claim-stolen')f.db.exec("UPDATE erebor_pilot_claim SET owner='other'");
    if(mode==='prepare-denied'&&action==='erebor-prepare')throw Error('observe-only controller');
+   if(action==='erebor-inspect'&&observed[args.site]&&mode.endsWith('start-inspection'))return {observed:{...observed[args.site],at:Date.now()/1000+(mode==='future-start-inspection'?1:-11)}};
    if(action==='erebor-inspect')return {observed:observed[args.site]||{inputEmpty:true,state:'STOPPED',amountPlaced:0,amountToPlace:0,flyingBlocks:0,printer:{DeferredBlocks:[],EntityProgress:-1,PrintStage:'BLOCKS'},at:Date.now()/1000}};
    if(action==='erebor-prepare'){
     const d=args.desired;

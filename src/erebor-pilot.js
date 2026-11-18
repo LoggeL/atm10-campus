@@ -76,7 +76,7 @@ export function pilotScheduler(db,massif,request,supply){
     const j=JSON.parse(expected[s]);if(j.started)continue;
     if(Date.now()>=lease.expiresAt||Date.now()-proof.at>=10000)throw Error('Pilotfreigabe abgelaufen');
     const args={site:site+s,version:v}, {observed:o}=await call('erebor-inspect',args);
-    if(!matches(j,o)||!['STOPPED','PAUSED'].includes(o.state)||o.flyingBlocks!==0||o.amountPlaced!==0||['missingItem','missingBlock','noGunpowder','targetNotLoaded','skipping'].includes(o.status))throw Error('Pilotstart nicht sicher');
+    if(!Number.isFinite(o?.at)||Date.now()/1000-o.at<0||Date.now()/1000-o.at>=10||!matches(j,o)||!['STOPPED','PAUSED'].includes(o.state)||o.flyingBlocks!==0||o.amountPlaced!==0||['missingItem','missingBlock','noGunpowder','targetNotLoaded','skipping'].includes(o.status))throw Error('Pilotstart nicht sicher');
     const {options,...desired}=j.desired;
     const r=await call('erebor-start',{...args,desired,kind:'stone',size:j.size});
     if(!r.started||r.observed?.state!=='RUNNING'||!matches(j,r.observed))throw Error('Pilotstart nicht bestätigt');
