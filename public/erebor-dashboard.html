@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <meta name="theme-color" content="#101916" />
+    <title>Erebor · Baudashboard | ATM10 Campus</title>
+    <link rel="stylesheet" href="/assets/erebor-dashboard.css" />
+  </head>
+  <body>
+    <a href="#main" class="skip">Zum Inhalt</a>
+    <header>
+      <nav class="shell">
+        <a class="brand" href="/app"><span class="mark" aria-hidden="true"></span>ATM10 Campus</a
+        ><span class="navlinks"
+          ><a href="/app?project=erebor">Baupläne</a><a href="/erebor/dashboard" aria-current="page">Dashboard</a
+          ><a href="/erebor/bauzaehler">Bauzähler</a></span
+        >
+      </nav>
+    </header>
+    <main class="shell" id="main">
+      <div class="heading">
+        <div>
+          <p class="project">Bauprojekt Erebor</p>
+          <h1>Baufortschritt</h1>
+        </div>
+        <div class="refresh">
+          <span id="stamp" role="status">Lade Projektstand …</span
+          ><button id="refresh" type="button">Aktualisieren</button>
+        </div>
+      </div>
+      <p id="error" role="alert" hidden></p>
+      <div id="summary" class="summary" aria-label="Projektübersicht"></div>
+      <section aria-labelledby="tasks-title">
+        <h2 id="tasks-title">Aufgaben</h2>
+        <div class="table-frame">
+          <table>
+            <thead>
+              <tr>
+                <th scope="col">Bauaufgabe</th>
+                <th scope="col">Erledigt / Gesamt</th>
+                <th scope="col">Zugewiesen</th>
+                <th scope="col">Frei</th>
+              </tr>
+            </thead>
+            <tbody id="tasks"></tbody>
+          </table>
+        </div>
+        <p class="footnote">
+          Gezählt werden veröffentlichte Teile. Der Cleanstone-Katalog kann sich mit der Massiv-Füllung
+          überschneiden.
+        </p>
+      </section>
+      <section aria-labelledby="fleet-title">
+        <div class="section-head">
+          <h2 id="fleet-title">Kanonen</h2>
+          <label
+            >Ansicht
+            <select id="filter">
+              <option value="all">Alle Stationen</option>
+              <option value="borrowed">Mit Übernahmen</option>
+              <option value="waiting">Mit Wartezeiten</option>
+              <option value="idle">Mit freien Kanonen</option>
+              <option value="unknown">Ohne Live-Nachweis</option>
+            </select></label
+          >
+        </div>
+        <div class="fleet-layout">
+          <div>
+            <div id="fleet" class="fleet" aria-label="Station auswählen"></div>
+            <p class="empty" id="empty" hidden>Keine Station passt zur Auswahl.</p>
+            <div class="legend" id="legend"></div>
+          </div>
+          <aside id="detail" aria-label="Stationsdetails"></aside>
+        </div>
+      </section>
+      <footer>
+        <a href="/app?project=erebor">Zur Bauverwaltung</a><a href="/erebor/bauzaehler">Detaillierte Bauzähler</a>
+      </footer>
+    </main>
+    <script type="module" src="/assets/erebor-dashboard.js"></script>
+  </body>
+</html>

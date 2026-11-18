@@ -9,6 +9,8 @@ test('Bauzähler page and read API retain authentication and never contact the c
  const dir=mkdtempSync(join(tmpdir(),'counter-route-'));let calls=0;
  const app=await buildServer({dataDir:dir,worldSources:{},bootstrapInvite:'counter-bootstrap',publicUrl:'http://test',cookieSecure:false,snapshotIntervalMin:0,cannonBridgeRequest:async()=>{calls++;throw Error('not allowed');}});
  try{
+  assert.equal((await app.inject('/erebor/dashboard')).statusCode,302);
+  assert.equal((await app.inject('/api/projects/erebor/dashboard')).statusCode,401);
   assert.equal((await app.inject('/erebor/bauzaehler')).statusCode,302);
   assert.equal((await app.inject('/api/projects/erebor/bauzaehler')).statusCode,401);
   const login=await app.inject({method:'POST',url:'/api/auth/register',payload:{code:'counter-bootstrap',username:'counter',password:'counter-test-password'}});
@@ -21,6 +23,10 @@ test('Bauzähler page and read API retain authentication and never contact the c
   assert.equal(result.statusCode,404);assert.equal(calls,0);
   const db=app.campus.db;
   db.prepare("INSERT INTO build_projects(id,current_version,plan_json,created_at,updated_at) VALUES('erebor',12,'{}','now','now')").run();
+  assert.match((await app.inject({url:'/erebor/dashboard',headers})).body,/Baufortschritt/);
+  const dashboard=await app.inject({url:'/api/projects/erebor/dashboard',headers});
+  assert.equal(dashboard.statusCode,200);assert.equal(dashboard.json().fleet.length,111);
+  assert.equal(dashboard.json().filling,null);assert.equal(dashboard.json().telemetryAt,null);
   const before=db.prepare('SELECT total_changes() n').get().n;
   const response=await app.inject({url:'/api/projects/erebor/bauzaehler',headers});
   assert.equal(response.statusCode,200);assert.match(response.headers['cache-control'],/no-store/);

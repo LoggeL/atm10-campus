@@ -2,6 +2,8 @@ import {cannonProgressRows} from './cannon-progress-rows.js';
 import {publishedPlan,selectionStore,unstarted} from './erebor-selection.js';
 import {productionStore} from './erebor-production.js';
 import {productionCounts} from './erebor-counts.js';
+import {availableMassifSlots} from './erebor-balance.js';
+import {dashboardData} from './erebor-dashboard.js';
 import {constructionCounter} from './erebor-bauzaehler.js';
 import {placementThroughput} from './erebor-throughput.js';
 import {registerMassif} from './erebor-massif.js';
@@ -65,7 +67,9 @@ export function registerEreborQueue(app,campus){
  CREATE TABLE IF NOT EXISTS erebor_queue_sites(site TEXT PRIMARY KEY,state TEXT NOT NULL,payload BLOB);`);
  const choices=selectionStore(db);
  const production=productionStore(db);
- const massif=registerMassif(app,campus,parallelLayout.sites);
+ const massif=registerMassif(app,campus,parallelLayout.sites,version=>
+  availableMassifSlots(parallelLayout.sites,liveCache,version,new Set(production.enabled(version)),
+   cfg()?.phase==='stone' && helpers.isEnabled(version)));
  db.exec('CREATE TABLE IF NOT EXISTS erebor_resume(version INTEGER,site TEXT,slot TEXT,upload TEXT,expires INTEGER,result TEXT,PRIMARY KEY(version,site,slot))');
  const verifyStone=config.worldSources.live?(p,verifyStone)=>generate(p,{verifyStone}):null;
  const helpers=parallelFleet(db,production,choices,request,recordedFinish,resumePaused,verifyStone,massif);
@@ -413,7 +417,7 @@ export function registerEreborQueue(app,campus){
    return {site:r.site,automatic:!!production.mode(c.version,r.site).enabled,status:s.status,live,native,nativeOptions:signal?.options??null,upload:j?.desired.file??null,kind:j?.phase??null,inserted:!!s.inserted,sha256:j?.desired.sha256||null,file:j?.desired.blueprint||null,anchor:j?.desired.anchor||null,blocks:j?.blocks??null,completed:s.completed,checked:s.checked||null};
   })};
  }
- app.get('/api/projects/erebor/bauzaehler',async(req,reply)=>{
+ function buildingProgress(req,reply,dashboard){
   requireActor(req,'read');
   const p=project();if(!p)throw new HttpError(404,'Erebor nicht verfügbar.');
   const mains=cfg()?.version===p.current_version?db.prepare('SELECT site,state FROM erebor_queue_sites').all().map(r=>({site:r.site,...JSON.parse(r.state)})):[];
@@ -430,8 +434,11 @@ export function registerEreborQueue(app,campus){
    return {...r,live:job?.tainted?null:r.live,workloadBlocks:['stone','build'].includes(job?.phase)?job.blocks:null};
   });
   counter.throughput=throughput.read(report,rows);
+  if(dashboard)Object.assign(counter,dashboardData(db,p.current_version,sites,report,jobs,published,massif));
   return reply.header('Cache-Control','private, no-store').send(counter);
- });
+ }
+ app.get('/api/projects/erebor/bauzaehler',(req,reply)=>buildingProgress(req,reply,false));
+ app.get('/api/projects/erebor/dashboard',(req,reply)=>buildingProgress(req,reply,true));
  app.get(base,async(req,reply)=>{requireActor(req,'read');const report=await liveReport(cfg()?.version);return reply.header('Cache-Control','private, no-store').send(status(report,req.query.site));});
  app.get(base+'/drucker-reparatur.zip',async(req,reply)=>{
   requireActor(req,'admin');

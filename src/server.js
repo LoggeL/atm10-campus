@@ -70,6 +70,7 @@ export async function buildServer(config = defaultConfig) {
   app.get('/login', async (req, reply) => html(reply, page('login.html')));
   app.get('/invite/:code', async (req, reply) => html(reply, page('invite.html')));
   app.get('/app', async (req, reply) => (req.actor?.via === 'session' ? html(reply, page('app.html')) : reply.redirect('/login')));
+  app.get('/erebor/dashboard', async (req, reply) => (req.actor?.via === 'session' ? html(reply, page('erebor-dashboard.html')) : reply.redirect('/login')));
   app.get('/erebor/bauzaehler', async (req, reply) => (req.actor?.via === 'session' ? html(reply, page('erebor-bauzaehler.html')) : reply.redirect('/login')));
   app.get('/projects', async (req, reply) => (req.actor?.via === 'session' ? html(reply, page('projects.html')) : reply.redirect('/login')));
   app.get('/docs', async (req, reply) => html(reply, page('docs.html')));

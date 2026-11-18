@@ -1,3 +1,4 @@
+import {planMassifWork} from './erebor-balance.js';
 import {Worker} from 'node:worker_threads';
 import {randomUUID,createHash} from 'node:crypto';
 import {requireActor,HttpError} from './auth.js';
@@ -8,7 +9,7 @@ import {parseStructure} from './nbt.js';
 
 const api='/api/projects/erebor/stone/massif';
 const filename=(v,site,tile)=>'EREBOR_STEIN_'+site+'_MASSIV_'+tile+'_V'+v;
-export function registerMassif(app,campus,stations){
+export function registerMassif(app,campus,stations,availableSlots=()=>[]){
  const {db,config}=campus;
  db.exec(`CREATE TABLE IF NOT EXISTS erebor_massif_runs(v INTEGER PRIMARY KEY,actor INTEGER,created TEXT);
  CREATE TABLE IF NOT EXISTS erebor_massif_control(v INTEGER PRIMARY KEY,stoneOnly INTEGER NOT NULL);
@@ -179,22 +180,36 @@ export function registerMassif(app,campus,stations){
   const name=filename(v,site,r.tile),desired={file:ereborUploadName(name+'.nbt',r.sha),blueprint:name,sha256:r.sha,owner:'Erebor',anchor:[r.x,r.y,r.z],version:v,rotation:'none',mirror:'none',options:{replace_mode:2,skip_missing:false,replace_block_entities:false}};
   return {job:{massif:r.tile,desired,phase:slot==='A'&&!r.tile.endsWith('_LUFT')?'build':'stone',size:[r.sx,r.sy,r.sz],blocks:r.blocks,materials:{'minecraft:stone':r.blocks},loaded:false,seen:0},bytes:Buffer.from(db.prepare('SELECT bytes FROM erebor_massif_blobs WHERE sha=?').get(r.sha).bytes)};
  }
+ let balance = null;
+ function preferences(v) {
+  const slots = availableSlots(v);
+  if (!slots.length) return null;
+  const capacity = slots.map(s => s.site+s.slot+Number(s.solids)).join(',');
+  if (!balance || balance.version !== v || balance.capacity !== capacity || Date.now()-balance.at >= 60000) {
+   const tiles = db.prepare('SELECT tile,x,y,z,blocks,site,slot FROM erebor_massif_tiles WHERE v=? AND done=0 AND special=0').all(v);
+   balance = {version:v, capacity, at:Date.now(), assignments:planMassifWork(tiles,slots)};
+  }
+  return balance.assignments;
+ }
  function reserve(v,site,slot,allowSolids=slot==='A'){
   if(!enabled(v))return null;
   const pos=stations.find(s=>s.site===site)[slot==='A'?'main':slot];
   return tx(db,()=>{
    let r=db.prepare('SELECT * FROM erebor_massif_tiles WHERE v=? AND site=? AND slot=? AND done=0').get(v,site,slot);
    if(!r){
-    r=db.prepare(`WITH active_catalog(anchor) AS MATERIALIZED (
+    const candidates=db.prepare(`WITH active_catalog(anchor) AS MATERIALIZED (
         SELECT json_extract(state,'$.job.desired.anchor') FROM erebor_queue_sites WHERE json_type(state,'$.job.desired.anchor')='array' AND json_extract(state,'$.job.massif') IS NULL
         UNION ALL SELECT json_extract(job,'$.desired.anchor') FROM erebor_helpers WHERE version=:v AND json_type(job,'$.desired.anchor')='array' AND json_extract(job,'$.massif') IS NULL)
-       SELECT t.*,((x-:x)*(x-:x)+(y-:y)*(y-:y)+(z-:z)*(z-:z)) AS d FROM erebor_massif_tiles t
+       SELECT t.tile,((x-:x)*(x-:x)+(y-:y)*(y-:y)+(z-:z)*(z-:z)) AS d FROM erebor_massif_tiles t
        WHERE v=:v AND site IS NULL AND done=0 AND special=0 AND x BETWEEN :x-255 AND :x+255 AND d<65536
        AND (:solids OR tile GLOB '*_LUFT')
        AND json_array(x,y,z) NOT IN (SELECT anchor FROM active_catalog)
        AND (sy<=16 OR json_array(x,y+16,z) NOT IN (SELECT anchor FROM active_catalog))
-       ORDER BY (:primary AND tile NOT GLOB '*_LUFT') DESC,(home=:site) DESC,priority,d,tile LIMIT 1`).get({x:pos[0],y:pos[1],z:pos[2],v,site,primary:Number(slot==='A'),solids:Number(allowSolids)});
-    if(!r)return null;
+       ORDER BY (:primary AND tile NOT GLOB '*_LUFT') DESC,(home=:site) DESC,priority,d,tile`).all({x:pos[0],y:pos[1],z:pos[2],v,site,primary:Number(slot==='A'),solids:Number(allowSolids)});
+    if(!candidates.length)return null;
+    const plan=preferences(v), key=site+slot;
+    const chosen=candidates.find(candidate=>plan?.get(candidate.tile)===key) ?? candidates[0];
+    r=rowFor.get(v,chosen.tile);
     db.prepare('UPDATE erebor_massif_tiles SET site=?,slot=? WHERE v=? AND tile=?').run(site,slot,v,r.tile);
    }
    return load(v,site,slot,r);
@@ -207,7 +222,7 @@ export function registerMassif(app,campus,stations){
   }
   return anchors;
  };
- return {enabled,reserve,occupied,restore(v,site,slot,tile){const r=rowFor.get(v,tile);if(!r||r.site!==site||r.slot!==slot||r.done)throw Error('Massiv-Auftrag nicht mehr reserviert.');return load(v,site,slot,r);},
+ return {enabled,reserve,occupied,lastBalancedAt:v=>balance?.version===v?balance.at:null,restore(v,site,slot,tile){const r=rowFor.get(v,tile);if(!r||r.site!==site||r.slot!==slot||r.done)throw Error('Massiv-Auftrag nicht mehr reserviert.');return load(v,site,slot,r);},
   finish(v,tile,site,slot){
    const updated=db.prepare('UPDATE erebor_massif_tiles SET done=1 WHERE v=? AND tile=? AND site=? AND slot=? AND done=0').run(v,tile,site,slot);
    const m=/^X(\d+)_Z(\d+)_/.exec(tile);
