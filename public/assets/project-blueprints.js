@@ -17,6 +17,23 @@ export function createProjectBlueprints({api,isSelected,closeDrawer,loadedStatus
  let renderKey='';
  const materialList=b=>Object.entries(b.materials||{'minecraft:stone':b.blocks}).sort((a,b)=>b[1]-a[1]).map(([name,n])=>{const c=catalog[name]||{icon:'/assets/erebor-palette/'+name.replace(':','__')+'.png'};return `<div class="material-label">${c?.icon?`<img class="material-icon" width="36" height="36" src="${esc(c.icon)}" alt="" loading="lazy">`:''}<span><strong>${fmt(n)} ${esc(c?.name||name.split(':')[1].replaceAll('_',' '))}</strong>${name.endsWith('_connecting')?' · <strong>Connecting</strong>':''}<br><span class="muted mono">${esc(name)}</span></span></div>`;}).join('');
  const byId=new Map(),submitting=new Set();
+ function esgarothPackages(published){
+  const available=published.filter(p=>(p.group==='E25'||p.group==='E26')&&p.files.length);
+  $('esgarothPackages').hidden=!available.length;
+  if(!available.length)return;
+  const select=$('esgarothPackage'),previous=select.value;
+  select.innerHTML=available.map(p=>`<option value="${esc(p.id)}">${esc(p.id)} · ${esc(p.title)}</option>`).join('');
+  select.value=available.some(p=>p.id===previous)?previous:available[0].id;
+  function showPackage(){
+   const p=available.find(p=>p.id===select.value);
+   const files=p.files.map(f=>byId.get(f.id));
+   $('esgarothZip').href=files[0].packageDownload;
+   $('esgarothCount').textContent=`${p.id} · ${files.length} Schematics`;
+   $('esgarothFiles').innerHTML=files.map(f=>`<tr><td><button class="text-button blueprint-entry" data-stone-id="${esc(f.id)}">${projectBlueprintPreview(f,{size:'small'})}<span>${f.kind==='clear'?'Aushub':'Bau'} · Y${esc(f.origin[1])}</span></button></td><td>${esc(f.cannon)}</td><td class="mono">${esc(f.origin.join(' / '))}</td><td><a href="${esc(f.download)}" download>NBT</a></td></tr>`).join('');
+  }
+  select.onchange=showPackage;
+  showPackage();
+ }
  function loadButton(b){
   const supported=/^K[0-9]{2}$/.test(b.cannon);
   const hint=!supported?'Für diese Plattform wurde noch keine Kanone bestätigt.':!admin()?'Zum Einlegen als Admin anmelden.':'In '+b.cannon+' einlegen';
@@ -82,6 +99,7 @@ export function createProjectBlueprints({api,isSelected,closeDrawer,loadedStatus
   if(isSelected()&&version===project.version&&Date.now()-catalogAt<120000)return;
 const [prepared,architecture,manifest,icons]=await Promise.all([api('/api/projects/erebor/stone/prepared?version='+project.version),api('/api/projects/erebor/architecture'),api('/api/projects/erebor/architecture/manifest'),fetch('/assets/material-icons/catalog.json').then(r=>r.json())]);if(!isSelected())return;catalog=icons;packages=prepared.packages;version=project.version;items=[...architectureBlueprints(project,architecture.packages),...preparedBlueprints(project,packages)];byId.clear();for(const b of items)byId.set(b.id,b);
   $('liveLine').textContent=`Erebor · ${architecture.packages.length} von ${manifest.packages.length} Architekturpaketen veröffentlicht.`;
+  esgarothPackages(architecture.packages);
   catalogAt=Date.now();
   $('cards').innerHTML='<a href="/api/projects/erebor/stone/massif/plans">Massiv-Baupläne und Sonderziele</a><a href="/viewer?project=erebor&room=E05">Blockvorschau öffnen</a>';rows();coordinates();
  },rows,coordinates,changeSite(){limit=150;renderKey='';rows();},refreshQueue,updateLoadStates,coordinateText:()=>coordinateListText(items).replace('ATM10 Campus – Einsetzkoordinaten der aktuellen Baupläne','Erebor – Einsetzkoordinaten der gespeicherten Schematics')};

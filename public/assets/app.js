@@ -2,7 +2,7 @@ import {setupAccountTools} from './campus-account.js?v=20261114-status-1';
 import {fleetEquipment} from './fleet-equipment.js?v=20261114-status-1';
 import {api} from './campus-client.js?v=20261114-status-1';
 import {setupEreborQueue} from './erebor-queue.js?v=20261114-status-1&revision=massif-remaining-1';
-import { createProjectBlueprints } from './project-blueprints.js?v=20261114-status-1&revision=fallback-details-1';
+import { createProjectBlueprints } from './project-blueprints.js?v=20261114-status-1&revision=esgaroth-1';
 import { createCannonSites } from './cannon-sites.js?v=20261114-status-1&fleet=20261110';
 import { esc, fmt } from './format.js?v=20261114-status-1';
 import { updateCannonPicker } from './cannon-picker.js?v=20261114-status-1';
@@ -45,7 +45,7 @@ function configureBlueprintProject(){document.getElementById('ereborMode')?.clas
   $('blueprintProjectLink').href='/projects?id='+blueprintProject;
   $('viewerLink').href=erebor?'/viewer?project=erebor':'/viewer';
   for(const id of ['filter','blueprintDownloads','overlapPanel','newBp'])$(id).classList.toggle('hide',erebor);
-  for(const id of ['stoneBlueprintCount','ereborQueue'])$(id).classList.toggle('hide',!erebor);
+  for(const id of ['stoneBlueprintCount','ereborQueue','esgarothCatalog'])$(id).classList.toggle('hide',!erebor);
 }
 $('blueprintProject').addEventListener('change',guard(async()=>{
   if($('blueprintProject').value==='campus'&&campusArchived){location.assign('/projects?id=campus');return;}

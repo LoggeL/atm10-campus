@@ -11,10 +11,19 @@ test('regular stone catalog is collapsed fallback; architecture and active job r
  globalThis.fetch=async()=>({json:async()=>({})});
  const file=(name,kind)=>({id:name,fileName:name+'.nbt',kind,cannon:'K01',origin:[0,0,0],size:[1,1,1],blocks:1,sha256:'a'});
  const stone=file('REGULAR'),active=file('ACTIVE'),arch=file('ARCH','build');
+ const water={version:1,revision:2,id:'E25_001',group:'E25',title:'Wasserstadt',files:[file('HOUSE','build')]};
+ const bridge={...water,id:'E26_001',group:'E26',title:'Brücke',files:[file('BRIDGE','build'),file('CLEAR','clear')]};
  const queue={pending:['ACTIVE','REGULAR','ARCH'],done:[],preferred:[]};
  try{
-  const ui=createProjectBlueprints({api:async url=>url==='/api/projects/erebor'?{id:'erebor',version:1}:url.includes('/stone/prepared')?{packages:[{version:1,cannon:'K01',part:1,files:[stone,active]}]}:url.includes('/manifest')?{packages:[{}]}:{packages:[{version:1,revision:2,id:'A',title:'Architecture',files:[arch]}]},isSelected:()=>true,getSite:()=> 'K01',getQueue:()=>queue,getStation:()=>({file:'ACTIVE'}),closeDrawer(){}});
+  const ui=createProjectBlueprints({api:async url=>url==='/api/projects/erebor'?{id:'erebor',version:1}:url.includes('/stone/prepared')?{packages:[{version:1,cannon:'K01',part:1,files:[stone,active]}]}:url.includes('/manifest')?{packages:[{}]}:{packages:[{version:1,revision:2,id:'A',title:'Architecture',files:[arch]},water,bridge]},isSelected:()=>true,getSite:()=> 'K01',getQueue:()=>queue,getStation:()=>({file:'ACTIVE'}),closeDrawer(){}});
   await ui.load();
+  assert.equal(get('esgarothPackages').hidden,false);
+  assert.match(get('esgarothFiles').innerHTML,/HOUSE\.nbt\?version=1&amp;revision=2/);
+  get('esgarothPackage').value='E26_001';
+  get('esgarothPackage').onchange();
+  assert.match(get('esgarothZip').href,/\/E26_001\.zip\?version=1&revision=2$/);
+  assert.match(get('esgarothFiles').innerHTML,/data-stone-id="CLEAR"/);
+  assert.doesNotMatch(get('esgarothFiles').innerHTML,/HOUSE/);
   const html=get('bpRows').innerHTML;
   assert.match(html,/<details data-regular-fallback><summary>Reguläre Cleanstone-Fallbackpläne/);
   assert.doesNotMatch(html,/<details[^>]*\bopen\b/);

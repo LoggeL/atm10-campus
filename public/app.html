@@ -14,6 +14,13 @@
   <section data-pane="overview">
     <div class="page-heading"><h1>Bauaufträge</h1><button class="primary" id="newBp">Neuer Bauplan</button></div>
     <div class="summary-line" id="cards" aria-label="Campus-Status"></div>
+    <div id="esgarothCatalog" class="hide">
+      <details id="esgarothPackages" hidden>
+        <summary>Wasserstadt und Brücke · Baupläne</summary>
+        <div class="toolbar"><label>Paket <select id="esgarothPackage"></select></label><a class="btn small" id="esgarothZip" download>Paket als ZIP</a></div>
+        <div class="table-wrap"><table><caption class="muted" id="esgarothCount"></caption><thead><tr><th>Bauplan</th><th>Kanonenplatz</th><th>Anker X / Y / Z</th><th>Download</th></tr></thead><tbody id="esgarothFiles"></tbody></table></div>
+      </details>
+    </div>
     <section id="ereborQueue" class="hide" aria-labelledby="ereborQueueTitle">
       <div class="fleet-headed"><label class="row">Station <select data-station-picker aria-label="Station für Bauaufträge"></select></label>
         <a data-progress-link href="/erebor/dashboard">Baufortschritt ansehen</a></div>
@@ -119,5 +126,5 @@
 <dialog class="form-dialog" id="editDialog" aria-labelledby="editTitle"></dialog>
 <dialog class="picker-dialog" id="cannonPickerDialog" aria-labelledby="pickerTitle"></dialog>
 <input type="file" id="hiddenFile" accept=".nbt" class="hide">
-<script type="module" src="/assets/app.js?v=20261114-status-1&amp;revision=fallback-details-1"></script>
+<script type="module" src="/assets/app.js?v=20261114-status-1&amp;revision=esgaroth-1"></script>
 </body></html>
