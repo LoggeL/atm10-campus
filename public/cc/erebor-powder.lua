@@ -61,7 +61,7 @@ local function maintainPowder(policy)
     if cpu.isBusy == false then free = true end
     local output = cpu.craftingJob and cpu.craftingJob.resource
     if cpu.isBusy and type(output) == "table" and output.name == GUNPOWDER then
-      report("crafting","Schießpulver auf ME-CPU")
+      report("crafting","Schiesspulver auf ME-CPU")
       return
     end
   end
