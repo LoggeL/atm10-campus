@@ -15,6 +15,11 @@
     <div class="page-heading"><h1>Bauaufträge</h1><button class="primary" id="newBp">Neuer Bauplan</button></div>
     <div class="summary-line" id="cards" aria-label="Campus-Status"></div>
     <div id="esgarothCatalog" class="hide">
+      <details id="hallFinishes" hidden>
+        <summary>Schatzhalle, Thronsaal, Schmiede und Königsgalerie · Innenausbau</summary>
+        <p>Diese Pakete nach dem regulären Raumbau einsetzen. Die ZIP enthält Anker, Materialliste und Einbauanleitung.</p>
+        <ul id="hallFinishLinks"></ul>
+      </details>
       <details id="esgarothPackages" hidden>
         <summary>Wasserstadt und Brücke · Baupläne</summary>
         <div class="toolbar"><label>Paket <select id="esgarothPackage"></select></label><a class="btn small" id="esgarothZip" download>Paket als ZIP</a></div>
@@ -126,5 +131,5 @@
 <dialog class="form-dialog" id="editDialog" aria-labelledby="editTitle"></dialog>
 <dialog class="picker-dialog" id="cannonPickerDialog" aria-labelledby="pickerTitle"></dialog>
 <input type="file" id="hiddenFile" accept=".nbt" class="hide">
-<script type="module" src="/assets/app.js?v=20261114-status-1&amp;revision=esgaroth-1"></script>
+<script type="module" src="/assets/app.js?v=20261114-status-1&amp;revision=gold-halls-1"></script>
 </body></html>

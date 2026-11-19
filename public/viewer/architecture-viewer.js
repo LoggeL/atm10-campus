@@ -71,7 +71,8 @@ export async function startArchitectureViewer({view,nav,scene,hash,api,loading,t
     }
     await Promise.all([...batches].map(async([state,a])=>{
       const name=m.palette[state].name,geo=new THREE.BufferGeometry();geo.setAttribute('position',new THREE.Float32BufferAttribute(a.p,3));geo.setAttribute('normal',new THREE.Float32BufferAttribute(a.n,3));geo.setAttribute('uv',new THREE.Float32BufferAttribute(a.uv,2));
-      const mat=new THREE.MeshLambertMaterial({color:color(name),side:THREE.DoubleSide,clippingPlanes:[clipPlane],clipShadows:true});
+      const darkGlass=name==='connectedglass:clear_glass_black',litCandle=name==='minecraft:candle';
+      const mat=new THREE.MeshLambertMaterial({color:darkGlass?'#363239':color(name),transparent:darkGlass,opacity:darkGlass ? .35 : 1,depthWrite:!darkGlass,emissive:litCandle?'#f7b15c':'#000000',side:THREE.DoubleSide,clippingPlanes:[clipPlane],clipShadows:true});
       if(/light|glowstone|lantern/.test(name)){mat.emissive.set('#d6ad61');mat.emissiveIntensity=.7;}
       const mesh=new THREE.Mesh(geo,mat);mesh.userData.block=name;mesh.castShadow=true;mesh.receiveShadow=true;g.add(mesh);
       try {let texture=await new THREE.TextureLoader().loadAsync('/assets/erebor-palette/'+name.replace(':','__')+'.png');

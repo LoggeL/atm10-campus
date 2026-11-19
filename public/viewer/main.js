@@ -106,7 +106,7 @@ async function main() {
 
   if (scene.planning) {
     if (scene.planning.id === 'erebor' && params.has('room')) {
-      const { startArchitectureViewer } = await import('./architecture-viewer.js?v=20261114-status-1');
+      const { startArchitectureViewer } = await import('./architecture-viewer.js?v=20261119-gold-halls');
       return startArchitectureViewer({view,nav,scene,hash,api,loading,toast,room:params.get('room')});
     }
     const { startProjectViewer } = await import('./project-viewer.js?v=20261114-status-1');

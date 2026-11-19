@@ -44,7 +44,7 @@ export function productionStore(db) {
       }
     }
     const architecture=[];
-    const arch=db.prepare("SELECT package_id,report_json FROM project_architecture_packages WHERE project_id='erebor' AND base_version=? AND revision=? ORDER BY package_id").all(version,DESIGN_REVISION);
+    const arch=db.prepare("SELECT package_id,report_json FROM project_architecture_packages WHERE project_id='erebor' AND base_version=? AND revision=? AND coalesce(json_extract(report_json,'$.finishing'),0)=0 ORDER BY package_id").all(version,DESIGN_REVISION);
     for(const pkg of arch) for(const f of JSON.parse(pkg.report_json).files){
       if(f.cannon===site) architecture.push({name:f.fileName.slice(0,-4),sha256:f.sha256,stage:f.kind,blocks:f.blocks,y:f.origin[1],sourceVersion:version,revision:DESIGN_REVISION,part:pkg.package_id});
     }

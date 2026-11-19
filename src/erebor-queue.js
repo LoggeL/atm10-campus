@@ -109,7 +109,7 @@ export function registerEreborQueue(app,campus){
  }
  function snapshotArchive(v){
   const result={clear:{},build:{}};
-  const rows=db.prepare("SELECT package_id,report_json FROM project_architecture_packages WHERE project_id='erebor' AND base_version=? AND revision=? ORDER BY package_id").all(v,DESIGN_REVISION);
+  const rows=db.prepare("SELECT package_id,report_json FROM project_architecture_packages WHERE project_id='erebor' AND base_version=? AND revision=? AND coalesce(json_extract(report_json,'$.finishing'),0)=0 ORDER BY package_id").all(v,DESIGN_REVISION);
   for(const row of rows)for(const f of JSON.parse(row.report_json).files){
    if(sites.includes(f.cannon)&&result[f.kind])(result[f.kind][f.cannon]??=[]).push({pack:row.package_id,fileName:f.fileName,origin:f.origin});
   }

@@ -99,6 +99,14 @@ export function createProjectBlueprints({api,isSelected,closeDrawer,loadedStatus
   if(isSelected()&&version===project.version&&Date.now()-catalogAt<120000)return;
 const [prepared,architecture,manifest,icons]=await Promise.all([api('/api/projects/erebor/stone/prepared?version='+project.version),api('/api/projects/erebor/architecture'),api('/api/projects/erebor/architecture/manifest'),fetch('/assets/material-icons/catalog.json').then(r=>r.json())]);if(!isSelected())return;catalog=icons;packages=prepared.packages;version=project.version;items=[...architectureBlueprints(project,architecture.packages),...preparedBlueprints(project,packages)];byId.clear();for(const b of items)byId.set(b.id,b);
   $('liveLine').textContent=`Erebor · ${architecture.packages.length} von ${manifest.packages.length} Architekturpaketen veröffentlicht.`;
+  const finishes=architecture.packages.filter(p=>p.finishing&&p.files.length);
+  if($('hallFinishes')){
+    $('hallFinishes').hidden=!finishes.length;
+    $('hallFinishLinks').innerHTML=finishes.map(p=>{
+      const file=byId.get(p.files[0].id);
+      return `<li><a href="${esc(file.packageDownload)}" download>${esc(p.title)} · ${esc(p.id)} (ZIP)</a> · ${p.files.length} Schematics</li>`;
+    }).join('');
+  }
   esgarothPackages(architecture.packages);
   catalogAt=Date.now();
   $('cards').innerHTML='<a href="/api/projects/erebor/stone/massif/plans">Massiv-Baupläne und Sonderziele</a><a href="/viewer?project=erebor&room=E05">Blockvorschau öffnen</a>';rows();coordinates();

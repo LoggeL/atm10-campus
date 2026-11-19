@@ -142,7 +142,7 @@ function landscape(d){
 }
 
 function interior(d,p){grandHalls(d,p);residential(d,p);balanceRooms(d,p.zones);mines(d,p);stairsAndLinks(d,p);for(const r of [...d.routes]){d.group=r.group;d.path(r.points,r.width,{roof:r.roof,wood:r.wood,light:false,finalOnly:true});}kernels(d,p);}
-export function buildEreborDesign(plan){
+export function buildEreborDesign(plan,finish){
  if(plan.rotationDegrees!==90||!plan.blockPreview?.dataGzipBase64)throw Error('Erebor-Standort oder Skinmodell fehlt');
  const d=new Design(plan);landscape(d);outside(d,plan);gate(d,plan);
  d.group='E03';d.path([[100,0,16],[100,4,-10],[84,4,-10]],6,{roof:true});
@@ -155,6 +155,7 @@ export function buildEreborDesign(plan){
  }
  else interior(d,plan);
  d.group='E02';d.clear(-15,0,-30,15,48,1);
+ if(finish)finish(d);
  // Hard exclusions remain last, after both the enlarged core and all new corridors.
  d.group='PROTECTED';for(const q of plan.site.protectedAreas.filter(q=>q.id!=='P-SEE')){const [a,b]=q.bounds,[ox,oy,oz]=plan.worldOrigin;const lo=[oz-b[2],a[1]-oy,a[0]-ox],hi=[oz-a[2],b[1]-oy,b[0]-ox];d.box(...lo,...hi,'minecraft:structure_void');}
  return d;
