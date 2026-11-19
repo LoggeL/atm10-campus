@@ -1,4 +1,4 @@
-import {groupOf,groupSites,supplyGroup} from './erebor-groups.js';
+import {groupOf,groupCount,supplyGroup} from './erebor-groups.js';
 import {isDeepStrictEqual as same} from 'node:util';
 import {verifyAlignment} from './alignment.js';
 import {itemsFor,stackSize} from './materials.js';
@@ -55,7 +55,7 @@ export function limitSupplyReads(request){
  return (args,urgent=false)=>new Promise((resolve,reject)=>{
   const entry={args,urgent,at:Date.now(),resolve,reject};
   if(active<2)void run(entry);
-  else if(waiting.length<37+2*groupSites.size)waiting.push(entry);
+  else if(waiting.length<37+groupCount)waiting.push(entry);
   else reject(new Error('Materialprüfung wartet auf freie Controller-Kapazität.'));
  });
 }

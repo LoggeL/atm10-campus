@@ -1,4 +1,4 @@
-import {slotsFor} from './erebor-groups.js';
+import {slotsFor,isFinishingSlot} from './erebor-groups.js';
 function cannonState(signal, job) {
   if (!signal?.state) return 'unknown';
   if (!signal.upload && signal.empty && signal.state === 'STOPPED') return job ? 'handover' : 'idle';
@@ -17,7 +17,8 @@ export function dashboardData(db, version, sites, report, jobs, filling, massif,
     .all(version);
   const reserved = new Map(active.map((r) => [r.site + r.slot, r]));
   const fleet = sites.flatMap((site) =>
-    slotsFor(site).map((slot) => {
+    slotsFor(site).filter(slot => !isFinishingSlot(site,slot) || jobs.has(site+slot) || reserved.has(site+slot) ||
+      (current && report.stations?.[site+slot]?.ready && report.stations[site+slot].state)).map((slot) => {
       const key = slot === 'A' ? site : site + slot;
       const job = jobs.get(key);
       const signal = current ? report.stations?.[key] : null;

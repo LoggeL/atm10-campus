@@ -237,6 +237,7 @@ def register_progress(rows, ids, groups, seen, built):
 
 def monitor(fleet, path, groups, ids, token, seconds):
     seen, built, online = {}, set(), set()
+    expected=(len(groups),sum(len(g['slots']) for g in groups))
     deadline=time.monotonic()+seconds
     next_api=0
     last=None
@@ -254,9 +255,9 @@ def monitor(fleet, path, groups, ids, token, seconds):
             next_api=time.monotonic()+30
         counts=(len(online),len(built))
         if counts!=last:
-            print(f"{counts[0]}/36 Rechner online, {counts[1]}/108 mit gestiegenem Bauzähler.",flush=True)
+            print(f"{counts[0]}/{expected[0]} Rechner online, {counts[1]}/{expected[1]} mit gestiegenem Bauzähler.",flush=True)
             last=counts
-        if counts==(36,108):
+        if counts==expected:
             return True
         time.sleep(4)
     for group in groups:
@@ -267,28 +268,32 @@ def monitor(fleet, path, groups, ids, token, seconds):
     return False
 
 
-def run(args, base):
+def run(args, base, prepare=None):
     import fleet
     container=args.container or get_container(fleet,base)
     root=fleet.world_directory(container)
     if base/"data" not in root.parents:
         raise ValueError("Container gehört nicht zum gewählten Weltverzeichnis.")
     layout=read_json(base/"discord/erebor-stations.json")
-    groups=groups_for(read_json(HERE/"expansion-groups.json"),layout,read_json(base/"discord/erebor-parallel.json"))
-    changes=host_changes(base,groups)
+    pairs=read_json(base/"discord/erebor-parallel.json")
+    if prepare:
+        groups,changes=prepare(args,base,layout,pairs)
+    else:
+        groups=groups_for(read_json(HERE/"expansion-groups.json"),layout,pairs)
+        changes=host_changes(base,groups)
     subprocess.run([*SERVICE,"is-active","--quiet",UNIT],check=True)
     console=fleet.Console(container)
-    parents={r["site"]:r for r in layout["sites"] if r["site"] in SITES}
+    parents={r["site"]:r for r in layout["sites"] if any(g["parent"]==r["site"] for g in groups)}
     feeders=(HERE/"campus.lua").read_bytes()
     livepath=base/"data/kubejs/config/erebor-target-live.json"
     # Each of the three physical printers can lie in a different chunk.
     footprints=[{**g,"cannon":p} for g in groups for p in g["slots"].values()]
-    print("Prüfe 18 Standorte mit 36 Rechnern und 108 Zusatzkanonen in",container,flush=True)
+    print(f"Prüfe {len(parents)} Standorte mit {len(groups)} Rechnern und {len(footprints)} Zusatzkanonen in",container,flush=True)
     with fleet.loaded(console,[*parents.values(),*footprints]):
         for g in groups:
             print(g["site"],"→"," / ".join(g["slots"]), "Kiste",fleet.xyz(g["chest"]),flush=True)
         if args.action=="check":
-            print("36 Gruppen und 108 Zusatzkanonen physisch geprüft. Hostdateien zu ändern:",len(changes))
+            print(f"{len(groups)} Gruppen und {len(footprints)} Zusatzkanonen physisch geprüft. Hostdateien zu ändern:",len(changes))
             print("Zusätzliche Hardware-Chunks:",extra_chunks(groups,parents))
             return
         ids=fleet.identify(console,groups)
@@ -348,7 +353,7 @@ def run(args, base):
             print("Minecraft lädt seine Server-Skripte neu:",console.run("minecraft:reload"),flush=True)
     keep_chunk_footprint(console,extra_chunks(groups,parents),backup/"zusatzchunks.json")
     if not monitor(fleet,livepath,groups,ids,token,args.wait):
-        raise ValueError("Einrichtung abgeschlossen; Baufortschritt noch nicht für alle 108 bestätigt. Details oben.")
+        raise ValueError("Einrichtung abgeschlossen; Baufortschritt noch nicht für alle Zusatzkanonen bestätigt. Details oben.")
 
 
 def main():

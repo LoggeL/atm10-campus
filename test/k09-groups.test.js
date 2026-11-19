@@ -6,19 +6,29 @@ import {availableMassifSlots} from '../src/erebor-balance.js';
 import {isEreborStation} from '../src/erebor-feeder.js';
 import {registerMassif} from '../src/erebor-massif.js';
 import {DatabaseSync} from 'node:sqlite';
+import {cannonProgressRows} from '../src/cannon-progress-rows.js';
 
-test('the 19 equipped stations have independent sets of nine slots, including the asymmetric K24 build',()=>{
- assert.equal(groupSites.size,19);
- assert.deepEqual(groupSites.get('K24').map(g=>g.name),['K24-W','K24-S']);
- const all=Object.fromEntries([...'ABCDEFGHI'].map(s=>[s,s]));
+test('planned K19 helpers appear in operating counts once their hardware reports ready',()=>{
+ const sites=[{site:'K19'}];
+ assert.deepEqual(cannonProgressRows(sites,[],null).map(r=>r.slot),[...'ABC']);
+ const stations={K19D:{ready:true,state:'STOPPED'},K19E:{ready:true}};
+ assert.deepEqual(cannonProgressRows(sites,[],{stations}).map(r=>r.slot),[...'ABCD']);
+});
+
+test('existing and planned groups have independent slots and inventories, including the asymmetric K24 build',()=>{
+ assert.equal(groupSites.size,23);
+ assert.deepEqual(groupSites.get('K24').map(g=>g.name),['K24-W','K24-S','K24-2E']);
+ const all=Object.fromEntries([...'ABCDEFGHIJKLMNOPQR'].map(s=>[s,s]));
  const extras=new Set();
  for(const station of parallelLayout.sites){
   const groups=groupSites.get(station.site);
-  assert.equal(slotsFor(station.site).join(''),groups?'ABCDEFGHI':'ABC');
-  for(const [index,g] of (groups??[]).entries()){
+  const letters=slotsFor(station.site);
+  assert.equal(new Set(letters).size,letters.length);
+  assert.deepEqual(letters,['A','B','C',...(groups??[]).flatMap(g=>Object.keys(g.slots))]);
+  for(const g of (groups??[])){
    assert.equal(groupOf('erebor-'+g.name),g);
    assert.equal(isEreborStation('erebor-'+g.name),true);
-   assert.equal(Object.values(supplyGroup(all,g)).join(''),index?'GHI':'DEF');
+   assert.deepEqual(Object.values(supplyGroup(all,g)),Object.keys(g.slots));
    for(const [s,position] of Object.entries(g.slots)){
     assert.deepEqual(station[s],position);
     assert.ok(!extras.has(position.join(',')));
@@ -26,7 +36,7 @@ test('the 19 equipped stations have independent sets of nine slots, including th
    }
   }
  }
- assert.equal(extras.size,114);
+ assert.equal(extras.size,150);
 });
 
 test('K09 separates three inventories and does not count other groups as providers',()=>{

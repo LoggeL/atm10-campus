@@ -43,7 +43,8 @@ export function registerEreborFleet(app,campus) {
     const site=groupOf(name)?.name.split('-')[0]??/^erebor-(K\d{2})$/i.exec(name)?.[1]?.toUpperCase();
     if(!site)return null;
     const network=(await campus.ereborLiveReport(parallelLayout.version))?.network;
-    return network?.stations?.[site]?{...network.stations[site],at:network.at,source:network.source,power:network.power}:{stale:true,at:null};
+    const group=groupOf(name),key=group?.name.includes('-2')?group.name:site;
+    return network?.stations?.[key]?{...network.stations[key],at:network.at,source:network.source,power:network.power}:{stale:true,at:null};
   };
   const prefix='/api/projects/erebor/cannon-sites';
   const profile={bufferStacks:16,gunpowder:64};

@@ -44,7 +44,7 @@ def validate_clear(data, size):
         offset += 5
 
 
-def handle(bridge, action, obj):
+def handle(bridge, action, obj, *, finishing=None):
     from campus_schematic import prepare_schematic
     layout = json.loads(Path(__file__).with_name('erebor-stations.json').read_text())
     if action == 'erebor-live':
@@ -77,11 +77,14 @@ def handle(bridge, action, obj):
         raise ValueError('Erebor-Standortplan oder Auftrag passt nicht.')
     key = obj['site']
     group = None
-    ext_slot = isinstance(key,str) and re.fullmatch(r'(K\d{2})([D-I])',key)
-    ext_supply = action=='erebor-supply' and isinstance(key,str) and re.fullmatch(r'(K\d{2})-[NWES]',key)
+    ext_slot = isinstance(key,str) and re.fullmatch(r'(K\d{2})([D-R])',key)
+    ext_supply = action=='erebor-supply' and isinstance(key,str) and re.fullmatch(r'(K\d{2})-2?[NWES]',key)
     if ext_slot or ext_supply:
         parent=(ext_slot or ext_supply)[1]
-        if parent=='K09':
+        if finishing is not None:
+            cfg=finishing
+            sites=cfg['sites']
+        elif parent=='K09':
             cfg=json.loads(Path(__file__).with_name('k09-groups.json').read_text())
             sites=[cfg]
         else:
@@ -113,7 +116,7 @@ def handle(bridge, action, obj):
         x,y,z = (group['slots'] if group else row)[helper[2]]
     if ext_supply:
         x,y,z=next(iter(group['slots'].values()))
-        site={**site, 'chest':group['chest'],'computer':group['computer'],'cannon':[x,y,z]}
+        site={**site, 'chest':group['chest'],'computer':group['computer'],'cannon':[x,y,z],'bridge':group.get('bridge',site['bridge'])}
     b = {'x':x, 'y':y, 'z':z, 'dimension':'minecraft:overworld', 'owner':'Erebor'}
     if action == 'erebor-inspect':
         return {'observed':bridge.inspect(b)}

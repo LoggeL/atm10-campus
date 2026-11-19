@@ -99,7 +99,12 @@ export function createProjectBlueprints({api,isSelected,closeDrawer,loadedStatus
   if(isSelected()&&version===project.version&&Date.now()-catalogAt<120000)return;
 const [prepared,architecture,manifest,icons]=await Promise.all([api('/api/projects/erebor/stone/prepared?version='+project.version),api('/api/projects/erebor/architecture'),api('/api/projects/erebor/architecture/manifest'),fetch('/assets/material-icons/catalog.json').then(r=>r.json())]);if(!isSelected())return;catalog=icons;packages=prepared.packages;version=project.version;items=[...architectureBlueprints(project,architecture.packages),...preparedBlueprints(project,packages)];byId.clear();for(const b of items)byId.set(b.id,b);
   $('liveLine').textContent=`Erebor · ${architecture.packages.length} von ${manifest.packages.length} Architekturpaketen veröffentlicht.`;
-  const finishes=architecture.packages.filter(p=>p.finishing&&p.files.length);
+  const finishes=architecture.packages.filter(p=>p.finishing&&p.group!=='E01'&&p.files.length);
+  const groves=architecture.packages.filter(p=>p.finishing&&p.group==='E01'&&p.files.length);
+  if($('ereborGroves')){
+    $('ereborGroves').hidden=!groves.length;
+    $('groveDownloads').innerHTML=groves.map(p=>`<a href="${esc(byId.get(p.files[0].id).packageDownload)}" download>${esc(p.title)} · ${esc(p.id)} (ZIP)</a>`).join(' ');
+  }
   if($('hallFinishes')){
     $('hallFinishes').hidden=!finishes.length;
     $('hallFinishLinks').innerHTML=finishes.map(p=>{

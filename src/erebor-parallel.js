@@ -57,7 +57,7 @@ export function parallelFleet(db,production,choices,request,recordedFinish,resum
       job.started=true;job.seen=at/1000;job.placed=signal.placed;
       save.run(JSON.stringify(job),'Baut',v,site,slot);return;
     }
-    if(!job && /[D-I]/.test(slot)){
+    if(!job && slot>'C'){
       const group=groupSites.get(site).find(g=>Object.hasOwn(g.slots,slot));
       const status=db.prepare('SELECT status_json FROM cannons WHERE name=?').get('erebor-'+group.name);
       const s=JSON.parse(status?.status_json||'null');

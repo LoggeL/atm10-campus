@@ -1,5 +1,6 @@
 import {Design,stair} from './erebor-design.js';
 import {compileErebor} from './erebor-tiles.js';
+import {drawHillsideGroves} from './erebor-hillside-groves.js';
 
 const glass='connectedglass:clear_glass_black';
 const masonry='minecraft:polished_blackstone_bricks';
@@ -7,13 +8,14 @@ const trim='minecraft:chiseled_polished_blackstone';
 const gold='minecraft:gold_block';
 const candle={name:'minecraft:candle',props:{candles:'4',lit:'true',waterlogged:'false'}};
 const rooms={
+  E01:'Berghänge · drei lockere Baumgruppen',
   E07:'Thronsaal · Kerzenband vor dem Arkenstein',
   E10:'Schatzhalle · Glasboden und zwei Goldläufe',
   E12:'Große Schmiede · zwei Foundry-Stellplätze und Gussplätze',
   E19:'Königsgalerie · Thrór in der geöffneten Gussform',
 };
-export const finishId=id=>/^E(?:07|10|12|19)_9\d\d$/.test(id);
-export const finishRoom=id=>Object.hasOwn(rooms,id);
+export const finishId=id=>/^E(?:01|07|10|12|19)_9\d\d$/.test(id);
+export const finishRoom=id=>id!=='E01'&&Object.hasOwn(rooms,id);
 
 // y is the player's feet. All ten transparent courses share a level top.
 function candleFloor(d,halfWidth,z,end,y,rim=1){
@@ -145,6 +147,7 @@ export function goldHallNotes(plan,group){
   const [ox,oy,oz]=plan.worldOrigin;
   const xyz=(x,y,z)=>[ox+z,oy+y,oz-x-1].join(' / ');
   const order='Innenausbau nach den regulären Raumplänen ausführen. Zuerst die Ausbau-AUSHUB-Dateien, danach die Ausbau-BAU-Dateien von unten nach oben. Koordinaten in X / Y / Z.';
+  if(group==='E01')return ['Schlussbegrünung nach Abschluss des Cleanstone-Berges. Die 17 Bäume stehen in drei lockeren Gruppen auf den unteren Berghängen. Die Bodentaschen liegen oben auf dem fertigen Stein. Nur BAU-Dateien, von unten nach oben einsetzen.'];
   if(group==='E07')return [order,'Vier Blöcke breites Mittelband aus zehn vollen Glaslagen. Viererkerzen unter dem Glas vor dem Verschließen anzünden, falls die Kanone sie unbeleuchtet setzt.'];
   const transfer='Die erste Foundry bekommt hinten einen zweiten Foundry Drain bei '+xyz(forgeCenters[0],forgeY+3,forgeZ-3)+'. Den angrenzenden Basic Mechanical Pipe mit dem Configurator auf Pull stellen. Einen für geschmolzenes Gold geeigneten Tank bei '+xyz(kingX,3,kingZ-9)+' hinter der Statue auf das Leitungsende setzen. Für den Transport die Leitungs-Chunks laden.';
   if(group==='E19')return [order,'Thrór mit Krone, gestuftem Bart und den zwei geöffneten Hälften der Gussform. Den sichtbaren Goldstrang mit einem Bucket of Molten Gold oben in den Schacht bei '+xyz(kingX+9,18,kingZ+5)+' setzen. Das Gold fällt bis zur Beckensohle. Zusätzliche Quellen im Becken nach Geschmack.',transfer,'Die statische Filmkulisse funktioniert unabhängig vom Produktionsanschluss. E12 und E19 zusammen bauen, um die Leitung zu vervollständigen.'];
@@ -159,6 +162,7 @@ export function goldHallNotes(plan,group){
 export function finishingScene(plan,base){
   const d=new Design(plan);
   drawGoldHalls(d);
+  drawHillsideGroves(d);
   for(const op of base.ops.filter(o=>o.g==='PROTECTED'))d.ops.push({...op,s:d.state('minecraft:structure_void')});
   const scene=compileErebor(plan,d);
   for(const p of scene.packages){
