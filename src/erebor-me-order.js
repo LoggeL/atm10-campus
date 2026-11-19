@@ -13,7 +13,8 @@ if (Object.keys(targets).length !== 4) throw new Error('Vier Connecting-Zielmeng
 
 export function stationSource() {
   const source = readFileSync(new URL('../public/cc/campus.lua', import.meta.url), 'utf8');
-  return source.replace('-- EMBED_EREBOR_ME_WORKER', () => worker);
+  const powder = readFileSync(new URL('../public/cc/erebor-powder.lua', import.meta.url), 'utf8');
+  return source.replace('-- EMBED_EREBOR_ME_WORKER', () => worker).replace('-- EMBED_EREBOR_POWDER', () => powder);
 }
 
 export function registerEreborMeOrder(app, campus) {

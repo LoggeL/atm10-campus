@@ -48,7 +48,7 @@ const currentVersion = /local VERSION = "([^"]+)"/.exec(stationSource())?.[1] ??
 // at other sites keep supplying their cannons without a fleet-wide reboot.
 const scriptVersion = row => {
   const installed = JSON.parse(row.status_json || '{}').script;
-  return currentVersion === '1.4.9' && row.name !== 'erebor-K02' && ['1.4.3','1.4.4','1.4.5','1.4.6','1.4.7','1.4.8'].includes(installed)
+  return currentVersion === '1.4.10' && row.name !== 'erebor-K02' && ['1.4.3','1.4.4','1.4.5','1.4.6','1.4.7','1.4.8','1.4.9'].includes(installed)
     ? installed : currentVersion;
 };
 const clip = (v, n) => (v == null ? null : String(v).slice(0, n));
@@ -65,6 +65,10 @@ export function normalizeStatus(b = {}) {
     chestSide: typeof b.chestSide === 'string' && b.chestSide.trim() ? b.chestSide.trim().slice(0,60) : null,
     chest: b.chest && typeof b.chest === 'object' ? { slots: int(b.chest.slots), used: int(b.chest.used), name: clip(b.chest.name, 60) } : null,
     delivered,
+    ...(b.powderReserve && typeof b.powderReserve==='object' ? {powderReserve:{
+      stage:clip(b.powderReserve.stage,32),stock:int(b.powderReserve.stock),quantity:int(b.powderReserve.quantity),
+      lastStart:int(b.powderReserve.lastStart),lastQuantity:int(b.powderReserve.lastQuantity),message:clip(b.powderReserve.message,300),
+    }} : {}),
     shortages: asList(b.shortages).slice(0, 100).filter(s => s && typeof s === 'object').map(s => ({
       item: clip(s.item, 120), missing: int(s.missing), inME: int(s.inME), craftable: !!s.craftable, crafting: !!s.crafting, error: clip(s.error, 200),
     })),
@@ -398,9 +402,14 @@ export function registerStationRoutes(app, campus, mat, alignment, schematics) {
     const row = ensureRow(req.params.name);
     seen(row.name);
     if (isEreborStation(row.name)) {
-      const plan = await campus.ereborFeeder(row,{options:normalizeOptions(JSON.parse(row.options_json || '{}')),script:scriptVersion(row),intervals:INTERVALS});
-      const runningVersion = JSON.parse(row.status_json || '{}').script;
-      return {...plan, connectingOrder:runningVersion === currentVersion ? meOrder.attemptFor(row.name,actor) : null};
+      const options=normalizeOptions(JSON.parse(row.options_json || '{}'));
+      const plan = await campus.ereborFeeder(row,{options,script:scriptVersion(row),intervals:INTERVALS});
+      const reported=JSON.parse(row.status_json || '{}');
+      // Erebor's shared AE2 reserve belongs to K02's installed main computer.
+      // A transient printer lease gates chest transfers, not crafting into ME storage.
+      const powderReserve=row.name==='erebor-K02' && reported.computerId===13 && !options.paused && options.gunpowder>0
+        ? {computerId:13,low:8192,target:16384} : null;
+      return {...plan, powderReserve, connectingOrder:reported.script === currentVersion ? meOrder.attemptFor(row.name,actor) : null};
     }
     return alignment.gate(row.name, planFor(row, liveSnap()));
   });
