@@ -41,6 +41,7 @@ class FinishingInstaller(unittest.TestCase):
                     keys.extend(groups)
                 self.assertEqual(len(keys),12)
                 self.assertEqual(sum(len(g['slots']) for g in keys),36)
+                self.assertEqual(next(g for g in keys if g['site']=='K25-E')['slots']['F'],[38,144,-9766])
                 self.assertEqual(len(json.loads((host/tool.CONFIG).read_bytes())['sites']),8)
                 self.assertEqual(tracker.read_text(encoding='utf8').count(tool.TRACKER),1)
                 self.assertEqual(ctrl.read_text(encoding='utf8').count(tool.TAG),1)
