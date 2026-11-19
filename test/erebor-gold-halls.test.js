@@ -13,6 +13,11 @@ test('ten glass courses cover both level floors, lit four-candle groups and soli
   for(const [half,y,lo,hi] of [[7,-96,-1054,-935],[2,0,-720,-630]]){
     let candles=0;
     for(let x=-half;x<half;x++)for(let z=lo;z<hi;z++){
+      if(y===-96&&z>=-998&&z< -985&&(x< -2||x>=2)){
+        assert.equal(name(x,y-1,z),'minecraft:polished_blackstone_bricks');
+        if(z>=-996&&z<=-988)assert.equal(name(x,y-12,z),undefined);
+        continue;
+      }
       for(let i=1;i<=10;i++)assert.equal(name(x,y-i,z),glass);
       const c=at(x,y-11,z);
       if(c.name==='minecraft:candle'){assert.equal(c.props.candles,'4');assert.equal(c.props.lit,'true');candles++;}

@@ -16,8 +16,8 @@ export const finishId=id=>/^E(?:07|10|12|19)_9\d\d$/.test(id);
 export const finishRoom=id=>Object.hasOwn(rooms,id);
 
 // y is the player's feet. All ten transparent courses share a level top.
-function candleFloor(d,halfWidth,z,end,y){
-  d.box(-halfWidth-1,y-12,z-1,halfWidth+1,y,end+1,masonry);
+function candleFloor(d,halfWidth,z,end,y,rim=1){
+  d.box(-halfWidth-rim,y-12,z-rim,halfWidth+rim,y,end+rim,masonry);
   d.clear(-halfWidth,y-11,z,halfWidth,y-10,end);
   d.box(-halfWidth,y-10,z,halfWidth,y,end,glass);
   const rows=Math.floor((end-z)/8),inset=Math.floor(((end-z)-(rows-1)*8-1)/2);
@@ -31,7 +31,12 @@ const channelStart=-1056,basinStart=-940,channelEnd=-935;
 const spouts=[-11,10];
 function treasure(d){
   const y=-96;
-  candleFloor(d,7,channelStart+2,channelEnd,y);
+  // The saved spawner and loot chest at world X -608 sit directly below the
+  // outer glass here. A flush crosswalk carries the wide bays over their buffer.
+  candleFloor(d,7,channelStart+2,-998,y);
+  candleFloor(d,7,-985,channelEnd,y);
+  d.box(-8,y-1,-998,8,y,-985,masonry);
+  candleFloor(d,2,-999,-984,y,0);
   for(const x of spouts){
     // A visible lip by the gold piles falls into a covered, one-block-deep run.
     d.box(x-1,y-3,channelStart-1,x+2,y+1,channelStart+3,masonry);
