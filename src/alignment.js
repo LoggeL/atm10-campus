@@ -15,10 +15,12 @@ export function bridgeClient(config) {
     const path='/campus/'+action, body=JSON.stringify(obj), stamp=String(Math.floor(Date.now()/1000)), nonce=randomBytes(24).toString('base64url');
     const signature=createHmac('sha256',config.cannonBridgeSecret).update(path+'\n'+stamp+'\n'+nonce+'\n'+body).digest('hex');
     let res;
-    try { res=await fetch(config.cannonBridgeUrl+path,{method:'POST',headers:{'content-type':'application/json','X-Campus-Time':stamp,'X-Campus-Nonce':nonce,'X-Campus-Signature':signature},body,signal:AbortSignal.timeout(10000),redirect:'error'}); }
+    const urnJob=['erebor-prepare','erebor-start'].includes(action)&&obj.desired?.blueprint?.includes('_URN_');
+    const timeoutSeconds=urnJob?25:10;
+    try { res=await fetch(config.cannonBridgeUrl+path,{method:'POST',headers:{'content-type':'application/json','X-Campus-Time':stamp,'X-Campus-Nonce':nonce,'X-Campus-Signature':signature},body,signal:AbortSignal.timeout(timeoutSeconds*1000),redirect:'error'}); }
     catch (e) {
       const code=e.cause?.code;
-      if(e.name==='TimeoutError'||code==='UND_ERR_HEADERS_TIMEOUT')throw new HttpError(503,'Live-Bridge: keine Antwort innerhalb von 10 Sekunden.');
+      if(e.name==='TimeoutError'||code==='UND_ERR_HEADERS_TIMEOUT')throw new HttpError(503,'Live-Bridge: keine Antwort innerhalb von '+timeoutSeconds+' Sekunden.');
       if(code==='ECONNREFUSED')throw new HttpError(503,'Live-Bridge: Verbindung am konfigurierten Port abgelehnt.');
       if(['ENOTFOUND','EAI_AGAIN','EHOSTUNREACH','ENETUNREACH','ETIMEDOUT','UND_ERR_CONNECT_TIMEOUT'].includes(code))throw new HttpError(503,'Live-Bridge: Host nicht erreichbar ('+code+').');
       throw new HttpError(503,'Live-Bridge: Verbindung unterbrochen; Material gesperrt.');
