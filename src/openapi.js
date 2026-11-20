@@ -39,6 +39,10 @@ export function openapi(baseUrl) {
     },
     security: [{ bearer: [] }],
     paths: {
+      '/api/projects/erebor/landschaft': {
+        get:{summary:'Landschaftsentwurf der aktuellen Erebor-Version mit bestehendem und vorgeschlagenem Gipfelprofil',responses:ok},
+        put:{summary:'Entwurf unabhängig von der laufenden Baufolge prüfen oder speichern. Erwartet projectVersion, baseVersion des Entwurfs, dryRun und draft.',responses:ok}
+      },
       '/api/projects/erebor/connecting-auftrag': {
         get:{summary:'Bestellstatus und AE2-Bestätigungen für die vier Erebor-Connecting-Blöcke.',responses:ok},
         post:{summary:'Einmalauftrag über die ME Bridge an K02 starten. Admin-Sitzung mit CSRF-Header erforderlich.',
