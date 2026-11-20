@@ -3,7 +3,10 @@ function cannonState(signal, job) {
   if (!signal?.state) return 'unknown';
   if (!signal.upload && signal.empty && signal.state === 'STOPPED') return job ? 'handover' : 'idle';
   if (!job?.loaded || job.tainted || signal.upload !== job.desired.file || !signal.aligned) return 'unverified';
-  if (signal.state === 'RUNNING') return signal.status === 'placing' ? 'placing' : 'searching';
+  if (signal.state === 'RUNNING') {
+    if (signal.status === 'clearing' && job.phase === 'clear') return 'clearing';
+    return signal.status === 'placing' ? 'placing' : 'searching';
+  }
   return 'waiting';
 }
 
@@ -47,6 +50,7 @@ export function dashboardData(db, version, sites, report, jobs, filling, massif,
     filling,
     fleet,
     telemetryAt: current ? report.at : null,
+    auxiliaryInteriorEnabled: current ? report.interiorHelpers === 1 : null,
     balance: { enabled: massif.enabled(version), plannedAt: massif.lastBalancedAt(version) },
   };
 }

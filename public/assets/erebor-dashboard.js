@@ -1,4 +1,4 @@
-import {states,borrowed,freshFleet,workloadDetails,stationCounts,slotDetail,forecastView,landscapePanel} from './erebor-progress-view.js?v=20261121-landschaft';
+import {states,borrowed,freshFleet,workloadDetails,stationCounts,slotDetail,forecastView,landscapePanel} from './erebor-progress-view.js?v=20261121-aushub';
 import {esc,fmt} from './format.js?v=20261114-status-1';
 import {api,linkStation} from './campus-client.js?v=20261114-status-1';
 const el = id => document.getElementById(id);
@@ -19,12 +19,13 @@ function renderSummary(fleet) {
   const sum = key => f ? f.solid[key]+f.cavity[key]+(f.urn?.[key]??0) : null;
   const done = sum('done'), total = sum('total');
   const working = fleet.filter(r=>r.state==='placing').length;
+  const clearing = fleet.filter(r=>r.state==='clearing').length;
   const known = fleet.filter(r=>r.state!=='unknown').length;
   const transfers = fleet.filter(borrowed).length;
   const throughput = data.throughput;
   el('summary').innerHTML = '<article class="panel primary-panel"><h3>Massiv-Füllung</h3><div class="metric-line"><strong class="big">'+percent(done,total)+'</strong><span class="unit">der automatischen Teile erledigt</span></div>'+
     track(done,total,sum('inProgress'))+'<div class="facts"><span><b>'+fmt(done)+' / '+fmt(total)+'</b> Teile</span><span><b>'+fmt(sum('inProgress'))+'</b> zugewiesen</span><span><b>'+fmt(sum('open'))+'</b> frei</span></div>'+(f ? '<p class="meta volume">'+volume(sum('finishedBlocks'))+' von '+volume(sum('blocks'))+' Planblöcken in abgeschlossenen Teilen</p>' : '')+'</article>'+
-    '<article class="panel"><h3>Kanonen im Einsatz</h3><div class="metric-line"><strong class="big">'+(known?fmt(working):'–')+'</strong><span class="unit">bauen · '+fleet.length+' Kanonen</span></div><div class="facts"><span><b>'+transfers+'</b> gebietsübergreifende Aufträge</span>'+
+    '<article class="panel"><h3>Kanonen im Einsatz</h3><div class="metric-line"><strong class="big">'+(known?fmt(working+clearing):'–')+'</strong><span class="unit">von '+fleet.length+' Kanonen</span></div><div class="facts">'+(known?'<span><b>'+fmt(working)+'</b> setzen Blöcke</span><span><b>'+fmt(clearing)+'</b> heben aus</span>':'')+'<span><b>'+transfers+'</b> gebietsübergreifende Aufträge</span>'+
     (showedFresh && throughput?.covered ? '<span><b>'+fmt(Math.round(throughput.blocksPerSecond))+'</b> Blöcke/s ('+fmt(throughput.covered)+' / '+fmt(throughput.assigned)+' zugewiesenen Kanonen gemessen)</span>':'')+
     '</div><p class="meta">'+(known?fmt(known)+' mit Weltmeldung':'Weltmeldung ausstehend')+' · '+(data.balance.enabled?(data.balance.plannedAt?'Lastverteilung um '+time(data.balance.plannedAt):'Lastverteilung bereit'):'Massiv-Vergabe pausiert')+'</p></article>';
 }
@@ -94,7 +95,7 @@ async function refresh() {
     el('error').hidden=false;
   }finally{busy=false;el('refresh').disabled=false;}
 }
-el('legend').innerHTML=[['placing','Baut'],['waiting','Sucht / wartet'],['handover','Planwechsel'],['idle','Frei'],['unverified','Ungeprüft'],['unknown','Kein Signal']].map(([kind,label])=>'<span><i class="dot '+kind+'"></i>'+label+'</span>').join('');
+el('legend').innerHTML=[['placing','Baut / hebt aus'],['waiting','Sucht / wartet'],['handover','Planwechsel'],['idle','Frei'],['unverified','Ungeprüft'],['unknown','Kein Signal']].map(([kind,label])=>'<span><i class="dot '+kind+'"></i>'+label+'</span>').join('');
 el('fleet').addEventListener('click',e=>{
   const button=e.target.closest('button[data-site]');if(!button)return;
   selected=button.dataset.site;const url=new URL(location.href);url.searchParams.set('kanone',selected);history.replaceState(null,'',url);render();

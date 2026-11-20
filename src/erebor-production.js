@@ -21,11 +21,28 @@ export function productionStore(db) {
   const finishedRows = db.prepare('SELECT name,finished_at FROM erebor_finished_plans WHERE version=? AND site=?');
   const priorities = db.prepare('SELECT name FROM erebor_priority WHERE version=? AND site=? ORDER BY id DESC');
   const cache = new Map();
+  let architectureIndex;
+
+  function architectureBySite(version){
+    if(architectureIndex?.version===version && Date.now()-architectureIndex.at<10000)return architectureIndex;
+    const bySite=new Map();
+    const rows=db.prepare("SELECT package_id,report_json FROM project_architecture_packages WHERE project_id='erebor' AND base_version=? AND revision=? AND coalesce(json_extract(report_json,'$.finishing'),0)=0 ORDER BY package_id");
+    for(const pkg of rows.iterate(version,DESIGN_REVISION)){
+      for(const f of JSON.parse(pkg.report_json).files){
+        if(!bySite.has(f.cannon))bySite.set(f.cannon,[]);
+        bySite.get(f.cannon).push({name:f.fileName.slice(0,-4),sha256:f.sha256,stage:f.kind,group:f.group,origin:f.origin,size:f.size,protectedCells:f.protectedCells,unknownCells:f.unknownCells,clearOmitted:f.clearOmitted,blocks:f.blocks,y:f.origin[1],sourceVersion:version,revision:DESIGN_REVISION,part:pkg.package_id});
+      }
+    }
+    for(const files of bySite.values())files.sort((a,b)=>phaseOrder[a.stage]-phaseOrder[b.stage] || a.y-b.y || a.name.localeCompare(b.name));
+    architectureIndex={version,at:Date.now(),bySite};
+    return architectureIndex;
+  }
 
   // Packages are immutable. A new publication can add another package at any time.
   function catalog(project,site) {
     const version=project.current_version, key=version+':'+site, previous=cache.get(key);
-    if(previous && Date.now()-previous.at<10000) return previous.files;
+    const architecture=architectureBySite(version);
+    if(previous && previous.at===architecture.at) return previous.files;
     const rows=db.prepare("SELECT version,part,report_json FROM project_stone_packages WHERE project_id='erebor' AND version=? AND cannon=? ORDER BY part");
     const packages=rows.all(version,site);
     const configuration=JSON.parse(project.plan_json), base=configuration.stoneStart?.preparedBaseVersion;
@@ -43,14 +60,8 @@ export function productionStore(db) {
         if(f.cannon===site) files.push({name:f.fileName.slice(0,-4),sha256:f.sha256,stage:'stone',origin:f.origin,blocks:f.blocks,sourceVersion:pkg.version,part:pkg.part});
       }
     }
-    const architecture=[];
-    const arch=db.prepare("SELECT package_id,report_json FROM project_architecture_packages WHERE project_id='erebor' AND base_version=? AND revision=? AND coalesce(json_extract(report_json,'$.finishing'),0)=0 ORDER BY package_id").all(version,DESIGN_REVISION);
-    for(const pkg of arch) for(const f of JSON.parse(pkg.report_json).files){
-      if(f.cannon===site) architecture.push({name:f.fileName.slice(0,-4),sha256:f.sha256,stage:f.kind,group:f.group,origin:f.origin,size:f.size,protectedCells:f.protectedCells,unknownCells:f.unknownCells,clearOmitted:f.clearOmitted,blocks:f.blocks,y:f.origin[1],sourceVersion:version,revision:DESIGN_REVISION,part:pkg.package_id});
-    }
-    architecture.sort((a,b)=>phaseOrder[a.stage]-phaseOrder[b.stage] || a.y-b.y || a.name.localeCompare(b.name));
-    files.push(...architecture);
-    cache.set(key,{at:Date.now(),files});
+    files.push(...(architecture.bySite.get(site)??[]));
+    cache.set(key,{at:architecture.at,files});
     return files;
   }
 

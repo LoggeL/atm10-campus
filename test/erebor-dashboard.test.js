@@ -68,6 +68,12 @@ test('dashboard separates published tasks, reports actual slot/home, and expires
     assert.equal(helper.home, 'K01');
     assert.equal(helper.placed, 23);
     assert.equal(helper.state, 'placing');
+    report.stations.K02B.status='clearing';
+    jobs.get('K02B').phase='clear';
+    assert.equal(read(1200).fleet[4].state,'clearing');
+    assert.equal(read(1200).fleet[4].placed,null);
+    jobs.get('K02B').phase='stone';
+    assert.equal(read(1200).fleet[4].state,'searching');
     assert.ok(read(47000).fleet.every((r) => r.state === 'unknown' && r.placed === null));
     report.stations.K02B.upload = 'other';
     assert.equal(read(1200).fleet[4].state, 'unverified');

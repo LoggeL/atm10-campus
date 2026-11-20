@@ -1,4 +1,4 @@
-import {interiorColumns,interiorGroup,interiorRelease,inRange,insideMassif} from './erebor-interior.js';
+import {interiorColumns,interiorFrontier,interiorRelease,inRange,insideMassif} from './erebor-interior.js';
 import {groupOf,slotsFor} from './erebor-groups.js';
 import {cannonProgressRows} from './cannon-progress-rows.js';
 import {publishedPlan,selectionStore,unstarted} from './erebor-selection.js';
@@ -102,23 +102,19 @@ export function registerEreborQueue(app,campus){
  async function interiorCandidate(p,site,position,taken){
   if(!config.worldSources.live||!massif.enabled(p.current_version))return null;
   const v=p.current_version,plan=JSON.parse(p.plan_json),base=plan.mountainFill.bounds[0];
-  const {open}=production.ordered(p,site),busy=releases.busy(v,base),first=new Map();
-  for(const e of open){
-   if(!interiorGroup(e.group)||!e.origin||!e.size)continue;
-   const k=e.origin[0]+','+e.origin[2],prior=first.get(k);
-   if(!prior||e.y<prior.y||e.y===prior.y&&e.stage==='clear')first.set(k,e);
-  }
-  const checks=new Map();
-  for(const e of [...first.values()].sort((a,b)=>a.y-b.y)){
-   if(taken.has(e.name)||e.unknownCells!==0||e.clearOmitted!==0||e.protectedCells!==0||
+  const {open}=production.ordered(p,site),busy=releases.busy(v,base);
+  const checks=new Map();let worldChecks=0;
+  for(const e of interiorFrontier(open,taken)){
+   if(e.unknownCells!==0||e.clearOmitted!==0||e.protectedCells!==0||
       (deferredInterior.get(e.name)||0)>Date.now()||!inRange(e.origin,e.size,position))continue;
    const cols=interiorColumns(e.origin,e.size,base);
    if(cols.some(k=>busy.has(k.join(','))))continue;
    if(!cols.every(k=>{const id=k.join(',');if(!checks.has(id))checks.set(id,releases.allows(v,[k]));return checks.get(id);}))continue;
    if(!insideMassif(plan,e.origin,e.size)){deferredInterior.set(e.name,Date.now()+600000);continue;}
+   if(++worldChecks>3)break;
    const pkg=published(p,site,e);
    if(!await generate(p,{interiorCheck:{bytes:pkg.bytes,anchor:e.origin,kind:e.stage}})){
-    deferredInterior.set(e.name,Date.now()+600000);return null;
+    deferredInterior.set(e.name,Date.now()+600000);continue;
    }
    const after=releases.busy(v,base);
    if(!current(v)||!massif.enabled(v)||!releases.allows(v,cols)||cols.some(k=>after.has(k.join(','))))return null;

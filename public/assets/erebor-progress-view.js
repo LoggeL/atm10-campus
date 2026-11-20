@@ -1,6 +1,7 @@
 import { esc, fmt } from './format.js?v=20261114-status-1';
 export const states = {
   placing: 'Baut',
+  clearing: 'Hebt aus',
   searching: 'Sucht Ziel',
   waiting: 'Wartet',
   handover: 'Planwechsel',

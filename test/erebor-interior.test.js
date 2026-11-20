@@ -2,7 +2,18 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {Region} from '../src/region.js';
 import {tileNBT} from '../src/erebor-tiles.js';
-import {interiorColumns,inRange,interiorGroup,interiorWorldCheck} from '../src/erebor-interior.js';
+import {interiorColumns,inRange,interiorFrontier,interiorGroup,interiorWorldCheck} from '../src/erebor-interior.js';
+test('independent excavation levels can run together while construction waits for lower or occupied tiles',()=>{
+ const file=(name,stage,y,x=0)=>({name,stage,origin:[x,y,0],size:[32,32,32],group:'E31'});
+ const low=file('low','clear',32),lowBuild=file('floor','build',32);
+ const high=file('high','clear',64),highBuild=file('gallery','build',64),other=file('other','build',0,32);
+ const open=[lowBuild,highBuild,low,high,other];
+ const names=(files,taken=[])=>interiorFrontier(files,new Set(taken)).map(f=>f.name);
+ assert.deepEqual(names(open,['low']),['other','high']);
+ assert.deepEqual(names(open,['gallery']),['other','low']);
+ assert.deepEqual(names([lowBuild,highBuild,other]),['other','floor']);
+ assert.deepEqual(names([highBuild]),['gallery']);
+});
 test('interior reservation covers cross-column tiles and excludes outlying corners and outdoor groups',()=>{
  assert.deepEqual(interiorColumns([60,0,-8],[32,32,32],[0,-40,0]),[[0,-1],[0,0],[1,-1],[1,0]]);
  assert.equal(inRange([240,0,0],[32,32,32],[0,0,0]),false);

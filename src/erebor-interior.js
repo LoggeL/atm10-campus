@@ -4,6 +4,30 @@ import {chunkBlockReader} from './terrain.js';
 import {parseStructure} from './nbt.js';
 
 export const interiorGroup=id=>/^(?:E(?:0[5-9]|1[0-46-9]|21[AB]|3[0-9])|S[1-4])$/.test(id);
+// Each architecture file occupies one aligned 32³ tile. Excavations on other
+// levels can proceed independently. Build the structure from its lowest open
+// level, after every excavation in that tile has finished.
+export function interiorFrontier(open,taken){
+ const columns=new Map(),candidates=[];
+ for(const entry of open){
+  if(!interiorGroup(entry.group)||entry.origin?.length!==3||entry.size?.length!==3||
+     !entry.size.every(n=>n===32)||!entry.origin.every(n=>Number.isInteger(n)&&n%32===0))continue;
+  const key=entry.origin[0]+','+entry.origin[2],y=entry.origin[1];
+  if(!columns.has(key))columns.set(key,new Map());
+  const levels=columns.get(key);
+  if(!levels.has(y))levels.set(y,[]);
+  levels.get(y).push(entry);
+ }
+ for(const levels of columns.values()){
+  const lowest=Math.min(...levels.keys());
+  for(const [y,entries] of levels){
+   if(entries.some(e=>taken.has(e.name)))continue;
+   const first=entries.find(e=>e.stage==='clear')??(y===lowest&&entries.find(e=>e.stage==='build'));
+   if(first)candidates.push(first);
+  }
+ }
+ return candidates.sort((a,b)=>a.origin[1]-b.origin[1]);
+}
 export function interiorColumns(origin,size,base){
  const out=[];
  for(let ix=Math.floor((origin[0]-base[0])/64);ix<=Math.floor((origin[0]+size[0]-1-base[0])/64);ix++)

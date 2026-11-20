@@ -328,6 +328,8 @@ td {
   color: var(--gray);
   border-radius: 3px;
 }
+.chip.clearing,
+.dot.clearing,
 .chip.placing,
 .dot.placing {
   background: #355438;
