@@ -199,7 +199,7 @@ export function parallelFleet(db,production,choices,request,recordedFinish,resum
         // A prepare response may time out after a one-block plan was inserted.
         // Service re-inspects the file/hash, printer, fuel and output before start.
         const urn=report.urnPreparation===2&&job.massif?.includes('_URN_')&&
-          same(job.size,[1,1,1])&&same(signal.options,[0,false,false]);
+          (same(job.size,[1,1,1])||report.urnPacks===3&&job.massif.includes('_URN_PACK_'))&&same(signal.options,[0,false,false]);
         if(!urn&&(slot<'D'||!job.loaded||!Number.isInteger(job.baseline)))continue;
         const previous=lastFirstStart.get(key);
         const last=previous?.file===signal.upload?previous.at:0;

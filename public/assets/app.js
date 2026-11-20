@@ -2,7 +2,7 @@ import {setupAccountTools} from './campus-account.js?v=20261114-status-1';
 import {fleetEquipment} from './fleet-equipment.js?v=20261114-status-1';
 import {api} from './campus-client.js?v=20261114-status-1';
 import {setupEreborQueue} from './erebor-queue.js?v=20261114-status-1&revision=massif-remaining-1';
-import { createProjectBlueprints } from './project-blueprints.js?v=20261114-status-1&revision=erebor-finish-2';
+import { createProjectBlueprints } from './project-blueprints.js?v=20261120-urnenpakete';
 import { createCannonSites } from './cannon-sites.js?v=20261114-status-1&fleet=20261110';
 import { esc, fmt } from './format.js?v=20261114-status-1';
 import { updateCannonPicker } from './cannon-picker.js?v=20261114-status-1';

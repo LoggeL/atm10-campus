@@ -83,6 +83,7 @@ export function openapi(baseUrl) {
       '/api/projects/erebor/stone/massif': {
         get:{summary:'Gespeicherte Vollstein-Pläne, bekannte Ausnahmen und aktuelle Kanonenaufträge.',responses:ok},
         post:{summary:'Cleanstone-Nacharbeiten aus der gespeicherten Welt veröffentlichen. Erst dryRun mit baseVersion, danach dieselbe baseVersion und die erhaltene preview. Bestehende Kanonenautomatik übernimmt erreichbare, freigegebene Pläne.',requestBody:{required:true,content:{'application/json':{schema:{type:'object',required:['baseVersion','dryRun'],properties:{baseVersion:{type:'integer'},dryRun:{type:'boolean'},preview:{type:'string'}}}}}},responses:{...ok,409:{description:'Veraltete Version oder Vorschau'}}}},
+      '/api/projects/erebor/stone/massif/urnenpakete':{get:{summary:'Veröffentlichte Urnen-Sammelpläne (format=json für Liste und Downloads).',responses:ok},post:{summary:'Offene, unvergebene Urnen bündeln. dryRun, baseVersion und anschließend preview erforderlich.',responses:ok}},
       '/api/projects/erebor/stone/massif/plans':{get:{summary:'Filterbare Campus-Liste der Vollstein-Schematics mit Download, Kanone und Weltanker.',responses:ok}},
       '/api/projects/{id}/stone/prepared': {
         get: {summary:'Fertig auf dem Campus gespeicherte Steinpakete mit Dateiliste, Mengen und Erstellungs-/Weltstand lesen. Keine aktuelle Neuberechnung.',parameters:[id,{name:'version',in:'query',required:true,schema:{type:'integer'}}],responses:ok},

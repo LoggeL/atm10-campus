@@ -16,7 +16,7 @@ export function manualUrn(column,origin,oldestTargetSave=0){
 // Match Minecraft's retained input -> output transition to this exact file.
 export function witnessedUrn(job,signal,at){
  const r=signal?.finish;
- return job?.massif?.includes('_URN_') && job.blocks===1 && signal.ready && signal.empty===true &&
+ return job?.massif?.includes('_URN_') && (job.blocks===1||job.massif.includes('_URN_PACK_')&&job.blocks>1) && signal.ready && signal.empty===true &&
    signal.upload==='' && signal.state==='STOPPED' && signal.status==='finished' &&
    r?.file===job.desired.file && Number.isSafeInteger(r.before) && Number.isSafeInteger(r.at) &&
    r.at>=r.before && r.at-r.before<=10000 && at>=r.at &&

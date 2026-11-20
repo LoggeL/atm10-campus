@@ -121,6 +121,6 @@ const [prepared,architecture,manifest,icons]=await Promise.all([api('/api/projec
   }
   esgarothPackages(architecture.packages);
   catalogAt=Date.now();
-  $('cards').innerHTML='<a href="/api/projects/erebor/stone/massif/plans">Massiv-Baupläne und Sonderziele</a><a href="/viewer?project=erebor&room=E05">Blockvorschau öffnen</a>';rows();coordinates();
+  $('cards').innerHTML='<a href="/api/projects/erebor/stone/massif/plans">Massiv-Baupläne und Sonderziele</a><a href="/api/projects/erebor/stone/massif/urnenpakete">Urnen-Sammelpläne</a><a href="/viewer?project=erebor&room=E05">Blockvorschau öffnen</a>';rows();coordinates();
  },rows,coordinates,changeSite(){limit=150;renderKey='';rows();},refreshQueue,updateLoadStates,coordinateText:()=>coordinateListText(items).replace('ATM10 Campus – Einsetzkoordinaten der aktuellen Baupläne','Erebor – Einsetzkoordinaten der gespeicherten Schematics')};
 }

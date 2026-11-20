@@ -86,7 +86,7 @@ export function registerEreborQueue(app,campus){
  const massif=registerMassif(app,campus,parallelLayout.sites,version=>
   availableMassifSlots(parallelLayout.sites,liveCache,version,new Set(production.enabled(version)),
    cfg()?.phase==='stone' && helpers.isEnabled(version)),version=>
-   liveCache?.version===version&&[1,2].includes(liveCache.urnPreparation)&&Math.abs(Date.now()-liveCache.at)<45000?liveCache.urnPreparation:0);
+   liveCache?.version===version&&[1,2].includes(liveCache.urnPreparation)&&Math.abs(Date.now()-liveCache.at)<45000?(liveCache.urnPreparation===2&&liveCache.urnPacks===3?3:liveCache.urnPreparation):0);
  db.exec('CREATE TABLE IF NOT EXISTS erebor_resume(version INTEGER,site TEXT,slot TEXT,upload TEXT,expires INTEGER,result TEXT,PRIMARY KEY(version,site,slot))');
  const verifyStone=config.worldSources.live?(p,verifyStone)=>generate(p,{verifyStone}):null;
  const helpers=parallelFleet(db,production,choices,request,recordedFinish,resumePaused,verifyStone,massif,{candidate:interiorCandidate,blockStone:blockedStone});
@@ -261,7 +261,7 @@ export function registerEreborQueue(app,campus){
     if(!same(tracked.desired.anchor,original.job.desired.anchor)||!same(tracked.size,original.job.size))return;
     const revised=original.job.desired.sha256!==tracked.desired.sha256;
     if(revised&&tracked.massif)return;
-     const filled=await verifyStone(p,{bytes:original.bytes,anchor:tracked.desired.anchor,size:tracked.size,blocks:original.job.blocks,collectUrns:!!tracked.massif&&!tracked.massif.endsWith('_BE')});
+     const filled=await verifyStone(p,{bytes:original.bytes,anchor:tracked.desired.anchor,size:tracked.size,blocks:original.job.blocks,collectUrns:!!tracked.massif&&!urn&&!tracked.massif.endsWith('_BE')});
     const {observed}=await request('erebor-inspect',data);
     if(!current(c.version)||!automatic()||choices.next(c.version,site)||!emptyStopped(observed)||observed.status!==signal.status||
        !same(observed.options,completedStoneOptions(tracked.desired,observed.options)))return;
@@ -436,9 +436,9 @@ export function registerEreborQueue(app,campus){
    const {site,slot,job}=row;
    lastUrnCheck.set(site+slot,{at:Date.now(),file:job.desired.file});
    const original=massif.restore(v,site,slot,job.massif);
-   if(!same(original.job.desired,job.desired)||!same(job.size,[1,1,1]))continue;
+   if(!same(original.job.desired,job.desired)||!same(job.size,original.job.size)||job.blocks!==original.job.blocks)continue;
    let stone;
-   try{stone=await verifyStone(p,{bytes:original.bytes,anchor:job.desired.anchor,size:job.size,blocks:1});}
+   try{stone=await verifyStone(p,{bytes:original.bytes,anchor:job.desired.anchor,size:job.size,blocks:original.job.blocks});}
    catch(e){app.log.warn({site,slot,err:e.message},'Urnenziel im Weltstand noch nicht lesbar');continue;}
    if(stone!==true||!current(v))continue;
    const state=slot==='A'?read(site):null;
