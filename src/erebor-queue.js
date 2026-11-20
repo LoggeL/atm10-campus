@@ -69,7 +69,8 @@ export function registerEreborQueue(app,campus){
  const production=productionStore(db);
  const massif=registerMassif(app,campus,parallelLayout.sites,version=>
   availableMassifSlots(parallelLayout.sites,liveCache,version,new Set(production.enabled(version)),
-   cfg()?.phase==='stone' && helpers.isEnabled(version)));
+   cfg()?.phase==='stone' && helpers.isEnabled(version)),version=>
+   liveCache?.version===version&&liveCache.urnPreparation===1&&Math.abs(Date.now()-liveCache.at)<45000);
  db.exec('CREATE TABLE IF NOT EXISTS erebor_resume(version INTEGER,site TEXT,slot TEXT,upload TEXT,expires INTEGER,result TEXT,PRIMARY KEY(version,site,slot))');
  const verifyStone=config.worldSources.live?(p,verifyStone)=>generate(p,{verifyStone}):null;
  const helpers=parallelFleet(db,production,choices,request,recordedFinish,resumePaused,verifyStone,massif);
@@ -133,7 +134,7 @@ export function registerEreborQueue(app,campus){
    else if(o.state==='PAUSED'&&o.status!=='ready')s.status='Pausiert: '+o.status;
    return true;
   }
-  if(confirmedFinish(o,j)||recordedFinish(o,j,witness?.signal?.finish,Date.now(),witness)){
+  if(!j.massif?.includes('_URN_')&&(confirmedFinish(o,j)||recordedFinish(o,j,witness?.signal?.finish,Date.now(),witness))){
    s.cursor=j.next;s.completed++;s.job=null;s.status='Fertig, nächster Plan folgt';
    tx(db,()=>{
     production.finish(j.desired.version??cfg().version,site,j.desired.blueprint,new Date().toISOString());
@@ -207,17 +208,19 @@ export function registerEreborQueue(app,campus){
     if(!same(tracked.desired.anchor,original.job.desired.anchor)||!same(tracked.size,original.job.size))return;
     const revised=original.job.desired.sha256!==tracked.desired.sha256;
     if(revised&&tracked.massif)return;
-    const filled=await verifyStone(p,{bytes:original.bytes,anchor:tracked.desired.anchor,size:tracked.size,blocks:original.job.blocks});
+     const filled=await verifyStone(p,{bytes:original.bytes,anchor:tracked.desired.anchor,size:tracked.size,blocks:original.job.blocks,collectUrns:!!tracked.massif&&!tracked.massif.endsWith('_BE')});
     const {observed}=await request('erebor-inspect',data);
     if(!current(c.version)||!automatic()||choices.next(c.version,site)||!emptyStopped(observed)||observed.status!==signal.status||
        !same(observed.options,observedEreborOptions(tracked.desired,observed.options)))return;
     if(filled){
      tx(db,()=>{
       production.finish(c.version,site,tracked.desired.blueprint,new Date().toISOString());
-      if(tracked.massif)massif.finish(c.version,tracked.massif,site,'A');
+      if(tracked.massif)massif.finish(c.version,tracked.massif,site,'A',filled.urns);
       choices.mark(tracked.selection,revised?'replaced':'finished');s.cursor=tracked.next;s.completed++;s.job=null;
-      s.status='Alle Steinziele im Weltstand bestätigt';persist(site,s);
+      s.status=filled.urns?'Reguläre Ziele bestätigt, Urnen als Einzelziele erfasst':'Alle Steinziele im Weltstand bestätigt';persist(site,s);
      });
+    }else if(tracked.massif?.includes('_URN_')){
+     tx(db,()=>{massif.deferUrn(c.version,site,tracked.massif);production.started(c.version,site,null);s.job=null;s.status='Urnenziel noch offen, nächster Auftrag folgt';persist(site,s);});
     }else{
      tx(db,()=>{
       if(revised)choices.mark(tracked.selection,'replaced');
@@ -332,6 +335,10 @@ export function registerEreborQueue(app,campus){
   const bytes=db.prepare('SELECT payload FROM erebor_queue_sites WHERE site=?').get(site).payload;
   if(!bytes)throw Error('Vorbereitete Datei fehlt.');
   const res=await request('erebor-prepare',{...data,desired,kind:j.phase,size:j.size,nbtBase64:Buffer.from(bytes).toString('base64')});
+  if(j.massif?.includes('_URN_')&&res.urnDeferred===true&&res.applied===false){
+   tx(db,()=>{massif.deferUrn(c.version,site,j.massif);s.job=null;s.status='Urnenziel zurückgestellt · '+res.reason;persist(site,s);});
+   return;
+  }
   readAt=0;
   if(!res.applied||!observe(site,s,res.observed))throw Error('Einlegen noch nicht bestätigt.');
   persist(site,s);

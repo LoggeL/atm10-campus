@@ -44,7 +44,8 @@ export function parallelFleet(db,production,choices,request,recordedFinish,resum
       if(row.message!==signal.status)save.run(JSON.stringify(job),signal.status,v,site,slot);
       return;
     }
-    const missingReceipt=job?.loaded&&signal.empty&&signal.state==='STOPPED'&&signal.status==='finished'&&!signal.finish;
+    const missingReceipt=job?.loaded&&signal.empty&&signal.state==='STOPPED'&&signal.status==='finished'&&
+      (!signal.finish||signal.finish.file!==job.desired.file||job.tainted);
     if(missingReceipt && (!verifyStone||!job.source||!isStationStone(job,site)||!enabled()||!signal.ready||
        at-Math.max(job.seen*1000,job.lastWorldCheck||0)<90000)){
       if(!job?.lastWorldCheck)save.run(JSON.stringify(job),'Wartet auf bestätigten Abschluss',v,site,slot);
@@ -103,15 +104,15 @@ export function parallelFleet(db,production,choices,request,recordedFinish,resum
         original=originalPlan();
         const expected={...original.job.desired,options:observedEreborOptions(original.job.desired,job.desired.options)};
         if(!same(expected,job.desired)||!same(original.job.size,job.size))throw Error('Auftrag stimmt nicht mit dem veröffentlichten Steinplan überein.');
-        filled=await verifyStone(p,{bytes:original.bytes,anchor:desired.anchor,size:job.size,blocks:original.job.blocks});
+        filled=await verifyStone(p,{bytes:original.bytes,anchor:desired.anchor,size:job.size,blocks:original.job.blocks,collectUrns:!!job.massif});
       }
       let {observed}=await request('erebor-inspect',args);
       if(!current())return;
-      if(missingReceipt&&(!emptyStopped(observed)||observed.status!=='finished'||!same(observed.options,observedEreborOptions(job.desired,observed.options))))return;
+      if(missingReceipt&&(!enabled()||!emptyStopped(observed)||observed.status!=='finished'||!same(observed.options,observedEreborOptions(job.desired,observed.options))))return;
       if(job.loaded && (filled||recordedFinish(observed,job,signal.finish,Date.now(),{signal,at}))){
         tx(db,()=>{
           production.finish(v,site,desired.blueprint,new Date().toISOString());
-          if(job.massif)massif.finish(v,job.massif,site,slot);
+          if(job.massif)massif.finish(v,job.massif,site,slot,filled?.urns);
           db.prepare("UPDATE erebor_helpers SET name=NULL,job=NULL,completed=completed+1,message='Abschnitt fertig' WHERE version=? AND site=? AND slot=?").run(v,site,slot);
         });
         return true;

@@ -1,8 +1,8 @@
 import {parentPort,workerData} from 'node:worker_threads';
 import {scanMassifColumn,combineRepairLayers} from './erebor-massif-scan.js';
-parentPort.on('message',({ix,iz,generation})=>{
+parentPort.on('message',({ix,iz,generation,urnsOnly})=>{
  try{
-  const result=scanMassifColumn(workerData.world,workerData.plan,ix,iz,workerData.stations);
+  const result=scanMassifColumn(workerData.world,workerData.plan,ix,iz,workerData.stations,urnsOnly);
   if(generation!==undefined&&!result.missing.length)result.rows=combineRepairLayers(result.rows,workerData.stations);
   parentPort.postMessage(result);
  }

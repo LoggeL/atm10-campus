@@ -6,12 +6,13 @@ import {setTimeout as delay} from 'node:timers/promises';
 import {createHash} from 'node:crypto';
 
 export const isEreborStation=name=>!!groupOf(name)||/^erebor-K(?:0[1-9]|[12][0-9]|3[0-7])$/i.test(name);
-export const needsSolidReplacement=desired=>desired?.blueprint?.includes('_MASSIV_')&&!desired.blueprint.includes('_LUFT_');
+export const needsSolidReplacement=desired=>desired?.blueprint?.includes('_MASSIV_')&&!desired.blueprint.includes('_LUFT_')&&!desired.blueprint.includes('_URN_');
 
 // Installed V5 controllers prepare stone in mode 0. V6 and manually
 // updated cannons use 2. All other options and identity checks stay exact.
 export function observedEreborOptions(desired,observed){
  const options=desired.options;
+ if(desired.blueprint?.includes('_URN_'))return options;
  if(!needsSolidReplacement(desired)&&desired.owner==='Erebor'&&/^EREBOR_STEIN_K\d{2}_/.test(desired.blueprint)&&
     [0,2].includes(options?.replace_mode)&&[0,2].includes(observed?.replace_mode)&&
     options.skip_missing===false&&options.replace_block_entities===false)
