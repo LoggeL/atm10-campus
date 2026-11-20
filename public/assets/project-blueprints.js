@@ -99,6 +99,13 @@ export function createProjectBlueprints({api,isSelected,closeDrawer,loadedStatus
   if(isSelected()&&version===project.version&&Date.now()-catalogAt<120000)return;
 const [prepared,architecture,manifest,icons]=await Promise.all([api('/api/projects/erebor/stone/prepared?version='+project.version),api('/api/projects/erebor/architecture'),api('/api/projects/erebor/architecture/manifest'),fetch('/assets/material-icons/catalog.json').then(r=>r.json())]);if(!isSelected())return;catalog=icons;packages=prepared.packages;version=project.version;items=[...architectureBlueprints(project,architecture.packages),...preparedBlueprints(project,packages)];byId.clear();for(const b of items)byId.set(b.id,b);
   $('liveLine').textContent=`Erebor · ${architecture.packages.length} von ${manifest.packages.length} Architekturpaketen veröffentlicht.`;
+  const surface=await api('/api/projects/erebor/landschaft/bauplaene').catch(()=>null);
+  if(!isSelected())return;
+  if($('surfaceCatalog')){
+   const parts=surface?.parts.filter(p=>p.files>0)||[];
+   $('surfaceCatalog').hidden=!parts.length;
+   $('surfaceDownloads').innerHTML=parts.map(p=>'<p><a download href="/api/projects/erebor/landschaft/bauplaene/'+encodeURIComponent(p.id)+'/'+encodeURIComponent(p.id)+'.zip">'+esc(p.id)+' · '+fmt(p.files)+' Schematics (ZIP)</a> · '+fmt(p.blocks)+' Blöcke</p>').join('');
+  }
   const finishes=architecture.packages.filter(p=>p.finishing&&p.group!=='E01'&&p.files.length);
   const groves=architecture.packages.filter(p=>p.finishing&&p.group==='E01'&&p.files.length);
   if($('ereborGroves')){
