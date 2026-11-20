@@ -5,6 +5,7 @@ import {cannonReset,emptyStopped} from './alignment.js';
 import {isStationStone,needsSolidReplacement,observedEreborOptions,completedStoneOptions,verifyEreborAlignment as verifyAlignment} from './erebor-feeder.js';
 import {publishedPlan} from './erebor-selection.js';
 import {tx} from './db.js';
+import {witnessedUrn} from './erebor-manual-urn.js';
 
 export const parallelLayout=JSON.parse(readFileSync(new URL('./erebor-fleet/parallel.json',import.meta.url)));
 for(const station of parallelLayout.sites){
@@ -29,6 +30,11 @@ export function parallelFleet(db,production,choices,request,recordedFinish,resum
   function jobs(version) {
     return db.prepare('SELECT site,slot,name,completed,message,job FROM erebor_helpers WHERE version=? ORDER BY site,slot').all(version)
       .map(row=>({...row,job:row.job?JSON.parse(row.job):null}));
+  }
+  function complete(v,site,slot,job,urns) {
+    production.finish(v,site,job.desired.blueprint,new Date().toISOString());
+    if(job.massif)massif.finish(v,job.massif,site,slot,urns);
+    db.prepare("UPDATE erebor_helpers SET name=NULL,job=NULL,completed=completed+1,message='Abschnitt fertig' WHERE version=? AND site=? AND slot=?").run(v,site,slot);
   }
   async function service(p,pair,slot,signal,at,enabled,main,current){
     const site=pair.site,key=site+slot,v=p.current_version;
@@ -111,16 +117,13 @@ export function parallelFleet(db,production,choices,request,recordedFinish,resum
       if(!current())return;
       if(missingReceipt&&(!enabled()||!emptyStopped(observed)||observed.status!=='finished'||!same(observed.options,completedStoneOptions(job.desired,observed.options))))return;
       if(job.loaded && (filled||(!urn&&recordedFinish(observed,job,signal.finish,Date.now(),{signal,at})))){
-        tx(db,()=>{
-          production.finish(v,site,desired.blueprint,new Date().toISOString());
-          if(job.massif)massif.finish(v,job.massif,site,slot,filled?.urns);
-          db.prepare("UPDATE erebor_helpers SET name=NULL,job=NULL,completed=completed+1,message='Abschnitt fertig' WHERE version=? AND site=? AND slot=?").run(v,site,slot);
-        });
+        tx(db,()=>complete(v,site,slot,job,filled?.urns));
         return true;
       }
       if(missingReceipt){
         if(!enabled())return;
         if(urn){
+          if(witnessedUrn(job,signal,at)&&at-signal.finish.at<360000){set('Urne gebaut · wartet auf gespeicherten Zielblock');return;}
           tx(db,()=>{massif.deferUrn(v,site,job.massif,slot);
             db.prepare('UPDATE erebor_helpers SET name=NULL,job=NULL,message=? WHERE version=? AND site=? AND slot=?').run('Stein im Weltstand noch offen · nächster Auftrag folgt',v,site,slot);});
           return;
@@ -196,7 +199,7 @@ export function parallelFleet(db,production,choices,request,recordedFinish,resum
       await service(p,r.station,r.slot,r.signal,report.at,active,read(r.station.site),current);
     }
   }
-  return {reserved,list,jobs,isEnabled,switchAll,jobAt,async tick(p,report,enabled,read,current,refresh){
+  return {reserved,list,jobs,complete,isEnabled,switchAll,jobAt,async tick(p,report,enabled,read,current,refresh){
     if(report?.version!==parallelLayout.version||report.sharedChest!==4||!report.stations)return;
     await startFueledExtras(p,report,enabled,read,current);
     for(const pair of parallelLayout.sites){

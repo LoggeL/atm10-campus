@@ -7,6 +7,7 @@ import {availableMassifSlots} from './erebor-balance.js';
 import {dashboardData} from './erebor-dashboard.js';
 import {placementThroughput} from './erebor-throughput.js';
 import {registerMassif} from './erebor-massif.js';
+import {witnessedUrn} from './erebor-manual-urn.js';
 import {parallelFleet,parallelLayout} from './erebor-parallel.js';
 import {Region} from './region.js';
 import {zipStore} from './zip.js';
@@ -221,6 +222,7 @@ export function registerEreborQueue(app,campus){
       s.status=filled.urns?'Reguläre Ziele bestätigt, Urnen als Einzelziele erfasst':'Alle Steinziele im Weltstand bestätigt';persist(site,s);
      });
     }else if(tracked.massif?.includes('_URN_')){
+     if(witnessedUrn(tracked,signal,report.at)&&report.at-signal.finish.at<360000){s.status='Urne gebaut · wartet auf gespeicherten Zielblock';return;}
      tx(db,()=>{massif.deferUrn(c.version,site,tracked.massif);production.started(c.version,site,null);s.job=null;s.status='Urnenziel noch offen, nächster Auftrag folgt';persist(site,s);});
     }else{
      tx(db,()=>{
@@ -366,6 +368,38 @@ export function registerEreborQueue(app,campus){
   persist(site,s);
   await startAutomatic(site,s,c.version,res.observed);
  }
+ // Reconcile fast single-block prints between dispatch batches. A full fleet pass
+ // can take minutes; an empty input is normal even if the start reply was lost.
+ const lastUrnCheck=new Map();
+ async function reconcileUrns(p,report){
+  const v=p.current_version;
+  if(!verifyStone||report?.urnPreparation!==2||!massif.enabled(v)||!current(v)||Date.now()-report.at>=15000)return;
+  const {mains,helperJobs}=assignments(v);
+  const ready=[...mains.map(r=>({...r,slot:'A'})),...helperJobs].filter(({site,slot,job})=>
+   witnessedUrn(job,report.stations[slot==='A'?site:site+slot],report.at));
+  const last=r=>{const e=lastUrnCheck.get(r.site+r.slot);return e?.file===r.job.desired.file?e.at:0;};
+  for(const row of ready.filter(r=>Date.now()-last(r)>=15000).sort((a,b)=>last(a)-last(b)).slice(0,16)){
+   if(!current(v)||Date.now()-report.at>=20000)return;
+   const {site,slot,job}=row;
+   lastUrnCheck.set(site+slot,{at:Date.now(),file:job.desired.file});
+   const original=massif.restore(v,site,slot,job.massif);
+   if(!same(original.job.desired,job.desired)||!same(job.size,[1,1,1]))continue;
+   let stone;
+   try{stone=await verifyStone(p,{bytes:original.bytes,anchor:job.desired.anchor,size:job.size,blocks:1});}
+   catch(e){app.log.warn({site,slot,err:e.message},'Urnenziel im Weltstand noch nicht lesbar');continue;}
+   if(stone!==true||!current(v))continue;
+   const state=slot==='A'?read(site):null;
+   if((state?.job??helpers.jobAt(v,site,slot))?.desired.file!==job.desired.file)continue;
+   tx(db,()=>{
+    if(slot!=='A'){helpers.complete(v,site,slot,job);return;}
+    production.finish(v,site,job.desired.blueprint,new Date().toISOString());
+    massif.finish(v,job.massif,site,slot);
+    choices.mark(job.selection,'finished');
+    state.cursor=job.next;state.completed++;state.job=null;state.inserted=false;
+    state.status='Cleanstone am Urnenziel bestätigt';persist(site,state);
+   });
+  }
+ }
  async function tick(){
   const c=cfg(),p=project();
   if(!c||!p||c.version!==p.current_version||closed)return;
@@ -378,6 +412,7 @@ export function registerEreborQueue(app,campus){
   try{
    const archive=c.archive?JSON.parse(c.archive):null;
    let report=await liveReport(c.version);
+   await reconcileUrns(p,report);
    for(const site of new Set([...active,...(c.enabled&&c.phase!=='finished'?sites:[])])){
     if(!current(c.version))return;
     if(report&&Date.now()-report.at>=30000)report=await liveReport(c.version);
@@ -397,7 +432,11 @@ export function registerEreborQueue(app,campus){
    };
    if(current(c.version)){
     const report=await liveReport(c.version);
-    await helpers.tick(p,report,()=>c.phase==='stone'&&helpers.isEnabled(c.version),read,renew,()=>liveReport(c.version));
+    await helpers.tick(p,report,()=>c.phase==='stone'&&helpers.isEnabled(c.version),read,renew,async()=>{
+     const fresh=await liveReport(c.version);
+     await reconcileUrns(p,fresh);
+     return fresh;
+    });
    }
    if(current(c.version)&&cfg().enabled&&!massif.enabled(c.version)&&c.phase!=='finished'&&!helpers.list(c.version).some(r=>r.name)&&sites.every(site=>{const s=read(site);return s.exhausted&&!s.job;})){
     const phase=({stone:'clear',clear:'build',build:'finished'})[c.phase];
