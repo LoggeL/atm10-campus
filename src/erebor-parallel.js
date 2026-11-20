@@ -182,7 +182,7 @@ export function parallelFleet(db,production,choices,request,recordedFinish,resum
         // Give one such idle slot a retry between batches using the normal guards.
         if(report.urnPreparation===2&&signal?.ready&&signal.empty===true&&!signal.upload&&signal.state==='STOPPED'){
           const row=lookup.get(p.current_version,station.site,slot);
-          if(row?.name?.includes('_URN_')&&/keine Antwort innerhalb|keine eindeutige RCON-Antwort/.test(row.message)){
+          if(row?.name?.includes('_URN_')&&/keine Antwort innerhalb|keine eindeutige RCON-Antwort|Urnenziel reserviert · Zielchunk lädt/.test(row.message)){
             const previous=lastFirstStart.get(key);
             const last=previous?.file===row.name?previous.at:0;
             if(Date.now()-last>=60000)retry.push({key,station,slot,signal,last,file:row.name});

@@ -63,7 +63,21 @@ export function configureEreborQueue(db,b,actor=null){
   });
 }
 export function registerEreborQueue(app,campus){
- const {db,config}=campus,request=config.cannonBridgeRequest||bridgeClient(config);
+ const {db,config}=campus,transport=config.cannonBridgeRequest||bridgeClient(config);
+ async function request(action,args){
+  const result=await transport(action,args);
+  if(action!=='erebor-prepare'||!result?.urnWarming||result.applied!==false||
+     !args.desired?.blueprint?.includes('_URN_'))return result;
+  // The tracker reads its target registry every 40 game ticks. Finish this
+  // handshake while its ten-minute ticket is valid, even on long fleet passes.
+  await new Promise(resolve=>setTimeout(resolve,3500));
+  const site=args.site.slice(0,3),slot=args.site.slice(3)||'A',v=args.version;
+  if(!current(v)||!massif.enabled(v))return result;
+  const enabled=slot==='A'?production.mode(v,site).enabled:cfg().phase==='stone'&&helpers.isEnabled(v);
+  const job=slot==='A'?read(site).job:helpers.jobAt(v,site,slot);
+  if(!enabled||job?.desired.file!==args.desired.file)return result;
+  return transport(action,args);
+ }
  db.exec(`CREATE TABLE IF NOT EXISTS erebor_queue_config(id INTEGER PRIMARY KEY CHECK(id=1),version INTEGER NOT NULL,enabled INTEGER NOT NULL,phase TEXT NOT NULL,archive TEXT,lease TEXT,expires INTEGER);
  CREATE TABLE IF NOT EXISTS erebor_queue_sites(site TEXT PRIMARY KEY,state TEXT NOT NULL,payload BLOB);`);
  const choices=selectionStore(db);
