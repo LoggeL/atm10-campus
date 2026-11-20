@@ -5,12 +5,65 @@ import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {createHash} from 'node:crypto';
 import {buildServer} from '../src/server.js';
-import {parallelLayout} from '../src/erebor-parallel.js';
+import {parallelFleet,parallelLayout} from '../src/erebor-parallel.js';
+import {DatabaseSync} from 'node:sqlite';
+import {registerMassif} from '../src/erebor-massif.js';
+import {manualUrn} from '../src/erebor-manual-urn.js';
 import {stoneNBT} from '../src/project-stone.js';
 import {zipStore,storedZipEntry} from '../src/zip.js';
 import {writeWorld} from './helpers.js';
 
 const fleet=JSON.parse(readFileSync(new URL('../src/erebor-fleet/stations.json',import.meta.url)));
+test('urn helper keeps its warming target, prints it in mode 0 and completes only on saved stone with the idle printer back in mode 2',async()=>{
+  const db=new DatabaseSync(':memory:'),hooks=[];
+  db.exec('CREATE TABLE erebor_queue_sites(state TEXT);CREATE TABLE build_projects(id TEXT,current_version INTEGER,plan_json TEXT)');
+  const m=registerMassif({get(){},post(){},addHook:(_,f)=>hooks.push(f)},{db,config:{worldSources:{}}},parallelLayout.sites,()=>[],()=>2);
+  const p={current_version:12};
+  const f=manualUrn('X15_Z00',[-400,-29,-10995]);
+  db.exec("INSERT INTO erebor_massif_runs VALUES(12,1,'today'); INSERT INTO build_projects VALUES('erebor',12,'{}')");
+  db.prepare('INSERT INTO erebor_massif_blobs VALUES(?,?)').run(f.sha,f.bytes);
+  db.prepare("INSERT INTO erebor_massif_tiles(v,tile,x,y,z,sx,sy,sz,blocks,sha,home,priority,special) VALUES(12,?,?,?,?,1,1,1,1,?,'K01',0,1)").run(f.tile,...f.origin,f.sha);
+  const options={replace_mode:0,skip_missing:false,replace_block_entities:false};
+  const reset={DeferredBlocks:[],PrintStage:'BLOCKS',EntityProgress:-1};
+  const idle=()=>({state:'STOPPED',status:'finished',inputEmpty:true,amountPlaced:0,amountToPlace:0,flyingBlocks:0,printer:reset,
+    options:{...options,replace_mode:2},outputCount:1,outputItem:'create:empty_schematic',at:Date.now()/1000});
+  let native=idle(),warm=true,stone=false,started=0,finished=0;
+  const request=async(action,b)=>{
+    assert.equal(b.site,'K01B');
+    if(action==='erebor-inspect')return {observed:{...native,at:Date.now()/1000}};
+    if(action==='erebor-prepare'){
+      if(warm){warm=false;return {applied:false,urnWarming:true};}
+      const d=b.desired;
+      native={...idle(),state:'PAUSED',status:'ready',options,inputEmpty:false,item:'create:schematic',fileHash:d.sha256,
+        components:{'create:schematic_file':d.file,'create:schematic_owner':'Erebor','create:schematic_deployed':1,'create:schematic_anchor':f.origin,
+          'create:schematic_bounds':[1,1,1],'create:schematic_mirror':'none','create:schematic_rotation':'none'},printer:{...reset,Anchor:f.origin}};
+      return {applied:true,observed:native};
+    }
+    assert.equal(action,'erebor-start');started++; native={...native,state:'RUNNING',status:'placing'};
+    return {started:true,observed:native};
+  };
+  const helpers=parallelFleet(db,{ordered:()=>({open:[],done:new Map()}),finish(){finished++;}},{waiting:()=>[]},request,
+    ()=>{throw Error('native receipt alone must not close this job')},async()=>false,async(_,verify)=>{
+      assert.equal(verify.collectUrns,false);assert.deepEqual(verify.anchor,f.origin);return stone;
+    },m);
+  const tick=(when=Date.now())=>helpers.tick(p,{version:12,sharedChest:4,at:when,stations:{K01B:{
+    state:native.state,status:native.status,ready:true,empty:native.inputEmpty,upload:native.components?.['create:schematic_file']||'',options:[2,false,false]}}},
+    ()=>true,()=>({}),()=>true);
+  try{
+    await tick();assert.equal(helpers.jobAt(12,'K01','B').massif,f.tile);assert.equal(started,0);
+    await tick();assert.equal(started,1);assert.equal(finished,0);
+    native=idle();
+    await tick(Date.now()+15000);
+    assert.equal(finished,0);assert.equal(helpers.jobAt(12,'K01','B'),null);
+    assert.equal(db.prepare('SELECT done FROM erebor_massif_tiles WHERE tile=?').get(f.tile).done,0);
+    db.exec('UPDATE erebor_urn_retry SET after=0');
+    await tick();assert.equal(started,2);
+    native=idle();stone=true;
+    await tick(Date.now()+15000);
+    assert.equal(finished,1);assert.equal(helpers.jobAt(12,'K01','B'),null);
+    assert.equal(db.prepare('SELECT done FROM erebor_massif_tiles WHERE tile=?').get(f.tile).done,1);
+  }finally{for(const close of hooks)await close();db.close();}
+});
 test('all 111 cannons touch their existing chest and all additional placements stay in the original chunk',()=>{
   assert.equal(parallelLayout.sites.length,37);
   for(const pair of parallelLayout.sites){

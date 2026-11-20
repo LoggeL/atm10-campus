@@ -120,6 +120,11 @@ export function parallelFleet(db,production,choices,request,recordedFinish,resum
       }
       if(missingReceipt){
         if(!enabled())return;
+        if(urn){
+          tx(db,()=>{massif.deferUrn(v,site,job.massif,slot);
+            db.prepare('UPDATE erebor_helpers SET name=NULL,job=NULL,message=? WHERE version=? AND site=? AND slot=?').run('Stein im Weltstand noch offen · nächster Auftrag folgt',v,site,slot);});
+          return;
+        }
         // Keep the reservation and replay the original fill-only plan. A crash
         // after prepare is reconciled by the usual matching-input inspection.
         job={...original.job,source:job.source,lastWorldCheck:at};

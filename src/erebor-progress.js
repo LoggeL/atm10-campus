@@ -42,11 +42,11 @@ export function massifProgress(db, version, sites) {
   const stations = Object.fromEntries(sites.map((id) => [id, massif()]));
   const total = massif(),
     unassigned = massif(),
-    filling = { solid: measure(), cavity: measure(), manual: measure() };
+    filling = { solid: measure(), cavity: measure(), urn: measure(), manual: measure() };
   const rows = db
     .prepare(
       `SELECT coalesce(site,home) AS owner,
-    CASE WHEN special THEN 'manual' WHEN tile GLOB '*_LUFT' THEN 'cavity' ELSE 'solid' END AS kind,
+    CASE WHEN special AND tile GLOB '*_URN_*_BE' THEN 'urn' WHEN special THEN 'manual' WHEN tile GLOB '*_LUFT' THEN 'cavity' ELSE 'solid' END AS kind,
     CASE WHEN done THEN 'done' WHEN site IS NOT NULL THEN 'inProgress' ELSE 'open' END AS state,
     count(*) AS parts, sum(blocks) AS blocks FROM erebor_massif_tiles WHERE v=? GROUP BY 1,2,3`,
     )
@@ -118,10 +118,11 @@ export function projectProgress(db, production, project, sites, active) {
 // Completed plan volume and unfinished plan volume use the same unit. The rolling
 // wall-clock window includes pauses and plan changes and survives a server restart.
 export function massifForecast(db, version, filling, enabled, now = Date.now()) {
-  if (!filling || filling.solid.total + filling.cavity.total === 0) return { state: 'unknown' };
-  const remainingBlocks =
-    filling.solid.blocks + filling.cavity.blocks - filling.solid.finishedBlocks - filling.cavity.finishedBlocks;
-  if (filling.solid.done + filling.cavity.done === filling.solid.total + filling.cavity.total)
+  if (!filling) return { state: 'unknown' };
+  const automatic=[filling.solid,filling.cavity,...(filling.urn?[filling.urn]:[])];
+  if (!automatic.some(row=>row.total)) return { state: 'unknown' };
+  const remainingBlocks=automatic.reduce((sum,row)=>sum+row.blocks-row.finishedBlocks,0);
+  if (automatic.every(row=>row.done===row.total))
     return { state: 'complete', remainingBlocks: 0 };
   if (!(remainingBlocks > 0)) return { state: 'unknown' };
   if (!enabled) return { state: 'paused', remainingBlocks };
@@ -135,9 +136,10 @@ export function massifForecast(db, version, filling, enabled, now = Date.now()) 
       `SELECT count(*) AS parts, coalesce(sum(t.blocks),0) AS blocks, max(f.finished_at) AS latest
     FROM erebor_massif_tiles t JOIN erebor_finished_plans f
     ON f.version=t.v AND f.site=t.site AND f.name='EREBOR_STEIN_' || t.site || '_MASSIV_' || t.tile || '_V' || t.v
-    WHERE t.v=? AND t.done=1 AND t.special=0 AND f.finished_at BETWEEN ? AND ?`,
+    WHERE t.v=? AND t.done=1 AND (t.special=0 OR t.tile GLOB '*_URN_*_BE')
+    AND (?=0 OR t.tile GLOB '*_URN_*_BE') AND f.finished_at BETWEEN ? AND ?`,
     )
-    .get(version, new Date(since).toISOString(), new Date(now).toISOString());
+    .get(version, Number(filling.solid.done===filling.solid.total&&filling.cavity.done===filling.cavity.total), new Date(since).toISOString(), new Date(now).toISOString());
   const sample = { remainingBlocks, windowSeconds, completedParts: receipts.parts };
   if (windowSeconds < 900 || receipts.parts < 2 || !receipts.blocks) return { state: 'sampling', ...sample };
   if (now - Date.parse(receipts.latest) > 30 * 60000) return { state: 'inactive', ...sample };

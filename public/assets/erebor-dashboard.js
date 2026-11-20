@@ -16,7 +16,7 @@ const track = (done,total,active=0) => total > 0
   ? '<div class="track" aria-hidden="true"><i style="width:'+Math.min(100,100*done/total)+'%"></i><b style="width:'+Math.min(100,100*active/total)+'%"></b></div>' : '';
 function renderSummary(fleet) {
   const f = data.filling;
-  const sum = key => f ? f.solid[key]+f.cavity[key] : null;
+  const sum = key => f ? f.solid[key]+f.cavity[key]+(f.urn?.[key]??0) : null;
   const done = sum('done'), total = sum('total');
   const working = fleet.filter(r=>r.state==='placing').length;
   const known = fleet.filter(r=>r.state!=='unknown').length;
@@ -31,7 +31,7 @@ function renderSummary(fleet) {
 function renderTasks() {
   const f = data.filling;
   const rows = [
-    ['Festgestein ersetzen',f?.solid],['Hohlräume füllen',f?.cavity],['Manuelle Sonderziele',f?.manual],
+    ['Festgestein ersetzen',f?.solid],['Hohlräume füllen',f?.cavity],['Urnen durch Cleanstone ersetzen',f?.urn],['Manuelle Sonderziele',f?.manual],
     ['Cleanstone-Katalog',data.stages.stone],['Aushub',data.stages.clear],['Architektur bauen',data.stages.build]
   ];
   el('tasks').innerHTML = rows.map(([name,row])=>'<tr><th scope="row">'+name+'</th><td><span class="progress-cell">'+

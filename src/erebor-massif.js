@@ -31,6 +31,7 @@ export function registerMassif(app,campus,stations,availableSlots=()=>[],urnCont
  const enabled=v=>!!db.prepare('SELECT 1 FROM erebor_massif_runs LEFT JOIN erebor_massif_control USING(v) WHERE v=? AND coalesce(stoneOnly,1)=1').get(v);
  const current=(v)=>project()?.current_version===v;
  const rowFor=db.prepare('SELECT * FROM erebor_massif_tiles WHERE v=? AND tile=?');
+ const urnCounts=db.prepare("SELECT count(*) AS found,coalesce(sum(done),0) AS finished,count(CASE WHEN done=0 AND site IS NOT NULL THEN 1 END) AS assigned FROM erebor_massif_tiles WHERE v=? AND special=1 AND tile GLOB '*_URN_*_BE'");
  const nearest=origin=>stations.reduce((best,s)=>{const d=Math.hypot(...origin.map((n,i)=>n-s.main[i]));return d<256&&(!best||d<best.d)?{id:s.site,d}:best;},null)?.id??null;
  const previews=new Map();let working=false,closed=false,worker,workerVersion,nextUrnSurvey=0;
  function getWorker(r){
@@ -121,7 +122,8 @@ export function registerMassif(app,campus,stations,availableSlots=()=>[],urnCont
  app.get(api,async(req,reply)=>{
   requireActor(req,'read');const v=project()?.current_version??0,s=status(v);
   const report=await campus.ereborLiveReport?.(v);
-  s.urns={controllerReady:!!urnControllerReady(v),controllerVersion:Number(urnControllerReady(v)),...db.prepare("SELECT count(*) AS found,coalesce(sum(done),0) AS finished,count(CASE WHEN done=0 AND site IS NOT NULL THEN 1 END) AS assigned FROM erebor_massif_tiles WHERE v=? AND special=1 AND tile GLOB '*_URN_*_BE'").get(v)};
+  const controllerVersion=Number(urnControllerReady(v));
+  s.urns={controllerReady:controllerVersion>0,controllerVersion,...urnCounts.get(v)};
   for(const row of s.active){
    const native=report?.stations?.[row.site+(row.slot==='A'?'':row.slot)],r=rowFor.get(v,row.tile);
    const expected=ereborUploadName(filename(v,row.site,row.tile)+'.nbt',r.sha);
@@ -178,7 +180,8 @@ export function registerMassif(app,campus,stations,availableSlots=()=>[],urnCont
   const control=actor.via==='session'&&actor.user.role==='admin'&&published(v)
    ?'<p><button type="button" id="phaseButton" data-version="'+v+'" data-stone="'+(!st.enabled)+'">'+(st.enabled?'Zur regulären Baufolge wechseln':'Nur Cleanstone bauen')+'</button> <span id="phaseResult" role="status"></span></p><script type="module" src="/assets/massif-phase.js"></script>':'';
   const controllerVersion=Number(urnControllerReady(v));
-  const urnInfo='<p><a href="?urns=1">Urnen-Einzelziele</a> · '+(controllerVersion===2?'Zielchunk-Ladehilfe und Zusatzkanonen bereit':controllerVersion===1?'V1 aktiv · Zielchunk-Ladehilfe benötigt V2':'Wartet auf Homebox-Erweiterung')+' · <a download href="/assets/erebor-urnen-v2.py">V2-Update für Logge</a></p>';
+  const counts=urnCounts.get(v);
+  const urnInfo='<p><a href="?urns=1">Urnen-Einzelziele</a> · '+counts.found.toLocaleString('de-DE')+' erfasst · '+counts.assigned+' vergeben · '+counts.finished+' im Weltstand bestätigt</p><p>'+(controllerVersion===2?'Zielchunk-Ladehilfe und Zusatzkanonen bereit':controllerVersion===1?'V1 aktiv · Zielchunk-Ladehilfe benötigt V2':'Wartet auf Homebox-Erweiterung')+' · <a download href="/assets/erebor-urnen-v2.py">V2-Update für Logge</a></p>';
   const overview='<p>'+st.tiles.published.toLocaleString('de-DE')+' Baupläne · '+st.tiles.blocks.toLocaleString('de-DE')+' geplante Platzierungen · '+st.tiles.finished+' Kanonenabschlüsse · '+st.worldVerifiedColumns+' Spalten mit geprüften regulären Steinzielen nach Bauabschluss</p>'+urnInfo+control;
   return reply.header('Cache-Control','no-store').type('text/html; charset=utf-8').send(campusPage('<!doctype html><html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Erebor · Massiver Cleanstone</title><link rel="stylesheet" href="/assets/app.css?v=20261114-status-1"></head><body><!-- campus-navigation --><main><a href="/app?project=erebor#overview">← Erebor-Baupläne</a><h1>Massiver Cleanstone</h1>'+overview+'<p><a href="?site=K35">K35</a> · <a href="?column=X23_Z25">Dungeon bei X 149 / Z −9387</a> · <a href="?">Gesamtes Massiv</a></p><form>'+(urns?'<input type="hidden" name="urns" value="1">':'')+'<label>Standort <select name="site"><option value="">Alle</option>'+stations.map(s=>'<option '+(site===s.site?'selected':'')+'>'+s.site+'</option>').join('')+'</select></label> <button>Filtern</button></form><div class="table-wrap"><table><thead><tr><th>NBT herunterladen</th><th>Kanone</th><th>Anker X / Y / Z</th><th>Stein</th><th>Status</th></tr></thead><tbody>'+html+'</tbody></table></div><p>'+(page>1?'<a href="'+link(page-1)+'">Zurück</a> ':'')+(rows.length>100?'<a href="'+link(page+1)+'">Weiter</a>':'')+'</p></main></body></html>',req.actor,'orders'));
  });

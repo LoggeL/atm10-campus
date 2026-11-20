@@ -1,6 +1,7 @@
 import hashlib
 import importlib.util
 import json
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -31,6 +32,37 @@ class UpgradeTest(unittest.TestCase):
         self.assertEqual(patched.count('chunks.addRegionTicket(ticket,new ChunkPos(p),2,station.pos)'),1)
         self.assertNotIn('c.replaceBlockEntities=',patched)
         self.assertEqual(hashlib.sha256(v1.encode()).hexdigest(),update.V1)
+        subprocess.run(['node','--check','-'],input=patched,text=True,encoding='utf8',check=True)
+
+    def test_ticket_for_empty_reserved_station_and_only_its_own_plan(self):
+        fixture="""
+          const assert=require('node:assert/strict');
+          class BlockPos {
+            constructor(x,y,z){this.x=x;this.y=y;this.z=z}
+            distSqr(b){return (this.x-b.x)**2+(this.y-b.y)**2+(this.z-b.z)**2}
+            equals(b){return this.distSqr(b)===0}
+            getX(){return this.x} getY(){return this.y} getZ(){return this.z}
+          }
+          const ChunkPos=class{constructor(p){this.pos=p}}, ticket={}, held=[];
+          const chunks={addRegionTicket:(t,p)=>held.push(p.pos)};
+          const Components=new Proxy({},{get:(o,k)=>k});
+          const station={site:'K09B',pos:new BlockPos(0,64,0)};
+          const row={ready:true,empty:true,state:'STOPPED',upload:''};
+          const a=new BlockPos(4,62,30),values={SCHEMATIC_ANCHOR:a,SCHEMATIC_BOUNDS:new BlockPos(1,1,1),
+            SCHEMATIC_DEPLOYED:true,SCHEMATIC_MIRROR:'none',SCHEMATIC_ROTATION:'none'};
+          const item={get:key=>values[key]};
+          const run=()=>trackUrn(chunks,station,row,item,{},!row.empty);
+          urnRequests.K09B={file:'exact',pos:[4,62,30],until:Date.now()+45000};
+          assert.equal(run(),false);assert.equal(held.length,1);
+          urnRequests.K09B.until=0;assert.equal(run(),false);assert.equal(held.length,1);
+          row.empty=false;row.upload='other';
+          assert.equal(run(),false);assert.equal(held.length,1);
+          row.upload='exact';assert.equal(run(),true);assert.equal(held.length,2);assert(held[1].equals(a));
+          values.SCHEMATIC_BOUNDS=new BlockPos(2,1,1);assert.equal(run(),false);
+          values.SCHEMATIC_BOUNDS=new BlockPos(1,1,1);urnRequests.K09B.pos=[999,62,30];assert.equal(run(),false);
+          assert.equal(held.length,2);
+        """
+        subprocess.run(['node','-'],input=update.TRACK+fixture,text=True,encoding='utf8',check=True)
 
     def test_all_installed_slots_use_their_own_surveyed_position(self):
         source=root/'src/erebor-fleet'

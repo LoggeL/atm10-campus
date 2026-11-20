@@ -250,6 +250,12 @@ export function registerEreborQueue(app,campus){
   if(!current(c.version))return;
   const old=s.job;
   const aligned=old&&!verifyAlignment(old.desired,o,old.desired)&&same(o.components?.['create:schematic_bounds'],old.size);
+  // The old tracker could taint the initial input before its first shot.
+  // Clear that historical flag only after the native printer proves it is still at its initial cursor.
+  if(aligned&&automatic()&&report?.urnPreparation===2&&old.massif?.includes('_URN_')&&old.tainted&&
+     !old.started&&!old.placed&&unstarted({...old,tainted:false},o)){
+   old.tainted=false;
+  }
   // V1 may already have inserted this exact file before the tracker changed its mode.
   if(!aligned&&automatic()&&report?.urnPreparation===2&&old?.massif?.includes('_URN_')&&
      o.state==='PAUSED'&&o.status==='ready'&&o.amountPlaced===0&&o.flyingBlocks===0&&same(old.size,[1,1,1])&&
