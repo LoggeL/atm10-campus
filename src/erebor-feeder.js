@@ -25,6 +25,14 @@ export function verifyEreborAlignment(desired,observed,receipt){
  return verifyAlignment(expected,observed,expected);
 }
 
+// The empty printer returns to the fleet default after consuming a plan.
+// Only use this for an independently verified empty, stopped cannon.
+export function completedStoneOptions(desired,observed){
+ if(desired.blueprint?.includes('_URN_')&&observed?.replace_mode===2)
+  return {...desired.options,replace_mode:2};
+ return observedEreborOptions(desired,observed);
+}
+
 export function isStationStone(job,site){
  const d=job?.desired;
  return (job?.phase==='stone'||job?.phase==='build'&&job.massif&&needsSolidReplacement(d)) && d?.owner==='Erebor' && d.blueprint?.startsWith('EREBOR_STEIN_'+site+'_') &&

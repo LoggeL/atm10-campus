@@ -10,7 +10,7 @@ import {registerMassif} from './erebor-massif.js';
 import {parallelFleet,parallelLayout} from './erebor-parallel.js';
 import {Region} from './region.js';
 import {zipStore} from './zip.js';
-import {ereborFeeder,isStationStone,needsSolidReplacement,observedEreborOptions,verifyEreborAlignment as verifyAlignment} from './erebor-feeder.js';
+import {ereborFeeder,isStationStone,needsSolidReplacement,observedEreborOptions,completedStoneOptions,verifyEreborAlignment as verifyAlignment} from './erebor-feeder.js';
 import {Worker} from 'node:worker_threads';
 import {createHash,randomUUID} from 'node:crypto';
 import {readFileSync} from 'node:fs';
@@ -70,7 +70,7 @@ export function registerEreborQueue(app,campus){
  const massif=registerMassif(app,campus,parallelLayout.sites,version=>
   availableMassifSlots(parallelLayout.sites,liveCache,version,new Set(production.enabled(version)),
    cfg()?.phase==='stone' && helpers.isEnabled(version)),version=>
-   liveCache?.version===version&&liveCache.urnPreparation===1&&Math.abs(Date.now()-liveCache.at)<45000);
+   liveCache?.version===version&&[1,2].includes(liveCache.urnPreparation)&&Math.abs(Date.now()-liveCache.at)<45000?liveCache.urnPreparation:0);
  db.exec('CREATE TABLE IF NOT EXISTS erebor_resume(version INTEGER,site TEXT,slot TEXT,upload TEXT,expires INTEGER,result TEXT,PRIMARY KEY(version,site,slot))');
  const verifyStone=config.worldSources.live?(p,verifyStone)=>generate(p,{verifyStone}):null;
  const helpers=parallelFleet(db,production,choices,request,recordedFinish,resumePaused,verifyStone,massif);
@@ -197,10 +197,11 @@ export function registerEreborQueue(app,campus){
   const data={site,version:c.version};
   const signal=report?.stations?.[site],tracked=s.job;
   if(!choice&&tracked?.loaded&&signal&&Date.now()-report.at<15000){
-   if(signal.state==='STOPPED'&&['finished','schematicInvalid'].includes(signal.status)&&signal.empty&&(!signal.finish||tracked.tainted||massif.enabled(c.version))&&Date.now()/1000-tracked.seen>=90){
+   const urn=tracked.massif?.includes('_URN_');
+   if(signal.state==='STOPPED'&&['finished','schematicInvalid'].includes(signal.status)&&signal.empty&&(!signal.finish||tracked.tainted||massif.enabled(c.version))&&Date.now()/1000-tracked.seen>=(urn?4:90)){
     s.inserted=false;s.status='Wartet auf bestätigten Abschluss';
     if(!automatic()||!massif.enabled(c.version)||!verifyStone||!isStationStone(tracked,site)||signal.upload||
-       Date.now()-(tracked.lastWorldCheck||0)<120000)return;
+       Date.now()-(tracked.lastWorldCheck||0)<(urn?15000:120000))return;
     tracked.lastWorldCheck=Date.now();
     const entry=tracked.massif?null:production.catalog(p,site).find(e=>e.stage==='stone'&&e.name===tracked.desired.blueprint);
     if(!entry&&!tracked.massif)return;
@@ -211,7 +212,7 @@ export function registerEreborQueue(app,campus){
      const filled=await verifyStone(p,{bytes:original.bytes,anchor:tracked.desired.anchor,size:tracked.size,blocks:original.job.blocks,collectUrns:!!tracked.massif&&!tracked.massif.endsWith('_BE')});
     const {observed}=await request('erebor-inspect',data);
     if(!current(c.version)||!automatic()||choices.next(c.version,site)||!emptyStopped(observed)||observed.status!==signal.status||
-       !same(observed.options,observedEreborOptions(tracked.desired,observed.options)))return;
+       !same(observed.options,completedStoneOptions(tracked.desired,observed.options)))return;
     if(filled){
      tx(db,()=>{
       production.finish(c.version,site,tracked.desired.blueprint,new Date().toISOString());
@@ -249,6 +250,18 @@ export function registerEreborQueue(app,campus){
   if(!current(c.version))return;
   const old=s.job;
   const aligned=old&&!verifyAlignment(old.desired,o,old.desired)&&same(o.components?.['create:schematic_bounds'],old.size);
+  // V1 may already have inserted this exact file before the tracker changed its mode.
+  if(!aligned&&automatic()&&report?.urnPreparation===2&&old?.massif?.includes('_URN_')&&
+     o.state==='PAUSED'&&o.status==='ready'&&o.amountPlaced===0&&o.flyingBlocks===0&&same(old.size,[1,1,1])&&
+     same(o.components?.['create:schematic_bounds'],old.size)&&o.options?.replace_mode===2){
+   const legacy={...old.desired,options:{...old.desired.options,replace_mode:2}};
+   if(!verifyAlignment(legacy,o,legacy)){
+    const {options,...desired}=old.desired;
+    const {bytes}=massif.restore(c.version,site,'A',old.massif);
+    await request('erebor-prepare',{...data,desired,kind:'stone',size:old.size,nbtBase64:bytes.toString('base64')});
+    s.status='Urnenplan wird im sicheren Baumodus übernommen';return;
+   }
+  }
   if(old){
    const report=o.inputEmpty===true&&o.status==='finished'?await liveReport(c.version):null;
    if(!current(c.version))return;
@@ -335,6 +348,9 @@ export function registerEreborQueue(app,campus){
   const bytes=db.prepare('SELECT payload FROM erebor_queue_sites WHERE site=?').get(site).payload;
   if(!bytes)throw Error('Vorbereitete Datei fehlt.');
   const res=await request('erebor-prepare',{...data,desired,kind:j.phase,size:j.size,nbtBase64:Buffer.from(bytes).toString('base64')});
+  if(j.massif?.includes('_URN_')&&res.urnWarming===true&&res.applied===false){
+   s.status='Urnenziel reserviert · Zielchunk lädt';return;
+  }
   if(j.massif?.includes('_URN_')&&res.urnDeferred===true&&res.applied===false){
    tx(db,()=>{massif.deferUrn(c.version,site,j.massif);s.job=null;s.status='Urnenziel zurückgestellt · '+res.reason;persist(site,s);});
    return;

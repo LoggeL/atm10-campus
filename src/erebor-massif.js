@@ -121,7 +121,7 @@ export function registerMassif(app,campus,stations,availableSlots=()=>[],urnCont
  app.get(api,async(req,reply)=>{
   requireActor(req,'read');const v=project()?.current_version??0,s=status(v);
   const report=await campus.ereborLiveReport?.(v);
-  s.urns={controllerReady:urnControllerReady(v),...db.prepare("SELECT count(*) AS found,coalesce(sum(done),0) AS finished FROM erebor_massif_tiles WHERE v=? AND special=1 AND tile GLOB '*_URN_*_BE'").get(v)};
+  s.urns={controllerReady:!!urnControllerReady(v),controllerVersion:Number(urnControllerReady(v)),...db.prepare("SELECT count(*) AS found,coalesce(sum(done),0) AS finished,count(CASE WHEN done=0 AND site IS NOT NULL THEN 1 END) AS assigned FROM erebor_massif_tiles WHERE v=? AND special=1 AND tile GLOB '*_URN_*_BE'").get(v)};
   for(const row of s.active){
    const native=report?.stations?.[row.site+(row.slot==='A'?'':row.slot)],r=rowFor.get(v,row.tile);
    const expected=ereborUploadName(filename(v,row.site,row.tile)+'.nbt',r.sha);
@@ -177,7 +177,8 @@ export function registerMassif(app,campus,stations,availableSlots=()=>[],urnCont
   const html=rows.slice(0,100).map(r=>'<tr><td><a download href="'+api+'/'+r.tile+'.nbt?version='+v+'">'+r.tile+'</a></td><td>'+(r.site?r.site+r.slot:r.home||'Außer Reichweite')+'</td><td>'+[r.x,r.y,r.z].join(' / ')+'</td><td>'+r.blocks.toLocaleString('de-DE')+'</td><td>'+(r.done?r.tile.includes('_URN_')?'Stein im Weltstand bestätigt':'Kanone fertig':r.special?'<a href="'+api+'/sonderziele?tile='+r.tile+'">'+(r.tile.includes('_URN_')?'Urnenauftrag ansehen':'Geschützte Einzelziele ansehen')+'</a>':r.site?'Vergeben':'Offen')+'</td></tr>').join('');
   const control=actor.via==='session'&&actor.user.role==='admin'&&published(v)
    ?'<p><button type="button" id="phaseButton" data-version="'+v+'" data-stone="'+(!st.enabled)+'">'+(st.enabled?'Zur regulären Baufolge wechseln':'Nur Cleanstone bauen')+'</button> <span id="phaseResult" role="status"></span></p><script type="module" src="/assets/massif-phase.js"></script>':'';
-  const urnInfo='<p><a href="?urns=1">Urnen-Einzelziele</a> · '+(urnControllerReady(v)?'Homebox bereit':'Wartet auf Homebox-Erweiterung')+' · <a download href="/assets/erebor-urnen.py">Installer für Logge</a></p>';
+  const controllerVersion=Number(urnControllerReady(v));
+  const urnInfo='<p><a href="?urns=1">Urnen-Einzelziele</a> · '+(controllerVersion===2?'Zielchunk-Ladehilfe und Zusatzkanonen bereit':controllerVersion===1?'V1 aktiv · Zielchunk-Ladehilfe benötigt V2':'Wartet auf Homebox-Erweiterung')+' · <a download href="/assets/erebor-urnen-v2.py">V2-Update für Logge</a></p>';
   const overview='<p>'+st.tiles.published.toLocaleString('de-DE')+' Baupläne · '+st.tiles.blocks.toLocaleString('de-DE')+' geplante Platzierungen · '+st.tiles.finished+' Kanonenabschlüsse · '+st.worldVerifiedColumns+' Spalten mit geprüften regulären Steinzielen nach Bauabschluss</p>'+urnInfo+control;
   return reply.header('Cache-Control','no-store').type('text/html; charset=utf-8').send(campusPage('<!doctype html><html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Erebor · Massiver Cleanstone</title><link rel="stylesheet" href="/assets/app.css?v=20261114-status-1"></head><body><!-- campus-navigation --><main><a href="/app?project=erebor#overview">← Erebor-Baupläne</a><h1>Massiver Cleanstone</h1>'+overview+'<p><a href="?site=K35">K35</a> · <a href="?column=X23_Z25">Dungeon bei X 149 / Z −9387</a> · <a href="?">Gesamtes Massiv</a></p><form>'+(urns?'<input type="hidden" name="urns" value="1">':'')+'<label>Standort <select name="site"><option value="">Alle</option>'+stations.map(s=>'<option '+(site===s.site?'selected':'')+'>'+s.site+'</option>').join('')+'</select></label> <button>Filtern</button></form><div class="table-wrap"><table><thead><tr><th>NBT herunterladen</th><th>Kanone</th><th>Anker X / Y / Z</th><th>Stein</th><th>Status</th></tr></thead><tbody>'+html+'</tbody></table></div><p>'+(page>1?'<a href="'+link(page-1)+'">Zurück</a> ':'')+(rows.length>100?'<a href="'+link(page+1)+'">Weiter</a>':'')+'</p></main></body></html>',req.actor,'orders'));
  });
@@ -219,11 +220,11 @@ export function registerMassif(app,campus,stations,availableSlots=()=>[],urnCont
         UNION ALL SELECT json_extract(job,'$.desired.anchor') FROM erebor_helpers WHERE version=:v AND json_type(job,'$.desired.anchor')='array' AND json_extract(job,'$.massif') IS NULL)
        SELECT t.tile,((x-:x)*(x-:x)+(y-:y)*(y-:y)+(z-:z)*(z-:z)) AS d FROM erebor_massif_tiles t
        WHERE v=:v AND site IS NULL AND done=0 AND (special=0 OR (:urn AND special=1 AND tile GLOB '*_URN_*_BE' AND sx=1 AND sy=1 AND sz=1 AND blocks=1)) AND x BETWEEN :x-255 AND :x+255 AND d<65536
-       AND (:solids OR tile GLOB '*_LUFT')
+       AND (:solids OR tile GLOB '*_LUFT' OR (special=1 AND :urn))
        AND (special=0 OR NOT EXISTS (SELECT 1 FROM erebor_urn_retry u WHERE u.v=t.v AND u.tile=t.tile AND u.after>:now))
        AND json_array(x,y,z) NOT IN (SELECT anchor FROM active_catalog)
        AND (sy<=16 OR json_array(x,y+16,z) NOT IN (SELECT anchor FROM active_catalog))
-       ORDER BY special,(:primary AND tile NOT GLOB '*_LUFT') DESC,(home=:site) DESC,priority,d,tile`).all({x:pos[0],y:pos[1],z:pos[2],v,site,primary:Number(slot==='A'),solids:Number(allowSolids),urn:Number(slot==='A'&&urnControllerReady(v)),now:Date.now()});
+       ORDER BY special,(:primary AND tile NOT GLOB '*_LUFT') DESC,(home=:site) DESC,priority,d,tile`).all({x:pos[0],y:pos[1],z:pos[2],v,site,primary:Number(slot==='A'),solids:Number(allowSolids),urn:Number(urnControllerReady(v)>=2||(slot==='A'&&!!urnControllerReady(v))),now:Date.now()});
     if(!candidates.length)return null;
     const plan=preferences(v), key=site+slot;
     const chosen=candidates.find(candidate=>plan?.get(candidate.tile)===key) ?? candidates[0];
@@ -241,8 +242,8 @@ export function registerMassif(app,campus,stations,availableSlots=()=>[],urnCont
   return anchors;
  };
  return {enabled,reserve,occupied,lastBalancedAt:v=>balance?.version===v?balance.at:null,restore(v,site,slot,tile){const r=rowFor.get(v,tile);if(!r||r.site!==site||r.slot!==slot||r.done)throw Error('Massiv-Auftrag nicht mehr reserviert.');return load(v,site,slot,r);},
-  deferUrn(v,site,tile){
-   const changed=db.prepare("UPDATE erebor_massif_tiles SET site=NULL,slot=NULL WHERE v=? AND tile=? AND site=? AND slot='A' AND special=1 AND tile GLOB '*_URN_*_BE' AND done=0").run(v,tile,site);
+  deferUrn(v,site,tile,slot='A'){
+   const changed=db.prepare("UPDATE erebor_massif_tiles SET site=NULL,slot=NULL WHERE v=? AND tile=? AND site=? AND slot=? AND special=1 AND tile GLOB '*_URN_*_BE' AND done=0").run(v,tile,site,slot);
    if(!changed.changes)throw Error('Urnenauftrag nicht reserviert.');
    db.prepare('INSERT OR REPLACE INTO erebor_urn_retry VALUES(?,?,?)').run(v,tile,Date.now()+300000);
   },

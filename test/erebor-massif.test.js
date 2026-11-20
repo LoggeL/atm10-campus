@@ -110,5 +110,13 @@ test('reservations survive retries, respect physical reach and helper capability
   assert.equal(urn.desired.options.replace_block_entities,false);
   mass.deferUrn(12,'K01',urn.massif);
   assert.equal(mass.reserve(12,'K01','A'),null);
+  ready=2;
+  db.exec('DELETE FROM erebor_urn_retry');
+  const helperUrn=mass.reserve(12,'K02','C',false).job;
+  assert.equal(helperUrn.massif,urn.massif);
+  assert.equal(helperUrn.desired.options.replace_mode,0);
+  assert.throws(()=>mass.deferUrn(12,'K02',urn.massif,'A'));
+  mass.deferUrn(12,'K02',urn.massif,'C');
+  assert.equal(mass.reserve(12,'K02','C',false),null);
  }finally{for(const close of hooks)await close();db.close();}
 });
