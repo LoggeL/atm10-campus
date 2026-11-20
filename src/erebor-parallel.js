@@ -173,11 +173,21 @@ export function parallelFleet(db,production,choices,request,recordedFinish,resum
   const lastFirstStart=new Map();
   async function startFueledExtras(p,report,enabled,read,current){
     if(!report || Date.now()-report.at>=15000 || report.at>Date.now())return;
-    const ready=[];
+    const ready=[],retry=[];
     for(const station of parallelLayout.sites){
       if(!enabled(station.site))continue;
       for(const slot of slotsFor(station.site).slice(1)){
         const key=station.site+slot, signal=report.stations[key];
+        // A cold prepare can also lose its response before the input was inserted.
+        // Give one such idle slot a retry between batches using the normal guards.
+        if(report.urnPreparation===2&&signal?.ready&&signal.empty===true&&!signal.upload&&signal.state==='STOPPED'){
+          const row=lookup.get(p.current_version,station.site,slot);
+          if(row?.name?.includes('_URN_')&&/keine Antwort innerhalb|keine eindeutige RCON-Antwort/.test(row.message)){
+            const previous=lastFirstStart.get(key);
+            const last=previous?.file===row.name?previous.at:0;
+            if(Date.now()-last>=60000)retry.push({key,station,slot,signal,last,file:row.name});
+          }
+        }
         if(signal?.state!=='PAUSED'||signal.status!=='ready'||!signal.ready||!signal.aligned||signal.placed!==0)continue;
         const job=jobAt(p.current_version,station.site,slot);
         if(!isStationStone(job,station.site)||job.started||job.tainted||job.placed>0||
@@ -196,11 +206,12 @@ export function parallelFleet(db,production,choices,request,recordedFinish,resum
     // Interleave newly fueled machines with initial assignments on large fleets.
     // The same serialized service performs the native inspection, file and flight checks.
     ready.sort((a,b)=>a.last-b.last);
-    for(const r of ready.slice(0,3)){
+    retry.sort((a,b)=>a.last-b.last);
+    for(const r of [...ready.slice(0,3),...retry.slice(0,1)]){
       if(!current()||Date.now()-report.at>=15000)break;
       const active=()=>enabled(r.station.site);
       if(!active())continue;
-      lastFirstStart.set(r.key,{file:r.signal.upload,at:Date.now()});
+      lastFirstStart.set(r.key,{file:r.file??r.signal.upload,at:Date.now()});
       await service(p,r.station,r.slot,r.signal,report.at,active,read(r.station.site),current);
     }
   }
