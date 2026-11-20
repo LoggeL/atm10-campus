@@ -1,3 +1,4 @@
+import {interiorColumns,interiorGroup,interiorRelease,inRange,insideMassif} from './erebor-interior.js';
 import {groupOf,slotsFor} from './erebor-groups.js';
 import {cannonProgressRows} from './cannon-progress-rows.js';
 import {publishedPlan,selectionStore,unstarted} from './erebor-selection.js';
@@ -88,7 +89,42 @@ export function registerEreborQueue(app,campus){
    liveCache?.version===version&&[1,2].includes(liveCache.urnPreparation)&&Math.abs(Date.now()-liveCache.at)<45000?liveCache.urnPreparation:0);
  db.exec('CREATE TABLE IF NOT EXISTS erebor_resume(version INTEGER,site TEXT,slot TEXT,upload TEXT,expires INTEGER,result TEXT,PRIMARY KEY(version,site,slot))');
  const verifyStone=config.worldSources.live?(p,verifyStone)=>generate(p,{verifyStone}):null;
- const helpers=parallelFleet(db,production,choices,request,recordedFinish,resumePaused,verifyStone,massif);
+ const helpers=parallelFleet(db,production,choices,request,recordedFinish,resumePaused,verifyStone,massif,{candidate:interiorCandidate,blockStone:blockedStone});
+ const releases=interiorRelease(db),deferredInterior=new Map();
+ const blockedColumnRows=db.prepare('SELECT ix,iz FROM erebor_interior_columns WHERE v=?');
+ function blockedStone(p){
+  const rows=blockedColumnRows.all(p.current_version);
+  if(!rows.length)return ()=>false;
+  const base=JSON.parse(p.plan_json).mountainFill.bounds[0],released=new Set(rows.map(r=>r.ix+','+r.iz));
+  return e=>e.stage==='stone'&&e.origin&&interiorColumns(e.origin,[64,16,64],base).some(k=>released.has(k.join(',')));
+ }
+ async function interiorCandidate(p,site,position,taken){
+  if(!config.worldSources.live||!massif.enabled(p.current_version))return null;
+  const v=p.current_version,plan=JSON.parse(p.plan_json),base=plan.mountainFill.bounds[0];
+  const {open}=production.ordered(p,site),busy=releases.busy(v,base),first=new Map();
+  for(const e of open){
+   if(!interiorGroup(e.group)||!e.origin||!e.size)continue;
+   const k=e.origin[0]+','+e.origin[2],prior=first.get(k);
+   if(!prior||e.y<prior.y||e.y===prior.y&&e.stage==='clear')first.set(k,e);
+  }
+  const checks=new Map();
+  for(const e of [...first.values()].sort((a,b)=>a.y-b.y)){
+   if(taken.has(e.name)||e.unknownCells!==0||e.clearOmitted!==0||e.protectedCells!==0||
+      (deferredInterior.get(e.name)||0)>Date.now()||!inRange(e.origin,e.size,position))continue;
+   const cols=interiorColumns(e.origin,e.size,base);
+   if(cols.some(k=>busy.has(k.join(','))))continue;
+   if(!cols.every(k=>{const id=k.join(',');if(!checks.has(id))checks.set(id,releases.allows(v,[k]));return checks.get(id);}))continue;
+   if(!insideMassif(plan,e.origin,e.size)){deferredInterior.set(e.name,Date.now()+600000);continue;}
+   const pkg=published(p,site,e);
+   if(!await generate(p,{interiorCheck:{bytes:pkg.bytes,anchor:e.origin,kind:e.stage}})){
+    deferredInterior.set(e.name,Date.now()+600000);return null;
+   }
+   const after=releases.busy(v,base);
+   if(!current(v)||!massif.enabled(v)||!releases.allows(v,cols)||cols.some(k=>after.has(k.join(','))))return null;
+   return {...pkg,entry:e,job:{...pkg.job,interior:true},release:()=>releases.mark(v,cols)};
+  }
+  return null;
+ }
  campus.ereborHelpers=helpers;
  function available(p,site){
   const busy=helpers.reserved(p.current_version,site);
@@ -97,7 +133,8 @@ export function registerEreborQueue(app,campus){
   const taken=new Set([...busy,...done.keys()].map(geometry));
   const stoneOnly=busy.size||massif.enabled(p.current_version);
   const occupied=massif.occupied(p.current_version);
-  return open.filter(e=>!taken.has(geometry(e.name))&&!occupied.has(e.origin?.join(','))&&(!stoneOnly||e.stage==='stone'));
+  const blocked=blockedStone(p);
+  return open.filter(e=>!blocked(e)&&!taken.has(geometry(e.name))&&!occupied.has(e.origin?.join(','))&&(!stoneOnly||e.stage==='stone'));
  }
  const cfg=()=>db.prepare('SELECT * FROM erebor_queue_config WHERE id=1').get();
  const project=()=>db.prepare("SELECT current_version,plan_json FROM build_projects WHERE id='erebor'").get();
@@ -192,7 +229,7 @@ export function registerEreborQueue(app,campus){
  }
  async function startAutomatic(site,s,version,observed){
   const mode=production.mode(version,site),job=s.job;
-  if(!mode.enabled||!job||job.tainted||(massif.enabled(version)&&!job.massif&&job.phase!=='stone'))return;
+  if(!mode.enabled||!job||job.tainted||(massif.enabled(version)&&!job.massif&&!job.interior&&job.phase!=='stone'))return;
   if(observed.state==='RUNNING'){
    if(mode.started_upload!==job.desired.file)production.started(version,site,job.desired.file);
    return;
@@ -213,7 +250,7 @@ export function registerEreborQueue(app,campus){
   const signal=report?.stations?.[site],tracked=s.job;
   if(!choice&&tracked?.loaded&&signal&&Date.now()-report.at<15000){
    const urn=tracked.massif?.includes('_URN_');
-   if(signal.state==='STOPPED'&&['finished','schematicInvalid'].includes(signal.status)&&signal.empty&&(!signal.finish||tracked.tainted||massif.enabled(c.version))&&Date.now()/1000-tracked.seen>=(urn?4:90)){
+   if(!tracked.interior&&signal.state==='STOPPED'&&['finished','schematicInvalid'].includes(signal.status)&&signal.empty&&(!signal.finish||tracked.tainted||massif.enabled(c.version))&&Date.now()/1000-tracked.seen>=(urn?4:90)){
     s.inserted=false;s.status='Wartet auf bestätigten Abschluss';
     if(!automatic()||!massif.enabled(c.version)||!verifyStone||!isStationStone(tracked,site)||signal.upload||
        Date.now()-(tracked.lastWorldCheck||0)<(urn?15000:120000))return;
@@ -344,10 +381,12 @@ export function registerEreborQueue(app,campus){
   if(!s.job&&(automatic()||production.priority(c.version,site))){
    const mass=automatic()?massif.reserve(c.version,site,'A'):null;
    const next=mass?null:available(p,site)[0];
-   if(!next&&!mass){s.status=massif.enabled(c.version)?'Wartet auf erreichbare Steinpläne':'Baufolge erledigt';s.exhausted=true;return;}
-   const {job,bytes}=mass??published(p,site,next);
+   const inside=!mass&&!next&&automatic()?await interiorCandidate(p,site,parallelLayout.sites.find(s=>s.site===site).main,helpers.reserved(c.version,site)):null;
+   if(inside&&(!automatic()||!current(c.version)||choices.next(c.version,site)))return;
+   if(!next&&!mass&&!inside){s.status=massif.enabled(c.version)?'Wartet auf erreichbare Steinpläne':'Baufolge erledigt';s.exhausted=true;return;}
+   const {job,bytes}=mass??inside??published(p,site,next);
    s.job={...job,next:s.cursor};
-   db.prepare('UPDATE erebor_queue_sites SET state=?,payload=? WHERE site=?').run(JSON.stringify(s),bytes,site);
+   tx(db,()=>{inside?.release();db.prepare('UPDATE erebor_queue_sites SET state=?,payload=? WHERE site=?').run(JSON.stringify(s),bytes,site);});
   }
   if(!s.job){
    if(c.phase!=='stone'&&(massif.enabled(c.version)||helpers.reserved(c.version,site).size))return;
@@ -680,6 +719,7 @@ export function registerEreborQueue(app,campus){
   if(req.headers.origin&&req.headers.origin!==config.publicUrl)throw new HttpError(403,'Fremder Origin.');
   if(!p||!sites.includes(b?.site)||b.version!==layout.version||b.version!==p.current_version)throw new HttpError(409,'Kanonenplatz oder Projektversion nicht aktuell.');
   const {job,bytes}=publishedPlan(db,p,b);
+  if(job.phase==='stone'&&blockedStone(p)({stage:'stone',origin:job.desired.anchor}))throw new HttpError(409,'Diese Spalte ist bereits an den Innenausbau übergeben.');
   const reserved=helpers.reserved(b.version,b.site);
   if(reserved.has(job.desired.blueprint)||(reserved.size&&job.phase!=='stone'))throw new HttpError(409,'Zusatzkanonen bearbeiten noch die Steinfüllung.');
   if(!cfg())configureEreborQueue(db,{action:'pause',version:b.version},actor);

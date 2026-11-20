@@ -11,7 +11,7 @@ export const parallelLayout=JSON.parse(readFileSync(new URL('./erebor-fleet/para
 for(const station of parallelLayout.sites){
   for(const group of groupSites.get(station.site)??[])Object.assign(station,group.slots);
 }
-export function parallelFleet(db,production,choices,request,recordedFinish,resumePaused,verifyStone,massif){
+export function parallelFleet(db,production,choices,request,recordedFinish,resumePaused,verifyStone,massif,interior){
   db.exec(`CREATE TABLE IF NOT EXISTS erebor_helpers(
     version INTEGER NOT NULL, site TEXT NOT NULL, slot TEXT NOT NULL, name TEXT,
     job TEXT, completed INTEGER NOT NULL DEFAULT 0, message TEXT, PRIMARY KEY(version,site,slot),
@@ -36,7 +36,7 @@ export function parallelFleet(db,production,choices,request,recordedFinish,resum
     if(job.massif)massif.finish(v,job.massif,site,slot,urns);
     db.prepare("UPDATE erebor_helpers SET name=NULL,job=NULL,completed=completed+1,message='Abschnitt fertig' WHERE version=? AND site=? AND slot=?").run(v,site,slot);
   }
-  async function service(p,pair,slot,signal,at,enabled,main,current){
+  async function service(p,pair,slot,signal,at,enabled,main,current,allowInterior=false){
     const site=pair.site,key=site+slot,v=p.current_version;
     const row=lookup.get(v,site,slot);
     let job=row?.job&&JSON.parse(row.job);
@@ -76,7 +76,7 @@ export function parallelFleet(db,production,choices,request,recordedFinish,resum
       // Reserve before the first network await. SQLite persists the exact job across restarts.
       const taken=reserved(v,site);
       if(main.job)taken.add(main.job.desired.blueprint);
-      if(main.job && main.job.phase!=='stone'&&!main.job.massif)return;
+      if(main.job && main.job.phase!=='stone'&&!main.job.massif&&!main.job.interior)return;
       for(const entry of choices.waiting(v))if(entry.site===site){
         if(!entry.name.startsWith('EREBOR_STEIN_'))return;
         taken.add(entry.name);
@@ -87,19 +87,22 @@ export function parallelFleet(db,production,choices,request,recordedFinish,resum
       const geometry=name=>name.replace(/_V\d+$/,'');
       const occupied=new Set([...taken,...done.keys()].map(geometry));
       const busyAnchors=massif?.occupied(v);
-      const entry=open.find(f=>f.stage==='stone'&&!occupied.has(geometry(f.name))&&Array.isArray(f.origin)&&!busyAnchors?.has(f.origin.join(','))&&
+      const blocked=interior?.blockStone(p)??(()=>false);
+      const entry=open.find(f=>!blocked(f)&&f.stage==='stone'&&!occupied.has(geometry(f.name))&&Array.isArray(f.origin)&&!busyAnchors?.has(f.origin.join(','))&&
         Math.hypot(...f.origin.map((n,i)=>n-pair[slot][i]))<256);
       const mass=massif?.reserve(v,site,slot,same(signal.options,[2,false,false]));
-      if(!entry&&!mass)return;
-      const result=mass??publishedPlan(db,p,{...entry,version:v,site,file:entry.name+'.nbt'});
-      job={...result.job,source:mass?{massif:result.job.massif}:entry};
-      db.prepare(`INSERT INTO erebor_helpers(version,site,slot,name,job,message) VALUES(?,?,?,?,?,'Reserviert')
-        ON CONFLICT(version,site,slot) DO UPDATE SET name=excluded.name,job=excluded.job,message=excluded.message`).run(v,site,slot,job.desired.blueprint,JSON.stringify(job));
+      const inside=!entry&&!mass&&allowInterior?await interior?.candidate(p,site,pair[slot],taken):null;
+      if(!entry&&!mass&&!inside)return;
+      if(inside&&(!enabled()||!current()))return;
+      const result=mass??inside??publishedPlan(db,p,{...entry,version:v,site,file:entry.name+'.nbt'});
+      job={...result.job,source:mass?{massif:result.job.massif}:(inside?.entry??entry)};
+      tx(db,()=>{inside?.release();db.prepare(`INSERT INTO erebor_helpers(version,site,slot,name,job,message) VALUES(?,?,?,?,?,'Reserviert')
+        ON CONFLICT(version,site,slot) DO UPDATE SET name=excluded.name,job=excluded.job,message=excluded.message`).run(v,site,slot,job.desired.blueprint,JSON.stringify(job));});
     }
     const set=message=>save.run(JSON.stringify(job),message,v,site,slot);
     const args={site:key,version:v};
     const {options,...desired}=job.desired;
-    const operation={...args,desired,kind:'stone',size:job.size};
+    const operation={...args,desired,kind:job.interior?job.phase:'stone',size:job.size};
     const matches=o=>!verifyAlignment(job.desired,o,job.desired)&&same(o.components?.['create:schematic_bounds'],job.size);
     try{
       let filled=false,original;
@@ -230,10 +233,10 @@ export function parallelFleet(db,production,choices,request,recordedFinish,resum
         if(signal?.state && Date.now()-report.at<45000){
           try{
             const active=()=>enabled(pair.site);
-            const finished=await service(p,pair,slot,signal,report.at,active,read(pair.site),current);
+            const finished=await service(p,pair,slot,signal,report.at,active,read(pair.site),current,report.interiorHelpers===1);
             if(finished&&current()&&active()){
               // Re-check the empty cannon before loading its next reserved section this round.
-              await service(p,pair,slot,signal,report.at,active,read(pair.site),current);
+              await service(p,pair,slot,signal,report.at,active,read(pair.site),current,report.interiorHelpers===1);
             }
           }
           catch(e){

@@ -1,3 +1,4 @@
+import {interiorWorldCheck} from './erebor-interior.js';
 import {parentPort,workerData} from 'node:worker_threads';
 import {createHash} from 'node:crypto';
 import {mountainTiles,exportMountainTile} from './project-stone.js';
@@ -10,7 +11,8 @@ import {stoneTargetsFilled} from './erebor-stone-targets.js';
 const {project,world}=workerData;
 let bySite;
 let scene;
-function next({site,cursor,phase,architecture,verifyStone}) {
+function next({site,cursor,phase,architecture,verifyStone,interiorCheck}) {
+ if(interiorCheck)return interiorWorldCheck(world,interiorCheck);
  if(verifyStone)return stoneTargetsFilled(world,verifyStone);
  if(phase==='stone'){
   bySite??=Object.groupBy(mountainTiles(project.plan).tiles,t=>nearestStoneCannon(project.plan,t.origin)?.id);

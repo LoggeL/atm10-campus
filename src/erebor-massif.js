@@ -41,10 +41,12 @@ export function registerMassif(app,campus,stations,availableSlots=()=>[],urnCont
  }
  const blob=db.prepare('INSERT OR IGNORE INTO erebor_massif_blobs VALUES(?,?)');
  const addTile=db.prepare('INSERT OR IGNORE INTO erebor_massif_tiles(v,tile,x,y,z,sx,sy,sz,blocks,sha,home,priority,special) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)');
+ db.exec('CREATE TABLE IF NOT EXISTS erebor_interior_columns(v INTEGER,ix INTEGER,iz INTEGER,PRIMARY KEY(v,ix,iz))');
+ const released=db.prepare('SELECT 1 FROM erebor_interior_columns WHERE v=? AND ix=? AND iz=?');
  const prefix=(ix,iz)=>'X'+String(ix).padStart(2,'0')+'_Z'+String(iz).padStart(2,'0')+'_';
  const later=db.prepare('UPDATE erebor_massif_audits SET due=? WHERE v=? AND ix=? AND iz=?');
  function nextAudit(v){
-  const a=db.prepare('SELECT a.*,c.priority FROM erebor_massif_audits a JOIN erebor_massif_columns c USING(v,ix,iz) WHERE a.v=? AND a.verified IS NULL AND a.due<=? AND c.state=\'done\' ORDER BY a.due LIMIT 1').get(v,Date.now());
+  const a=db.prepare('SELECT a.*,c.priority FROM erebor_massif_audits a JOIN erebor_massif_columns c USING(v,ix,iz) WHERE a.v=? AND NOT EXISTS (SELECT 1 FROM erebor_interior_columns i WHERE i.v=a.v AND i.ix=a.ix AND i.iz=a.iz) AND a.verified IS NULL AND a.due<=? AND c.state=\'done\' ORDER BY a.due LIMIT 1').get(v,Date.now());
   if(!a)return null;
   const pending=db.prepare('SELECT 1 FROM erebor_massif_tiles WHERE v=? AND tile GLOB ? AND special=0 AND done=0 LIMIT 1').get(v,prefix(a.ix,a.iz)+'*');
   if(pending){later.run(Date.now()+300000,v,a.ix,a.iz);return null;}
@@ -73,6 +75,7 @@ export function registerMassif(app,campus,stations,availableSlots=()=>[],urnCont
    });
    if(closed||!current(v))return;
    tx(db,()=>{
+    if(released.get(v,col.ix,col.iz))return;
     const audit=col.generation!==undefined;
     let rows=data.rows;
     if(audit){
@@ -221,16 +224,16 @@ export function registerMassif(app,campus,stations,availableSlots=()=>[],urnCont
     const candidates=db.prepare(`WITH active_catalog(anchor) AS MATERIALIZED (
         SELECT json_extract(state,'$.job.desired.anchor') FROM erebor_queue_sites WHERE json_type(state,'$.job.desired.anchor')='array' AND json_extract(state,'$.job.massif') IS NULL
         UNION ALL SELECT json_extract(job,'$.desired.anchor') FROM erebor_helpers WHERE version=:v AND json_type(job,'$.desired.anchor')='array' AND json_extract(job,'$.massif') IS NULL)
-       SELECT t.tile,((x-:x)*(x-:x)+(y-:y)*(y-:y)+(z-:z)*(z-:z)) AS d FROM erebor_massif_tiles t
+       SELECT t.tile,t.special,((x-:x)*(x-:x)+(y-:y)*(y-:y)+(z-:z)*(z-:z)) AS d FROM erebor_massif_tiles t
        WHERE v=:v AND site IS NULL AND done=0 AND (special=0 OR (:urn AND special=1 AND tile GLOB '*_URN_*_BE' AND sx=1 AND sy=1 AND sz=1 AND blocks=1)) AND x BETWEEN :x-255 AND :x+255 AND d<65536
        AND (:solids OR tile GLOB '*_LUFT' OR (special=1 AND :urn))
        AND (special=0 OR NOT EXISTS (SELECT 1 FROM erebor_urn_retry u WHERE u.v=t.v AND u.tile=t.tile AND u.after>:now))
        AND json_array(x,y,z) NOT IN (SELECT anchor FROM active_catalog)
        AND (sy<=16 OR json_array(x,y+16,z) NOT IN (SELECT anchor FROM active_catalog))
-       ORDER BY special,(:primary AND tile NOT GLOB '*_LUFT') DESC,(home=:site) DESC,priority,d,tile`).all({x:pos[0],y:pos[1],z:pos[2],v,site,primary:Number(slot==='A'),solids:Number(allowSolids),urn:Number(urnControllerReady(v)>=2||(slot==='A'&&!!urnControllerReady(v))),now:Date.now()});
+       ORDER BY special DESC,(:primary AND tile NOT GLOB '*_LUFT') DESC,(home=:site) DESC,priority,d,tile`).all({x:pos[0],y:pos[1],z:pos[2],v,site,primary:Number(slot==='A'),solids:Number(allowSolids),urn:Number(urnControllerReady(v)>=2||(slot==='A'&&!!urnControllerReady(v))),now:Date.now()});
     if(!candidates.length)return null;
     const plan=preferences(v), key=site+slot;
-    const chosen=candidates.find(candidate=>plan?.get(candidate.tile)===key) ?? candidates[0];
+    const chosen=candidates.find(candidate=>candidate.special) ?? candidates.find(candidate=>plan?.get(candidate.tile)===key) ?? candidates[0];
     r=rowFor.get(v,chosen.tile);
     db.prepare('UPDATE erebor_massif_tiles SET site=?,slot=? WHERE v=? AND tile=?').run(site,slot,v,r.tile);
    }

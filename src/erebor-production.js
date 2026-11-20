@@ -46,7 +46,7 @@ export function productionStore(db) {
     const architecture=[];
     const arch=db.prepare("SELECT package_id,report_json FROM project_architecture_packages WHERE project_id='erebor' AND base_version=? AND revision=? AND coalesce(json_extract(report_json,'$.finishing'),0)=0 ORDER BY package_id").all(version,DESIGN_REVISION);
     for(const pkg of arch) for(const f of JSON.parse(pkg.report_json).files){
-      if(f.cannon===site) architecture.push({name:f.fileName.slice(0,-4),sha256:f.sha256,stage:f.kind,blocks:f.blocks,y:f.origin[1],sourceVersion:version,revision:DESIGN_REVISION,part:pkg.package_id});
+      if(f.cannon===site) architecture.push({name:f.fileName.slice(0,-4),sha256:f.sha256,stage:f.kind,group:f.group,origin:f.origin,size:f.size,protectedCells:f.protectedCells,unknownCells:f.unknownCells,clearOmitted:f.clearOmitted,blocks:f.blocks,y:f.origin[1],sourceVersion:version,revision:DESIGN_REVISION,part:pkg.package_id});
     }
     architecture.sort((a,b)=>phaseOrder[a.stage]-phaseOrder[b.stage] || a.y-b.y || a.name.localeCompare(b.name));
     files.push(...architecture);
