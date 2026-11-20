@@ -45,12 +45,13 @@ export function massifProgress(db, version, sites) {
     filling = { solid: measure(), cavity: measure(), urn: measure(), manual: measure() };
   const rows = db
     .prepare(
-      `SELECT coalesce(site,home) AS owner,
+      `WITH packed AS MATERIALIZED (SELECT json_extract(pt.value,'$.tile') AS tile,j.site FROM erebor_urn_jobs j,json_each(j.points) pt WHERE j.v=:v)
+    SELECT coalesce(packed.site,t.site,t.home) AS owner,
     CASE WHEN special AND tile GLOB '*_URN_*_BE' THEN 'urn' WHEN special THEN 'manual' WHEN tile GLOB '*_LUFT' THEN 'cavity' ELSE 'solid' END AS kind,
-    CASE WHEN done THEN 'done' WHEN site IS NOT NULL THEN 'inProgress' ELSE 'open' END AS state,
-    count(*) AS parts, sum(blocks) AS blocks FROM erebor_massif_tiles WHERE v=? GROUP BY 1,2,3`,
+    CASE WHEN done THEN 'done' WHEN coalesce(packed.site,t.site) IS NOT NULL THEN 'inProgress' ELSE 'open' END AS state,
+    count(*) AS parts, sum(blocks) AS blocks FROM erebor_massif_tiles t LEFT JOIN packed USING(tile) WHERE t.v=:v GROUP BY 1,2,3`,
     )
-    .all(version);
+    .all({v:version});
   for (const { owner, kind, state, parts, blocks } of rows) {
     const task = filling[kind];
     add(task, state, parts);

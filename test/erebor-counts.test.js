@@ -11,7 +11,7 @@ test('counter projection separates catalog history from massif and deduplicates 
   db.exec(`CREATE TABLE erebor_queue_config(id,version,phase);
    CREATE TABLE project_stone_packages(project_id,version,cannon,part,report_json);
    CREATE TABLE project_architecture_packages(project_id,base_version,revision,package_id,report_json);
-   CREATE TABLE erebor_massif_runs(v); CREATE TABLE erebor_massif_tiles(v,tile,home,site,slot,done,special DEFAULT 0,blocks DEFAULT 0);`);
+   CREATE TABLE erebor_massif_runs(v); CREATE TABLE erebor_urn_jobs(v,site,points); CREATE TABLE erebor_massif_tiles(v,tile,home,site,slot,done,special DEFAULT 0,blocks DEFAULT 0);`);
   const production=productionStore(db),project={current_version:12,plan_json:'{}'};
   const files=['ACTIVE_V12','WAIT_V12','DONE_V12','WAIT_V12'].map(name=>({fileName:name+'.nbt',cannon:'K01',origin:[0,0,0]}));
   db.prepare('INSERT INTO project_stone_packages VALUES(?,?,?,?,?)').run('erebor',12,'K01',1,JSON.stringify({files}));

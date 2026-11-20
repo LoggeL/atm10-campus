@@ -9,7 +9,7 @@ test('fleet ETA compares outstanding automatic volume to recent receipts and sur
   const now = Date.parse('2026-11-18T15:00:00Z');
   try {
     db.exec(`CREATE TABLE erebor_massif_runs(v,created);
-      CREATE TABLE erebor_massif_tiles(v,tile,home,site,special,done,blocks);
+      CREATE TABLE erebor_urn_jobs(v,site,points); CREATE TABLE erebor_massif_tiles(v,tile,home,site,special,done,blocks);
       CREATE TABLE erebor_finished_plans(version,site,name,finished_at);
       INSERT INTO erebor_massif_runs VALUES(12,'2026-11-17T00:00:00.000Z');
       INSERT INTO erebor_massif_tiles VALUES

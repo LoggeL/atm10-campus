@@ -5,10 +5,11 @@ import {publishedPlan,selectionStore,unstarted} from './erebor-selection.js';
 import {productionStore} from './erebor-production.js';
 import {projectProgress,massifForecast} from './erebor-progress.js';
 import {availableMassifSlots} from './erebor-balance.js';
+import {surfaceOverview} from './api-erebor-surface.js';
 import {dashboardData} from './erebor-dashboard.js';
 import {placementThroughput} from './erebor-throughput.js';
 import {registerMassif} from './erebor-massif.js';
-import {witnessedUrn} from './erebor-manual-urn.js';
+import {witnessedUrn,readyUrnPack} from './erebor-manual-urn.js';
 import {parallelFleet,parallelLayout} from './erebor-parallel.js';
 import {Region} from './region.js';
 import {zipStore} from './zip.js';
@@ -423,7 +424,33 @@ export function registerEreborQueue(app,campus){
  }
  // Reconcile fast single-block prints between dispatch batches. A full fleet pass
  // can take minutes; an empty input is normal even if the start reply was lost.
- const lastUrnCheck=new Map();
+ const lastUrnCheck=new Map(),lastPackStart=new Map();
+ // A failed first-start read leaves a valid prepared main waiting through the helper rotation.
+ // On the same queue lease, retry one eligible main at each fresh fleet report.
+ async function startReadyMainPack(v,report){
+  if(report?.urnPacks!==3||!current(v)||!massif.enabled(v)||Date.now()-report.at>=15000)return;
+  const eligible=production.enabled(v).flatMap(site=>{
+   const state=read(site),job=state.job;
+   if(!readyUrnPack(job,report.stations?.[site])||choices.next(v,site)||
+      production.mode(v,site).started_upload===job.desired.file)return [];
+   const last=lastPackStart.get(site);
+   return [{site,state,job,at:last?.file===job.desired.file?last.at:0}];
+  }).filter(r=>Date.now()-r.at>=30000).sort((a,b)=>a.at-b.at);
+  if(!eligible.length)return;
+  const {site,state,job}=eligible[0];
+  lastPackStart.set(site,{file:job.desired.file,at:Date.now()});
+  const still=()=>current(v)&&massif.enabled(v)&&production.mode(v,site).enabled&&
+   !choices.next(v,site)&&read(site).job?.desired.file===job.desired.file;
+  try{
+   const {observed}=await request('erebor-inspect',{site,version:v});
+   if(!still()||verifyAlignment(job.desired,observed,job.desired)||
+      !same(observed.components?.['create:schematic_bounds'],job.size)||
+      observed.state!=='PAUSED'||observed.status!=='ready'||!unstarted(job,observed))return;
+   observe(site,state,observed);
+   await startAutomatic(site,state,v,observed);
+  }catch(e){state.status=e.message;}
+  if(still()){state.checked=new Date().toISOString();persist(site,state);}
+ }
  async function reconcileUrns(p,report){
   const v=p.current_version;
   if(!verifyStone||report?.urnPreparation!==2||!massif.enabled(v)||!current(v)||Date.now()-report.at>=15000)return;
@@ -465,6 +492,7 @@ export function registerEreborQueue(app,campus){
   try{
    const archive=c.archive?JSON.parse(c.archive):null;
    let report=await liveReport(c.version);
+   await startReadyMainPack(c.version,report);
    await reconcileUrns(p,report);
    for(const site of new Set([...active,...(c.enabled&&c.phase!=='finished'?sites:[])])){
     if(!current(c.version))return;
@@ -487,6 +515,7 @@ export function registerEreborQueue(app,campus){
     const report=await liveReport(c.version);
     await helpers.tick(p,report,()=>c.phase==='stone'&&helpers.isEnabled(c.version),read,renew,async()=>{
      const fresh=await liveReport(c.version);
+     await startReadyMainPack(c.version,fresh);
      await reconcileUrns(p,fresh);
      return fresh;
     });
@@ -568,6 +597,7 @@ export function registerEreborQueue(app,campus){
   counter.throughput=throughput.read(report,rows);
   if(dashboard){
    Object.assign(counter,dashboardData(db,p.current_version,sites,report,jobs,filling,massif));
+   counter.surface=surfaceOverview(db,p);
    counter.forecast=massifForecast(db,p.current_version,filling,counter.balance.enabled);
   }
   return reply.header('Cache-Control','private, no-store').send(counter);

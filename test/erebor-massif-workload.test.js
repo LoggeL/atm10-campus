@@ -6,7 +6,7 @@ import {massifProgress} from '../src/erebor-progress.js';
 test('unfinished automatic volume includes pending reservations and keeps manual and unassigned work separate',()=>{
   const db=new DatabaseSync(':memory:');
   try {
-    db.exec(`CREATE TABLE erebor_massif_tiles(v,tile,home,site,special,done,blocks);
+    db.exec(`CREATE TABLE erebor_urn_jobs(v,site,points); CREATE TABLE erebor_massif_tiles(v,tile,home,site,special,done,blocks);
       INSERT INTO erebor_massif_tiles VALUES
       (12,'SOLID','K01',NULL,0,0,100),(12,'CAVITY_LUFT','K02','K01',0,0,40),
       (12,'TARGET_BE','K01',NULL,1,0,9),(12,'DONE','K01',NULL,0,1,999),(12,'UNASSIGNED',NULL,NULL,0,0,3)`);

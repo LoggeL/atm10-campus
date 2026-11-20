@@ -25,15 +25,16 @@ export function dashboardData(db, version, sites, report, jobs, filling, massif,
       const state = cannonState(signal, job);
       const matched = ['placing', 'searching', 'waiting'].includes(state);
       const tile = reserved.get(site + slot);
+      const packed = job?.massif?.includes('_URN_PACK_');
       return {
         site,
         slot,
         state,
         reason: signal?.status ?? null,
         file: job?.desired?.blueprint ?? null,
-        tile: tile?.tile ?? null,
+        tile: packed ? job.massif : tile?.tile ?? null,
         home: tile?.home ?? null,
-        planBlocks: tile?.blocks ?? job?.blocks ?? null,
+        planBlocks: packed ? job.blocks : tile?.blocks ?? job?.blocks ?? null,
         placed: matched && Number.isSafeInteger(signal.placed) ? signal.placed : null,
         total:
           matched && Number.isSafeInteger(signal.total) && signal.total > 0 && signal.total >= signal.placed

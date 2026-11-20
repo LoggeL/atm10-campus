@@ -104,6 +104,7 @@ const [prepared,architecture,manifest,icons]=await Promise.all([api('/api/projec
   if($('surfaceCatalog')){
    const parts=surface?.parts.filter(p=>p.files>0)||[];
    $('surfaceCatalog').hidden=!parts.length;
+   if(parts.length&&new URLSearchParams(location.search).get('surface')==='1'&&!$('surfaceCatalog').dataset.opened){$('surfaceCatalog').open=true;$('surfaceCatalog').dataset.opened='1';$('surfaceCatalog').scrollIntoView({block:'start'});}
    $('surfaceDownloads').innerHTML=parts.map(p=>'<p><a download href="/api/projects/erebor/landschaft/bauplaene/'+encodeURIComponent(p.id)+'/'+encodeURIComponent(p.id)+'.zip">'+esc(p.id)+' · '+fmt(p.files)+' Schematics (ZIP)</a> · '+fmt(p.blocks)+' Blöcke</p>').join('');
   }
   const finishes=architecture.packages.filter(p=>p.finishing&&p.group!=='E01'&&p.files.length);

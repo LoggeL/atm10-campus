@@ -24,6 +24,15 @@ export function freshFleet(data, now = Date.now()) {
     rows: fresh ? data.fleet : data.fleet.map((row) => ({ ...row, state: 'unknown', placed: null, total: null })),
   };
 }
+export function landscapePanel(surface){
+ if(!surface)return '<p>Für die aktuelle Bergversion sind keine Landschaftspläne veröffentlicht.</p>';
+ return '<div class="facts"><span><b>'+fmt(surface.published)+' / '+fmt(surface.regions)+'</b> Regionen veröffentlicht</span>'+
+  '<span><b>'+fmt(surface.files)+'</b> Schematics</span><span><b>'+fmt(surface.blocks)+'</b> geplante Blöcke</span></div>'+
+  '<p class="volume">Erde und Wald an den unteren Hängen · '+fmt(surface.trees)+' geplante Bäume · Schneegipfel auf Y '+fmt(surface.summitY)+'</p>'+
+  '<p class="meta">Der Baufortschritt der Außenhaut wird noch nicht gemessen.</p>'+
+  '<p class="volume"><a href="/app?project=erebor&amp;surface=1#overview">Landschafts-Baupläne öffnen</a> · <a href="/projects?id=erebor#landschaft">Höhenprofil ansehen</a></p>';
+}
+
 export function workloadDetails(massif, unassigned) {
   const w = massif?.workload;
   if (!w) return '<p>Der veröffentlichte Blockumfang ist unbekannt.</p>';
@@ -35,7 +44,7 @@ export function workloadDetails(massif, unassigned) {
     ' in zugewiesenen Teilen. Der laufende Druckfortschritt ist darin enthalten.</p>' +
     '<p>' +
     fmt(w.manualBlocks) +
-    ' Planblöcke in manuellen Sonderzielen. ' +
+    ' Zielblöcke außerhalb der automatischen Urnenaufträge. ' +
     fmt(unassigned?.total) +
     ' veröffentlichte Teile ohne Stationszuordnung. Weitere Weltprüfungen können neue Teile ergeben.</p>'
   );
@@ -68,7 +77,7 @@ export function stationCounts(row) {
         fmt(mass.workload.grossBlocks) +
         ' automatische Planblöcke ausstehend, davon ' +
         fmt(mass.workload.assignedBlocks) +
-        ' zugewiesen. Sonderziele: ' +
+        ' zugewiesen. Gesondert zu prüfen sind ' +
         fmt(mass.workload.manualBlocks) +
         ' Planblöcke.</p>'
       : '') +

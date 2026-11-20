@@ -1,3 +1,4 @@
+import {isDeepStrictEqual as same} from 'node:util';
 import {createHash} from 'node:crypto';
 import {stoneNBT} from './project-stone.js';
 
@@ -14,6 +15,14 @@ export function manualUrn(column,origin,oldestTargetSave=0){
 
 // The single block may land before the controller can read back its start.
 // Match Minecraft's retained input -> output transition to this exact file.
+export function readyUrnPack(job, signal){
+ return !!job?.massif?.includes('_URN_PACK_') && !job.started && !job.placed && !job.tainted &&
+  signal?.ready && signal.aligned && signal.placed===0 && signal.fuel>0 &&
+  signal.state==='PAUSED' && signal.status==='ready' && signal.upload===job.desired.file &&
+  signal.owner===job.desired.owner && same(signal.anchor,job.desired.anchor) &&
+  same(signal.size,job.size) && same(signal.options,[0,false,false]);
+}
+
 export function witnessedUrn(job,signal,at){
  const r=signal?.finish;
  return job?.massif?.includes('_URN_') && (job.blocks===1||job.massif.includes('_URN_PACK_')&&job.blocks>1) && signal.ready && signal.empty===true &&

@@ -5,6 +5,18 @@ import {tx,logActivity} from './db.js';
 import {surfaceParts} from './erebor-surface.js';
 import {storedZipEntry} from './zip.js';
 
+// Publication totals are distinct from blocks placed in the Minecraft world.
+export function surfaceOverview(db,project){
+ const v=project.current_version;
+ const row=db.prepare('SELECT revision,draft FROM erebor_landscape WHERE project_version=?').get(v);
+ if(!row)return null;
+ const draft=JSON.parse(row.draft),parts=surfaceParts(JSON.parse(project.plan_json),draft);
+ const totals=db.prepare(`SELECT count(*) AS published,coalesce(sum(json_extract(summary,'$.files')),0) AS files,
+  coalesce(sum(json_extract(summary,'$.blocks')),0) AS blocks,coalesce(sum(json_extract(summary,'$.trees')),0) AS trees
+  FROM erebor_surface_parts WHERE v=? AND r=?`).get(v,row.revision);
+ return {revision:row.revision,regions:parts.length,summitY:draft.summit[1],...totals};
+}
+
 export function registerSurface(app,campus){
  const {db,config}=campus,path='/api/projects/erebor/landschaft/bauplaene';
  db.exec('CREATE TABLE IF NOT EXISTS erebor_surface_parts(v INTEGER,r INTEGER,id TEXT,version INTEGER,summary TEXT,report TEXT,zip BLOB,PRIMARY KEY(v,r,id))');

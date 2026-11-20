@@ -1,4 +1,4 @@
-import {states,borrowed,freshFleet,workloadDetails,stationCounts,slotDetail,forecastView} from './erebor-progress-view.js?v=20261114-status-1';
+import {states,borrowed,freshFleet,workloadDetails,stationCounts,slotDetail,forecastView,landscapePanel} from './erebor-progress-view.js?v=20261121-landschaft';
 import {esc,fmt} from './format.js?v=20261114-status-1';
 import {api,linkStation} from './campus-client.js?v=20261114-status-1';
 const el = id => document.getElementById(id);
@@ -31,7 +31,7 @@ function renderSummary(fleet) {
 function renderTasks() {
   const f = data.filling;
   const rows = [
-    ['Festgestein ersetzen',f?.solid],['Hohlräume füllen',f?.cavity],['Urnen durch Cleanstone ersetzen',f?.urn],['Manuelle Sonderziele',f?.manual],
+    ['Festgestein ersetzen',f?.solid],['Hohlräume füllen',f?.cavity],['Urnen automatisch ersetzen',f?.urn],
     ['Cleanstone-Katalog',data.stages.stone],['Aushub',data.stages.clear],['Architektur bauen',data.stages.build]
   ];
   el('tasks').innerHTML = rows.map(([name,row])=>'<tr><th scope="row">'+name+'</th><td><span class="progress-cell">'+
@@ -82,7 +82,11 @@ async function refresh() {
     data=await api('/api/projects/erebor/dashboard');el('error').hidden=true;
     el('forecast').innerHTML=forecastView(data.forecast);
     el('stamp').textContent='Stand '+time(data.capturedAt)+' Uhr';
-    renderTasks();el('quantities').innerHTML=workloadDetails(data.massif,data.unassignedMassif);render();
+    renderTasks();
+    el('landscape').innerHTML=landscapePanel(data.surface);
+    const manual=data.filling?.manual;
+    el('quantities').innerHTML=workloadDetails(data.massif,data.unassignedMassif)+(manual?.open?'<p>'+fmt(manual.open)+' offene Sonderpläne für sonstige Block-Entities. <a href="/api/projects/erebor/stone/massif/plans?special=1">Ziele ansehen</a></p>':'');
+    render();
   }catch(error){
     el('forecast').innerHTML=forecastView({state:'offline'});
     if(data){data.telemetryAt=null;render();}

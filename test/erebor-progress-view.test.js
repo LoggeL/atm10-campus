@@ -56,7 +56,7 @@ test('dashboard keeps station remainder, separate stage totals, assigned block v
   for (const t of [
     '140',
     'davon 40',
-    '9 Planblöcke in manuellen Sonderzielen',
+    '9 Zielblöcke außerhalb der automatischen Urnenaufträge',
     '2 veröffentlichte Teile ohne Stationszuordnung',
   ])
     assert.ok(html.includes(t), t);
