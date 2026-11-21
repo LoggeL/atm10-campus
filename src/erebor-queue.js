@@ -531,7 +531,7 @@ export function registerEreborQueue(app,campus){
      const check={bytes:pkg.bytes,anchor:pkg.job.desired.anchor,kind:'surface'};
      const done=await generate(p,{interiorCheck:{...check,completed:true,minimumSave:Math.floor(job.seen||0)*1000}});
      if(!done){
-      const safe=await generate(p,{interiorCheck:{...check,details:true}});
+      const safe=await generate(p,{interiorCheck:{...check,details:true,resumeSurface:true}});
       if(safe!==true){note(typeof safe==='string'?safe:'Weltprüfung offen');continue;}
      }
      const {observed}=await request('erebor-inspect',{site:key,version:v});

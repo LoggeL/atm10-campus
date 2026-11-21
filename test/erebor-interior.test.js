@@ -40,4 +40,11 @@ test('surface admits supported air, preserves existing stone and confirms only t
  block='minecraft:stone';assert.equal(interiorWorldCheck('.',plan),false);
  assert.match(interiorWorldCheck('.',{...plan,details:true}),/0 \/ 0 \/ 0: minecraft:stone vorhanden, minecraft:snow_block geplant/);
  block='minecraft:snow_block';assert.ok(interiorWorldCheck('.',{...plan,completed:true}));
+ const soil={...plan,bytes:tileNBT([{}, {name:'minecraft:dirt'}],cells,'surface').bytes};
+ block='minecraft:grass_block';
+ assert.equal(interiorWorldCheck('.',soil),false);
+ assert.equal(interiorWorldCheck('.',{...soil,resumeSurface:true}),true);
+ assert.equal(interiorWorldCheck('.',{...soil,resumeSurface:true,completed:true}),false);
+ block='minecraft:stone';
+ assert.equal(interiorWorldCheck('.',{...soil,resumeSurface:true}),false);
 });

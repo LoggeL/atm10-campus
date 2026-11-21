@@ -48,7 +48,7 @@ export function insideMassif(plan,origin,size){
  return true;
 }
 const air=name=>['minecraft:air','minecraft:cave_air','minecraft:void_air'].includes(name);
-export function interiorWorldCheck(world,{bytes,anchor,kind,completed=false,minimumSave=0,outdoor=false,details=false}){
+export function interiorWorldCheck(world,{bytes,anchor,kind,completed=false,minimumSave=0,outdoor=false,details=false,resumeSurface=false}){
  const rejected=reason=>details?reason:false;
  const plan=parseStructure(bytes,completed);
  if(plan.entities||plan.blockEntities||!['build','clear','surface'].includes(kind))return false;
@@ -83,7 +83,11 @@ export function interiorWorldCheck(world,{bytes,anchor,kind,completed=false,mini
   if(completed){
    if(!matches||(!sapling&&Object.entries(pt.properties??{}).some(([key,val])=>state.Properties?.[key]!==val)))return false;
   }else if(kind==='surface'){
-   if(!matches&&!air(name))return rejected([x,y,z].join(' / ')+': '+name+' vorhanden, '+pt.name+' geplant');
+   // Grass spreads onto exposed dirt and reverts under a solid cover. The
+   // fill-only printer may keep either soil when resuming an interrupted job.
+   const dirtAndGrass=resumeSurface&&((pt.name==='minecraft:dirt'&&name==='minecraft:grass_block')||
+    (pt.name==='minecraft:grass_block'&&name==='minecraft:dirt'));
+   if(!matches&&!dirtAndGrass&&!air(name))return rejected([x,y,z].join(' / ')+': '+name+' vorhanden, '+pt.name+' geplant');
    if(sapling&&!grown&&!saplingSoil(planned.get(index(pt)-sx*sz)??at(x,y-1,z).Name))return rejected('Pflanzboden fehlt bei '+[x,y,z].join(' / '));
    if(!pt.name.endsWith('_leaves')&&!planned.has(index(pt)-sx*sz)&&air(at(x,y-1,z).Name))return rejected('Untergrund fehlt bei '+[x,y,z].join(' / '));
   }else if(!matches&&!air(name)&&name!=='minecraft:stone'&&!(outdoor&&/^minecraft:(?:dirt|grass_block|gravel|sand|andesite|diorite|granite|tuff|deepslate)$/.test(name)))return false;
