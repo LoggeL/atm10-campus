@@ -12,6 +12,7 @@ import { cannonRange, cannonTarget, reachableCannons } from './cannon-range.js';
 import { createCannonBlueprints } from './cannon-blueprints.js';
 import { isEreborStation } from './erebor-feeder.js';
 import { DESIGN_REVISION } from './erebor-design.js';
+import { landscapeFiles } from './erebor-landscape-work.js';
 import { registerEreborMeOrder, stationSource } from './erebor-me-order.js';
 import { cannonReset, foreignInput } from './alignment.js';
 
@@ -435,7 +436,10 @@ export function registerStationRoutes(app, campus, mat, alignment, schematics) {
     const snap = mat.snapshotOf(req.query);
     const bps = mat.selection({});
     const revision=db.prepare('SELECT count(*) AS n,max(a.saved_at) AS latest,max(a.base_version) AS version '+ereborReports).get(DESIGN_REVISION);
-    const key = [snap.id,bps.map(b => b.current?.id).join(','),revision.n,revision.latest,revision.version].join(':');
+    const surface=db.prepare(`SELECT s.v,s.r,count(*) AS parts,sum(s.version) AS versions FROM erebor_surface_parts s
+      JOIN build_projects p ON p.id='erebor' AND p.current_version=s.v
+      JOIN erebor_landscape l ON l.project_version=s.v AND l.revision=s.r GROUP BY s.v,s.r`).get();
+    const key = [snap.id,bps.map(b => b.current?.id).join(','),revision.n,revision.latest,revision.version,surface?.v,surface?.r,surface?.parts,surface?.versions].join(':');
     if (wantedCache?.key !== key) {
       const merged = mat.aggregate(bps, snap);
       const items = [...merged.items].filter(([, e]) => e.needed > 0).map(([item]) => item);
@@ -444,6 +448,10 @@ export function registerStationRoutes(app, campus, mat, alignment, schematics) {
         json_each(a.report_json,'$.materials') material
         WHERE p.id='erebor' AND a.revision=? AND material.value>0`).all(DESIGN_REVISION);
       for(const {item} of architecture)if(!items.includes(item))items.push(item);
+      if(surface){
+        const materials=new Set(landscapeFiles(db,surface.v,surface.r).flatMap(f=>Object.keys(f.materials)));
+        for(const item of materials)if(!items.includes(item))items.push(item);
+      }
       if (!items.includes('minecraft:gunpowder')) items.push('minecraft:gunpowder');
       wantedCache = { key, items: items.sort() };
     }
