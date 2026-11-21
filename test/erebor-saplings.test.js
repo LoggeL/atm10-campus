@@ -42,3 +42,21 @@ test('a trunk crossing two files becomes one plant; old running inputs can still
   assert.equal(db.prepare('SELECT count(*) n FROM erebor_surface_dispatch WHERE done=1').get().n,2);
  }finally{db.close();}
 });
+
+test('a requested helper can resume its reserved sapling revision without counting a finished plan',()=>{
+ const db=new DatabaseSync(':memory:');
+ try{
+  const queue=landscapeQueue(db);
+  db.exec('CREATE TABLE erebor_landscape(project_version,revision); INSERT INTO erebor_landscape VALUES(12,2)');
+  const source={r:2,part:'R-3_-20',fileName:'tile.nbt',sha256:'old'};
+  const job={source,surface:true,loaded:true,desired:{file:'campus_88d06245-a7f8-8d0d-95f6-f57c2d1e7b00.nbt'}};
+  db.prepare('INSERT INTO erebor_surface_legacy VALUES(12,2,?,?,?,?,?)').run('tile.nbt','old','new','{}',Buffer.alloc(0));
+  const add=db.prepare("INSERT INTO erebor_surface_dispatch VALUES(12,2,'tile.nbt',?,'K20','C',0)");
+  add.run('old');add.run('new');
+  assert.equal(queue.successor(12,'K20','B',job),null);
+  assert.deepEqual(queue.successor(12,'K20','C',job),{...source,sha256:'new'});
+  queue.releasePrevious(12,'K20','C',job);
+  assert.equal(queue.successor(12,'K20','C',job),null);
+  assert.deepEqual({...db.prepare('SELECT sha,site,slot,done FROM erebor_surface_dispatch').get()},{sha:'new',site:'K20',slot:'C',done:0});
+ }finally{db.close();}
+});

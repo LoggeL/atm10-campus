@@ -43,13 +43,29 @@ export function parallelFleet(db,production,choices,request,recordedFinish,resum
     const row=lookup.get(v,site,slot);
     let job=row?.job&&JSON.parse(row.job);
     if(!signal?.state||(!job&&(!signal.ready||!enabled()||signal.upload||signal.state!=='STOPPED')))return;
+    const successor=job?.surface&&interior?.landscape?.successor?.(v,site,slot,job);
+    if(successor&&enabled()&&current()&&signal.ready&&signal.empty===true&&!signal.upload&&signal.state==='STOPPED'&&
+       !signal.finish&&Date.now()-at<15000){
+      const {observed}=await request('erebor-inspect',{site:key,version:v});
+      if(!emptyStopped(observed)||!enabled()||!current())return;
+      const replacement=interior.landscape.restore(v,successor).job;
+      if(!same(replacement.desired.anchor,job.desired.anchor)||!same(replacement.size,job.size)||
+         replacement.desired.options.replace_mode!==0||replacement.desired.blueprint!==job.desired.blueprint)return;
+      tx(db,()=>{
+        if(jobAt(v,site,slot)?.desired.file!==job.desired.file)throw Error('Auftrag hat gewechselt.');
+        interior.landscape.releasePrevious(v,site,slot,job);
+        save.run(JSON.stringify(replacement),'Setzlingsplan zum Einlegen bereit',v,site,slot);
+      });
+      job=replacement;
+    }
     // Native resource waits clear themselves. A full RCON inspection of each
     // waiting helper competes with the very chest probes that let it resume.
     if(job?.loaded&&signal.state==='PAUSED'&&['missingItem','missingBlock','noGunpowder','targetNotLoaded'].includes(signal.status)&&
        signal.ready&&signal.aligned&&signal.upload===job.desired.file&&signal.owner===job.desired.owner&&
        same(signal.anchor,job.desired.anchor)&&same(signal.size,job.size)&&
        ((!needsSolidReplacement(job.desired)&&same(signal.options,[0,false,false]))||same(signal.options,[2,false,false]))){
-      if(row.message!==signal.status)save.run(JSON.stringify(job),signal.status,v,site,slot);
+      const message=successor?'Setzlingsplan vorgemerkt · alten Plan im Eingabefach entnehmen':signal.status;
+      if(row.message!==message)save.run(JSON.stringify(job),message,v,site,slot);
       return;
     }
     const urn=job?.massif?.includes('_URN_');

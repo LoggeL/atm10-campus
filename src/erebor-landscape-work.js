@@ -81,7 +81,27 @@ export function landscapeQueue(db){
   return {bytes,job:{desired,size:[32,32,32],blocks:f.blocks,materials:f.materials,source,phase:'build',surface:true,loaded:false,seen:0}};
  }
  const deferred=new Map();
- return {restore,finish(v,site,slot,job){
+ // These two operators requested an in-progress revision change. The native
+ // printer must release the old input before the new reservation is adopted.
+ const requestedSwitch=new Map([
+  ['K20C','campus_88d06245-a7f8-8d0d-95f6-f57c2d1e7b00.nbt'],
+  ['K36C','campus_cec97c6f-482e-8dcc-90b3-eb8186b1ab16.nbt'],
+ ]);
+ function successor(v,site,slot,job){
+  if(!job?.surface||!job.loaded||requestedSwitch.get(site+slot)!==job.desired.file)return null;
+  const s=job.source;
+  const next=db.prepare(`SELECT l.next_sha sha FROM erebor_surface_legacy l
+   JOIN erebor_surface_dispatch old ON old.v=l.v AND old.r=l.r AND old.file=l.file AND old.sha=l.sha
+   JOIN erebor_surface_dispatch n ON n.v=l.v AND n.r=l.r AND n.file=l.file AND n.sha=l.next_sha
+   WHERE l.v=? AND l.r=? AND l.file=? AND l.sha=? AND old.site=? AND old.slot=?
+    AND n.site=old.site AND n.slot=old.slot AND n.done=0 AND old.done=0`).get(v,s.r,s.fileName,s.sha256,site,slot);
+  if(!next||revision(v)!==s.r)return null;
+  return {...s,sha256:next.sha};
+ }
+ return {restore,successor,releasePrevious(v,site,slot,job){
+  const s=job.source;
+  if(!db.prepare('DELETE FROM erebor_surface_dispatch WHERE v=? AND r=? AND file=? AND sha=? AND site=? AND slot=? AND done=0').run(v,s.r,s.fileName,s.sha256,site,slot).changes)throw Error('Vorherige Reservierung hat gewechselt.');
+ },finish(v,site,slot,job){
   const s=job.source;
   const changed=db.prepare('UPDATE erebor_surface_dispatch SET done=1 WHERE v=? AND r=? AND site=? AND slot=? AND file=? AND sha=? AND done=0').run(v,s.r,site,slot,s.fileName,s.sha256);
   if(!changed.changes)throw Error('Landschaftsreservierung passt nicht zur Kanone.');
