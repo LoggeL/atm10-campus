@@ -453,8 +453,9 @@ export function registerEreborQueue(app,campus){
    if(!(readySurface(job,report,site)||report.urnPacks===3&&readyUrnPack(job,report.stations?.[site]))||choices.next(v,site)||
       production.mode(v,site).started_upload===job.desired.file)return [];
    const last=lastPackStart.get(site);
-   return [{site,state,job,at:last?.file===job.desired.file?last.at:0}];
-  }).filter(r=>Date.now()-r.at>=30000).sort((a,b)=>a.at-b.at);
+   if(last?.file===job.desired.file&&Date.now()-last.at<30000)return [];
+   return [{site,state,job,at:last?.at??0}];
+  }).sort((a,b)=>a.at-b.at);
   if(!eligible.length)return;
   const {site,state,job}=eligible[0];
   lastPackStart.set(site,{file:job.desired.file,at:Date.now()});
@@ -562,7 +563,12 @@ export function registerEreborQueue(app,campus){
    await finishRooms(p,report);
    for(const site of new Set([...active,...(c.enabled&&c.phase!=='finished'?sites:[])])){
     if(!current(c.version))return;
-    if(report&&Date.now()-report.at>=15000){report=await liveReport(c.version);await finishRooms(p,report);}
+    if(report&&Date.now()-report.at>=15000){
+     report=await liveReport(c.version);
+     await startPreparedMain(c.version,report);
+     if(report?.surfaceModeTracker===1)await helpers.startFueledExtras(p,report,()=>c.phase==='stone'&&helpers.isEnabled(c.version),read,()=>current(c.version));
+     await finishRooms(p,report);
+    }
     // V4 emits an empty row when the station chunk is asleep or the cannon is absent.
     // A missing row is inconclusive. Keep the native check in that case.
     const signal=report?.stations?.[site];

@@ -88,7 +88,13 @@ export function surveyTerrain(worldDir, options) {
         } catch { samplesMissing++; samples.push([x, z, null, null, null, null, null, false]); }
       }
       for (const be of chunk.block_entities || []) if (be.x >= from[0] && be.x <= to[0] && be.z >= from[1] && be.z <= to[1]) {
-        if (blockEntities.length < 10000) blockEntities.push({ pos: [be.x, be.y, be.z], id: String(be.id || '') }); else truncatedEntities = true;
+        if (blockEntities.length >= 10000) { truncatedEntities = true; continue; }
+        const entity = { pos: [be.x, be.y, be.z], id: String(be.id || '') };
+        if (entity.id==='computercraft:computer_advanced' && from[0]===to[0] && from[1]===to[1] && be.y===probeY) {
+          entity.computer = { id:Number.isInteger(be.ComputerId)?be.ComputerId:null, on:Boolean(be.On),
+            station:typeof be.Label==='string'&&/^erebor-K\d{2}(?:-[WE]2?)?$/.test(be.Label)?be.Label:null };
+        }
+        blockEntities.push(entity);
       }
       for (const [name, s] of Object.entries(chunk.structures?.starts || {})) if (s.id && s.id !== 'INVALID') {
         structures.push({ id: name, chunk: [cx, cz], boxes: (s.Children || []).map(c => c.BB ? Array.from(c.BB) : null).filter(Boolean) });

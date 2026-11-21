@@ -177,7 +177,7 @@ export function parallelFleet(db,production,choices,request,recordedFinish,resum
   const jobAt=(version,site,slot)=>JSON.parse(lookup.get(version,site,slot)?.job||'null');
   const lastFirstStart=new Map();
   async function startFueledExtras(p,report,enabled,read,current){
-    if(!report || Date.now()-report.at>=15000 || report.at>Date.now())return;
+    if(report?.version!==p.current_version||report.sharedChest!==4||!report.stations||Date.now()-report.at>=15000||report.at>Date.now())return;
     const ready=[],retry=[];
     for(const station of parallelLayout.sites){
       if(!enabled(station.site))continue;
@@ -206,7 +206,8 @@ export function parallelFleet(db,production,choices,request,recordedFinish,resum
         if(!surface&&!urn&&(slot<'D'||!job.loaded||!Number.isInteger(job.baseline)))continue;
         const previous=lastFirstStart.get(key);
         const last=previous?.file===signal.upload?previous.at:0;
-        if(Date.now()-last>=30000)ready.push({key,station,slot,signal,last});
+        // A new file on a quick printer must not overtake a slower printer each round.
+        if(Date.now()-last>=30000)ready.push({key,station,slot,signal,last:previous?.at??0});
       }
     }
     // Interleave newly fueled machines with initial assignments on large fleets.
@@ -221,7 +222,7 @@ export function parallelFleet(db,production,choices,request,recordedFinish,resum
       await service(p,r.station,r.slot,r.signal,report.at,active,read(r.station.site),current);
     }
   }
-  return {reserved,list,jobs,complete,isEnabled,switchAll,jobAt,async refill(p,site,slot,report,enabled,main,current){
+  return {reserved,list,jobs,complete,isEnabled,switchAll,jobAt,startFueledExtras,async refill(p,site,slot,report,enabled,main,current){
     const pair=parallelLayout.sites.find(r=>r.site===site);
     if(pair&&enabled()&&current()&&Date.now()-report.at<15000)
       await service(p,pair,slot,report.stations[site+slot],report.at,enabled,main,current,report.interiorHelpers===1,report.ereborProjectWork===1);
