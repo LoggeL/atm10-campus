@@ -30,7 +30,7 @@ export function landscapePanel(surface){
  return '<div class="facts"><span><b>'+fmt(surface.published)+' / '+fmt(surface.regions)+'</b> Regionen veröffentlicht</span>'+
   '<span><b>'+fmt(surface.files)+'</b> Schematics</span><span><b>'+fmt(surface.blocks)+'</b> geplante Blöcke</span></div>'+
   '<p class="volume">Erde und Wald an den unteren Hängen · '+fmt(surface.trees)+' geplante Bäume · Schneegipfel auf Y '+fmt(surface.summitY)+'</p>'+
-  '<p class="meta">Der Baufortschritt der Außenhaut wird noch nicht gemessen.</p>'+
+  '<p class="meta">Die Aufgabenliste zählt die abgeschlossenen und zugewiesenen Landschaftspläne.</p>'+
   '<p class="volume"><a href="/app?project=erebor&amp;surface=1#overview">Landschafts-Baupläne öffnen</a> · <a href="/projects?id=erebor#landschaft">Höhenprofil ansehen</a></p>';
 }
 

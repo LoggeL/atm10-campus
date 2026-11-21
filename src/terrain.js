@@ -25,12 +25,12 @@ export function terrainQuery(query) {
   return { from, to, step, probeY };
 }
 
-export function chunkBlockReader(chunk) {
+export function chunkBlockReader(chunk, withState = false) {
   const sections = new Map((chunk.sections || []).map(s => [s.Y, s.block_states]));
   return (x, y, z) => {
     const bs = sections.get(Math.floor(y / 16));
-    if (!bs?.palette?.length) return 'minecraft:air';
-    if (bs.palette.length === 1) return bs.palette[0].Name;
+    if (!bs?.palette?.length) return withState ? {Name:'minecraft:air'} : 'minecraft:air';
+    if (bs.palette.length === 1) return withState ? bs.palette[0] : bs.palette[0].Name;
     if (!bs.data?.words) throw Error('Blockzustände fehlen.');
     const i = ((y & 15) * 16 + (z & 15)) * 16 + (x & 15);
     const bits = Math.max(4, Math.ceil(Math.log2(bs.palette.length))), perLong = Math.floor(64 / bits), mask = (1 << bits) - 1;
@@ -39,7 +39,7 @@ export function chunkBlockReader(chunk) {
     const hi = w[k], lo = w[k + 1];
     const p = off + bits <= 32 ? (lo >>> off) & mask : off >= 32 ? (hi >>> (off - 32)) & mask : ((lo >>> off) | (hi << (32 - off))) & mask;
     if (!bs.palette[p]) throw Error('Ungültiger Palettenindex.');
-    return bs.palette[p].Name;
+    return withState ? bs.palette[p] : bs.palette[p].Name;
   };
 }
 

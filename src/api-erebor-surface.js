@@ -4,6 +4,7 @@ import {requireActor,HttpError} from './auth.js';
 import {tx,logActivity} from './db.js';
 import {surfaceParts} from './erebor-surface.js';
 import {storedZipEntry} from './zip.js';
+import {landscapeProgress} from './erebor-landscape-work.js';
 
 // Publication totals are distinct from blocks placed in the Minecraft world.
 export function surfaceOverview(db,project){
@@ -14,7 +15,7 @@ export function surfaceOverview(db,project){
  const totals=db.prepare(`SELECT count(*) AS published,coalesce(sum(json_extract(summary,'$.files')),0) AS files,
   coalesce(sum(json_extract(summary,'$.blocks')),0) AS blocks,coalesce(sum(json_extract(summary,'$.trees')),0) AS trees
   FROM erebor_surface_parts WHERE v=? AND r=?`).get(v,row.revision);
- return {revision:row.revision,regions:parts.length,summitY:draft.summit[1],...totals};
+ return {revision:row.revision,regions:parts.length,summitY:draft.summit[1],...totals,task:landscapeProgress(db,v,row.revision)};
 }
 
 export function registerSurface(app,campus){

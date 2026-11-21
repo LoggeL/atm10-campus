@@ -34,9 +34,10 @@ export function parallelFleet(db,production,choices,request,recordedFinish,resum
   function complete(v,site,slot,job,urns) {
     production.finish(v,site,job.desired.blueprint,new Date().toISOString());
     if(job.massif)massif.finish(v,job.massif,site,slot,urns);
+    if(job.surface)interior.landscape.finish(v,site,slot,job);
     db.prepare("UPDATE erebor_helpers SET name=NULL,job=NULL,completed=completed+1,message='Abschnitt fertig' WHERE version=? AND site=? AND slot=?").run(v,site,slot);
   }
-  async function service(p,pair,slot,signal,at,enabled,main,current,allowInterior=false){
+  async function service(p,pair,slot,signal,at,enabled,main,current,allowInterior=false,projectWork=false){
     const site=pair.site,key=site+slot,v=p.current_version;
     const row=lookup.get(v,site,slot);
     let job=row?.job&&JSON.parse(row.job);
@@ -76,7 +77,7 @@ export function parallelFleet(db,production,choices,request,recordedFinish,resum
       // Reserve before the first network await. SQLite persists the exact job across restarts.
       const taken=reserved(v,site);
       if(main.job)taken.add(main.job.desired.blueprint);
-      if(main.job && main.job.phase!=='stone'&&!main.job.massif&&!main.job.interior)return;
+      if(main.job && main.job.phase!=='stone'&&!main.job.massif&&!main.job.interior&&!main.job.surface)return;
       for(const entry of choices.waiting(v))if(entry.site===site){
         if(!entry.name.startsWith('EREBOR_STEIN_'))return;
         taken.add(entry.name);
@@ -91,7 +92,7 @@ export function parallelFleet(db,production,choices,request,recordedFinish,resum
       const entry=open.find(f=>!blocked(f)&&f.stage==='stone'&&!occupied.has(geometry(f.name))&&Array.isArray(f.origin)&&!busyAnchors?.has(f.origin.join(','))&&
         Math.hypot(...f.origin.map((n,i)=>n-pair[slot][i]))<256);
       const mass=massif?.reserve(v,site,slot,same(signal.options,[2,false,false]));
-      const inside=!entry&&!mass&&allowInterior?await interior?.candidate(p,site,pair[slot],taken):null;
+      const inside=!entry&&!mass&&allowInterior?await interior?.candidate(p,site,pair[slot],taken,projectWork,slot):null;
       if(!entry&&!mass&&!inside)return;
       if(inside&&(!enabled()||!current()))return;
       const result=mass??inside??publishedPlan(db,p,{...entry,version:v,site,file:entry.name+'.nbt'});
@@ -102,12 +103,12 @@ export function parallelFleet(db,production,choices,request,recordedFinish,resum
     const set=message=>save.run(JSON.stringify(job),message,v,site,slot);
     const args={site:key,version:v};
     const {options,...desired}=job.desired;
-    const operation={...args,desired,kind:job.interior?job.phase:'stone',size:job.size};
+    const operation={...args,desired,kind:job.surface?'surface':job.interior?job.phase:'stone',size:job.size};
     const matches=o=>!verifyAlignment(job.desired,o,job.desired)&&same(o.components?.['create:schematic_bounds'],job.size);
     try{
       let filled=false,original;
       const published={...job.source,version:v,site,file:desired.blueprint+'.nbt'};
-      const originalPlan=()=>job.massif?massif.restore(v,site,slot,job.massif):publishedPlan(db,p,published);
+      const originalPlan=()=>job.massif?massif.restore(v,site,slot,job.massif):job.surface?interior.landscape.restore(v,job.source):publishedPlan(db,p,published);
       if(missingReceipt){
         job.lastWorldCheck=at;
         set('Prüft die Steinziele in der gespeicherten Welt');
@@ -218,7 +219,11 @@ export function parallelFleet(db,production,choices,request,recordedFinish,resum
       await service(p,r.station,r.slot,r.signal,report.at,active,read(r.station.site),current);
     }
   }
-  return {reserved,list,jobs,complete,isEnabled,switchAll,jobAt,async tick(p,report,enabled,read,current,refresh){
+  return {reserved,list,jobs,complete,isEnabled,switchAll,jobAt,async refill(p,site,slot,report,enabled,main,current){
+    const pair=parallelLayout.sites.find(r=>r.site===site);
+    if(pair&&enabled()&&current()&&Date.now()-report.at<15000)
+      await service(p,pair,slot,report.stations[site+slot],report.at,enabled,main,current,report.interiorHelpers===1,report.ereborProjectWork===1);
+  },async tick(p,report,enabled,read,current,refresh){
     if(report?.version!==parallelLayout.version||report.sharedChest!==4||!report.stations)return;
     await startFueledExtras(p,report,enabled,read,current);
     for(const pair of parallelLayout.sites){
@@ -233,10 +238,10 @@ export function parallelFleet(db,production,choices,request,recordedFinish,resum
         if(signal?.state && Date.now()-report.at<45000){
           try{
             const active=()=>enabled(pair.site);
-            const finished=await service(p,pair,slot,signal,report.at,active,read(pair.site),current,report.interiorHelpers===1);
+            const finished=await service(p,pair,slot,signal,report.at,active,read(pair.site),current,report.interiorHelpers===1,report.ereborProjectWork===1);
             if(finished&&current()&&active()){
               // Re-check the empty cannon before loading its next reserved section this round.
-              await service(p,pair,slot,signal,report.at,active,read(pair.site),current,report.interiorHelpers===1);
+              await service(p,pair,slot,signal,report.at,active,read(pair.site),current,report.interiorHelpers===1,report.ereborProjectWork===1);
             }
           }
           catch(e){

@@ -29,3 +29,14 @@ test('interior world proof rejects unknown terrain and protects a machine just a
  be=[];block='ae2:controller';assert.equal(interiorWorldCheck('.',args),false);
  absent=true;assert.equal(interiorWorldCheck('.',args),false);
 });
+test('surface admits supported air, preserves existing stone and confirms only the exact finished block',t=>{
+ let block='minecraft:air';
+ t.mock.method(Region,'open',()=>({chunk:(x,z)=>({xPos:x,zPos:z,Status:'minecraft:full',sections:[{Y:-1,block_states:{palette:[{Name:'minecraft:stone'}]}},{Y:0,block_states:{palette:[{Name:block}]}}]})}));
+ const cells=new Uint8Array(32768);cells[0]=1;
+ const {bytes}=tileNBT([{}, {name:'minecraft:snow_block'}],cells,'surface');
+ const plan={bytes,kind:'surface',anchor:[0,0,0]};
+ assert.ok(interiorWorldCheck('.',plan));
+ assert.equal(interiorWorldCheck('.',{...plan,completed:true}),false);
+ block='minecraft:stone';assert.equal(interiorWorldCheck('.',plan),false);
+ block='minecraft:snow_block';assert.ok(interiorWorldCheck('.',{...plan,completed:true}));
+});

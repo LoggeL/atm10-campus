@@ -51,6 +51,7 @@ export function dashboardData(db, version, sites, report, jobs, filling, massif,
     fleet,
     telemetryAt: current ? report.at : null,
     auxiliaryInteriorEnabled: current ? report.interiorHelpers === 1 : null,
+    landscapeAutomationEnabled: current ? report.ereborProjectWork === 1 : null,
     balance: { enabled: massif.enabled(version), plannedAt: massif.lastBalancedAt(version) },
   };
 }

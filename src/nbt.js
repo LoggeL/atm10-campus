@@ -73,7 +73,7 @@ export const AIR_NAMES = new Set(['minecraft:air', 'minecraft:cave_air', 'minecr
 
 // Parse a vanilla/Create structure file (.nbt). Positions are local to the structure.
 // Returns placed blocks (non-air), clear cells (explicit air) and the structure size.
-export function parseStructure(bytes) {
+export function parseStructure(bytes, includeProperties = false) {
   const root = parseNBT(decodeMaybeCompressed(Buffer.from(bytes))).value;
   const size = root.size, palette = root.palette || (root.palettes && root.palettes[0]);
   if (!Array.isArray(size) || size.length !== 3 || !size.every(n => Number.isInteger(n) && n > 0 && n <= 8192) || !Array.isArray(palette) || !Array.isArray(root.blocks)) {
@@ -92,7 +92,7 @@ export function parseStructure(bytes) {
     }
     if (name === 'minecraft:structure_void') continue;
     if (AIR_NAMES.has(name)) { clear.push(pos[0], pos[1], pos[2]); continue; }
-    placed.push({ x: pos[0], y: pos[1], z: pos[2], name });
+    placed.push({ x: pos[0], y: pos[1], z: pos[2], name, ...(includeProperties && {properties:palette[b.state].Properties}) });
     materials[name] = (materials[name] || 0) + 1;
     if (b.nbt) blockEntities++;
   }

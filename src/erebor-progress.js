@@ -73,6 +73,24 @@ export function massifProgress(db, version, sites) {
 function compact(row) {
   return { open: row.open, inProgress: row.inProgress, done: row.done };
 }
+// One unit per published plan, or per registered urn target even when several
+// targets share a printer file. The catalog and the massif cover the same stone.
+export function overallProgress(db,version,production,filling,stone,surface,jobs){
+ const total=group(),architecture={clear:group(),build:group()};
+ const finished=new Set(db.prepare('SELECT name FROM erebor_finished_plans WHERE version=?').all(version).map(r=>r.name));
+ const active=new Set([...jobs.values()].filter(Boolean).map(j=>j.desired.blueprint));
+ const seen=new Set();
+ for(const files of production.architecture(version).values())for(const file of files){
+  if(seen.has(file.name)||!architecture[file.stage])continue;
+  seen.add(file.name);
+  add(architecture[file.stage],finished.has(file.name)?'done':active.has(file.name)?'inProgress':'open');
+ }
+ for(const row of [...(filling?Object.values(filling):[stone]),...Object.values(architecture),surface]){
+  if(!row)continue;
+  for(const key of Object.keys(total))total[key]+=row[key];
+ }
+ return {...total,architecture};
+}
 function catalogTotals(byStage) {
   const sum = ledger();
   for (const stage of Object.values(byStage)) for (const state of Object.keys(sum)) sum[state] += stage[state];

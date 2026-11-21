@@ -7,10 +7,10 @@ export const interiorGroup=id=>/^(?:E(?:0[5-9]|1[0-46-9]|21[AB]|3[0-9])|S[1-4])$
 // Each architecture file occupies one aligned 32³ tile. Excavations on other
 // levels can proceed independently. Build the structure from its lowest open
 // level, after every excavation in that tile has finished.
-export function interiorFrontier(open,taken){
+export function interiorFrontier(open,taken,allArchitecture=false){
  const columns=new Map(),candidates=[];
  for(const entry of open){
-  if(!interiorGroup(entry.group)||entry.origin?.length!==3||entry.size?.length!==3||
+  if(!(interiorGroup(entry.group)||allArchitecture&&['build','clear'].includes(entry.stage))||entry.origin?.length!==3||entry.size?.length!==3||
      !entry.size.every(n=>n===32)||!entry.origin.every(n=>Number.isInteger(n)&&n%32===0))continue;
   const key=entry.origin[0]+','+entry.origin[2],y=entry.origin[1];
   if(!columns.has(key))columns.set(key,new Map());
@@ -22,7 +22,8 @@ export function interiorFrontier(open,taken){
   const lowest=Math.min(...levels.keys());
   for(const [y,entries] of levels){
    if(entries.some(e=>taken.has(e.name)))continue;
-   const first=entries.find(e=>e.stage==='clear')??(y===lowest&&entries.find(e=>e.stage==='build'));
+   const base=entries.filter(e=>!e.finishing),phase=base.length?base:entries;
+   const first=phase.find(e=>e.stage==='clear')??(y===lowest&&phase.find(e=>e.stage==='build'));
    if(first)candidates.push(first);
   }
  }
@@ -45,29 +46,42 @@ export function insideMassif(plan,origin,size){
  for(let i=x;i<x+w;i++)for(let k=z;k<z+d;k++){const top=mountainTop(plan,i,k);if(top==null||y+h>top)return false;}
  return true;
 }
-export function interiorWorldCheck(world,{bytes,anchor,kind}){
- const plan=parseStructure(bytes);
- if(plan.entities||plan.blockEntities||!['build','clear'].includes(kind))return false;
+const air=name=>['minecraft:air','minecraft:cave_air','minecraft:void_air'].includes(name);
+export function interiorWorldCheck(world,{bytes,anchor,kind,completed=false,minimumSave=0,outdoor=false}){
+ const plan=parseStructure(bytes,completed);
+ if(plan.entities||plan.blockEntities||!['build','clear','surface'].includes(kind))return false;
  const points=kind==='clear'?[]:plan.placed;
  if(kind==='clear'){
   if(plan.placed.length)return false;
   for(let i=0;i<plan.clear.length;i+=3)points.push({x:plan.clear[i],y:plan.clear[i+1],z:plan.clear[i+2],name:'minecraft:air'});
  }else if(plan.clear.length)return false;
  if(!points.length)return false;
- const regions=new Map(),readers=new Map(),tech=[];
+ const regions=new Map(),readers=new Map(),stamps=new Map(),tech=[];
  const [ox,oy,oz]=anchor,[sx,sy,sz]=plan.size;
  for(let cx=(ox-4)>>4;cx<=(ox+sx+3)>>4;cx++)for(let cz=(oz-4)>>4;cz<=(oz+sz+3)>>4;cz++){
   const rk=(cx>>5)+','+(cz>>5);
   if(!regions.has(rk))regions.set(rk,Region.open(world,cx>>5,cz>>5));
-  const chunk=regions.get(rk)?.chunk(cx,cz);
+  const region=regions.get(rk),chunk=region?.chunk(cx,cz);
   if(!chunk?.sections?.length||chunk.xPos!==cx||chunk.zPos!==cz||!['full','minecraft:full'].includes(chunk.Status))return false;
-  readers.set(cx+','+cz,chunkBlockReader(chunk));
+  const key=cx+','+cz;
+  readers.set(key,chunkBlockReader(chunk,true));
+  if(minimumSave)stamps.set(key,region.buf.readUInt32BE(4096+4*((cx&31)+(cz&31)*32))*1000);
   for(const b of chunk.block_entities||[])if(b.y>=oy-4&&b.y<oy+sy+4)tech.push(b);
  }
+ const index=pt=>pt.x+sx*(pt.z+sz*pt.y);
+ const planned=kind==='surface'?new Set(points.map(index)):null;
  for(const pt of points){
   const x=pt.x+anchor[0],y=pt.y+anchor[1],z=pt.z+anchor[2],cx=x>>4,cz=z>>4,key=cx+','+cz;
-  const name=readers.get(key)(x,y,z);
-  if(tech.some(b=>Math.abs(b.x-x)<=4&&Math.abs(b.y-y)<=4&&Math.abs(b.z-z)<=4)||!(name===pt.name||name==='minecraft:stone'||['minecraft:air','minecraft:cave_air','minecraft:void_air'].includes(name)))return false;
+  if(minimumSave&&stamps.get(key)<minimumSave)return false;
+  const at=readers.get(key),state=at(x,y,z),name=state.Name;
+  if(tech.some(b=>Math.abs(b.x-x)<=4&&Math.abs(b.y-y)<=4&&Math.abs(b.z-z)<=4))return false;
+  const matches=kind==='clear'?air(name):name===pt.name;
+  if(completed){
+   if(!matches||Object.entries(pt.properties??{}).some(([key,val])=>state.Properties?.[key]!==val))return false;
+  }else if(kind==='surface'){
+   if(!matches&&!air(name))return false;
+   if(!pt.name.endsWith('_leaves')&&!planned.has(index(pt)-sx*sz)&&air(at(x,y-1,z).Name))return false;
+  }else if(!matches&&!air(name)&&name!=='minecraft:stone'&&!(outdoor&&/^minecraft:(?:dirt|grass_block|gravel|sand|andesite|diorite|granite|tuff|deepslate)$/.test(name)))return false;
  }
  return true;
 }

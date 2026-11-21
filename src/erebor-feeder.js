@@ -175,7 +175,8 @@ export function ereborFeeder(db,request,version,liveReport){
     const total=items.reduce((sum,item)=>sum+item.needed,0),first=group[entries[0][0]];
     const identity=entries.map(([slot,r])=>slot+'='+r.file).sort().join('|');
     const assignment=parseInt(createHash('sha256').update(identity).digest('hex').slice(0,12),16);
-    return {...base,assignment,state:base.options.paused?'paused':'feeding',options:{...base.options,returnLeftovers:false},
+    const projectCraft=!base.options.paused&&entries.some(([slot])=>group[slot].phase==='build'&&(group[slot].interior||group[slot].surface));
+    return {...base,assignment,state:base.options.paused?'paused':'feeding',options:{...base.options,autoCraft:base.options.autoCraft||projectCraft,returnLeftovers:false},
      alignment:{enabled:true,state:'aligned',leaseSeconds:10,probeMode:'shared'},blueprint:{id:first.desired.blueprint,
      name:site+' · '+entries.map(([slot])=>slot).join(' + '),origin:first.desired.anchor,size:first.size,version},items,
      totals:{start:total,needed:total,kinds:items.length}};

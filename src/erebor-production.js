@@ -26,11 +26,12 @@ export function productionStore(db) {
   function architectureBySite(version){
     if(architectureIndex?.version===version && Date.now()-architectureIndex.at<10000)return architectureIndex;
     const bySite=new Map();
-    const rows=db.prepare("SELECT package_id,report_json FROM project_architecture_packages WHERE project_id='erebor' AND base_version=? AND revision=? AND coalesce(json_extract(report_json,'$.finishing'),0)=0 ORDER BY package_id");
+    const rows=db.prepare("SELECT package_id,report_json FROM project_architecture_packages WHERE project_id='erebor' AND base_version=? AND revision=? ORDER BY package_id");
     for(const pkg of rows.iterate(version,DESIGN_REVISION)){
-      for(const f of JSON.parse(pkg.report_json).files){
+      const report=JSON.parse(pkg.report_json);
+      for(const f of report.files){
         if(!bySite.has(f.cannon))bySite.set(f.cannon,[]);
-        bySite.get(f.cannon).push({name:f.fileName.slice(0,-4),sha256:f.sha256,stage:f.kind,group:f.group,origin:f.origin,size:f.size,protectedCells:f.protectedCells,unknownCells:f.unknownCells,clearOmitted:f.clearOmitted,blocks:f.blocks,y:f.origin[1],sourceVersion:version,revision:DESIGN_REVISION,part:pkg.package_id});
+        bySite.get(f.cannon).push({name:f.fileName.slice(0,-4),sha256:f.sha256,stage:f.kind,group:f.group,finishing:!!report.finishing,origin:f.origin,size:f.size,protectedCells:f.protectedCells,unknownCells:f.unknownCells,clearOmitted:f.clearOmitted,blocks:f.blocks,y:f.origin[1],sourceVersion:version,revision:DESIGN_REVISION,part:pkg.package_id});
       }
     }
     for(const files of bySite.values())files.sort((a,b)=>phaseOrder[a.stage]-phaseOrder[b.stage] || a.y-b.y || a.name.localeCompare(b.name));
@@ -113,7 +114,7 @@ export function productionStore(db) {
   }
   migrate();
   return {
-    catalog, finished,
+    catalog, finished, architecture:v=>architectureBySite(v).bySite,
     ordered,
     done:(v,site,name)=>!!db.prepare('SELECT 1 FROM erebor_finished_plans WHERE version=? AND site=? AND name=?').get(v,site,name),
     finish(v,site,name,at){if(name)finish.run(v,site,name,at);db.prepare('DELETE FROM erebor_priority WHERE version=? AND site=? AND name=?').run(v,site,name??'');},

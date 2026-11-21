@@ -1,9 +1,11 @@
-import {interiorColumns,interiorFrontier,interiorRelease,inRange,insideMassif} from './erebor-interior.js';
+import {interiorColumns,interiorFrontier,interiorGroup,interiorRelease,inRange,insideMassif} from './erebor-interior.js';
+import {landscapeQueue} from './erebor-landscape-work.js';
+import {mountainTop} from './project-stone.js';
 import {groupOf,slotsFor} from './erebor-groups.js';
 import {cannonProgressRows} from './cannon-progress-rows.js';
 import {publishedPlan,selectionStore,unstarted} from './erebor-selection.js';
 import {productionStore} from './erebor-production.js';
-import {projectProgress,massifForecast} from './erebor-progress.js';
+import {projectProgress,massifForecast,overallProgress} from './erebor-progress.js';
 import {availableMassifSlots} from './erebor-balance.js';
 import {surfaceOverview} from './api-erebor-surface.js';
 import {dashboardData} from './erebor-dashboard.js';
@@ -90,7 +92,8 @@ export function registerEreborQueue(app,campus){
    liveCache?.version===version&&[1,2].includes(liveCache.urnPreparation)&&Math.abs(Date.now()-liveCache.at)<45000?(liveCache.urnPreparation===2&&liveCache.urnPacks===3?3:liveCache.urnPreparation):0);
  db.exec('CREATE TABLE IF NOT EXISTS erebor_resume(version INTEGER,site TEXT,slot TEXT,upload TEXT,expires INTEGER,result TEXT,PRIMARY KEY(version,site,slot))');
  const verifyStone=config.worldSources.live?(p,verifyStone)=>generate(p,{verifyStone}):null;
- const helpers=parallelFleet(db,production,choices,request,recordedFinish,resumePaused,verifyStone,massif,{candidate:interiorCandidate,blockStone:blockedStone});
+ const landscape=landscapeQueue(db);
+ const helpers=parallelFleet(db,production,choices,request,recordedFinish,resumePaused,verifyStone,massif,{candidate:interiorCandidate,landscape,blockStone:blockedStone});
  const releases=interiorRelease(db),deferredInterior=new Map();
  const blockedColumnRows=db.prepare('SELECT ix,iz FROM erebor_interior_columns WHERE v=?');
  function blockedStone(p){
@@ -99,27 +102,39 @@ export function registerEreborQueue(app,campus){
   const base=JSON.parse(p.plan_json).mountainFill.bounds[0],released=new Set(rows.map(r=>r.ix+','+r.iz));
   return e=>e.stage==='stone'&&e.origin&&interiorColumns(e.origin,[64,16,64],base).some(k=>released.has(k.join(',')));
  }
- async function interiorCandidate(p,site,position,taken){
+ async function interiorCandidate(p,site,position,taken,projectWork=false,slot='A'){
   if(!config.worldSources.live||!massif.enabled(p.current_version))return null;
   const v=p.current_version,plan=JSON.parse(p.plan_json),base=plan.mountainFill.bounds[0];
   const {open}=production.ordered(p,site),busy=releases.busy(v,base);
   const checks=new Map();let worldChecks=0;
-  for(const e of interiorFrontier(open,taken)){
-   if(e.unknownCells!==0||e.clearOmitted!==0||e.protectedCells!==0||
+  for(const e of interiorFrontier(open,taken,projectWork||slot==='A')){
+   if(e.finishing&&(!projectWork||open.some(other=>other.group===e.group&&(!other.finishing||e.stage==='build'&&other.stage==='clear'))))continue;
+   if(e.unknownCells!==0||e.clearOmitted!==0||
       (deferredInterior.get(e.name)||0)>Date.now()||!inRange(e.origin,e.size,position))continue;
-   const cols=interiorColumns(e.origin,e.size,base);
+   const outdoors=!insideMassif(plan,e.origin,e.size);
+   if(outdoors){
+    if(slot!=='A'&&!projectWork&&!interiorGroup(e.group))continue;
+    if(plan.mountainFill.protectedBoxes.some(({bounds:[lo,hi]})=>lo.every((n,i)=>e.origin[i]+e.size[i]>n&&e.origin[i]<hi[i])))continue;
+   }
+   const cols=interiorColumns(e.origin,e.size,base).filter(([ix,iz])=>{
+    if(!outdoors)return true;
+    const x0=Math.max(e.origin[0],base[0]+64*ix),z0=Math.max(e.origin[2],base[2]+64*iz);
+    for(let x=x0;x<Math.min(e.origin[0]+e.size[0],base[0]+64*(ix+1));x++)
+     for(let z=z0;z<Math.min(e.origin[2]+e.size[2],base[2]+64*(iz+1));z++){const top=mountainTop(plan,x,z);if(top!=null&&top>=e.origin[1])return true;}
+    return false;
+   });
    if(cols.some(k=>busy.has(k.join(','))))continue;
    if(!cols.every(k=>{const id=k.join(',');if(!checks.has(id))checks.set(id,releases.allows(v,[k]));return checks.get(id);}))continue;
-   if(!insideMassif(plan,e.origin,e.size)){deferredInterior.set(e.name,Date.now()+600000);continue;}
    if(++worldChecks>3)break;
    const pkg=published(p,site,e);
-   if(!await generate(p,{interiorCheck:{bytes:pkg.bytes,anchor:e.origin,kind:e.stage}})){
+   if(!await generate(p,{interiorCheck:{bytes:pkg.bytes,anchor:e.origin,kind:e.stage,outdoor:outdoors}})){
     deferredInterior.set(e.name,Date.now()+600000);continue;
    }
    const after=releases.busy(v,base);
    if(!current(v)||!massif.enabled(v)||!releases.allows(v,cols)||cols.some(k=>after.has(k.join(','))))return null;
-   return {...pkg,entry:e,job:{...pkg.job,interior:true},release:()=>releases.mark(v,cols)};
+   return {...pkg,entry:e,job:{...pkg.job,interior:true,source:e},release:()=>releases.mark(v,cols)};
   }
+  if(projectWork)return landscape.candidate(p,site,slot,position,async pkg=>generate(p,{interiorCheck:{bytes:pkg.bytes,anchor:pkg.job.desired.anchor,kind:'surface'}}));
   return null;
  }
  campus.ereborHelpers=helpers;
@@ -188,6 +203,7 @@ export function registerEreborQueue(app,campus){
    tx(db,()=>{
     production.finish(j.desired.version??cfg().version,site,j.desired.blueprint,new Date().toISOString());
     if(j.massif)massif.finish(j.desired.version,j.massif,site,'A');
+    if(j.surface)landscape.finish(j.desired.version,site,'A',j);
     choices.mark(j.selection,'finished');persist(site,s);
    });return true;
   }
@@ -199,7 +215,7 @@ export function registerEreborQueue(app,campus){
  }
  async function startJob(site,version,job){
   const {options,...desired}=job.desired;
-  const result=await request('erebor-start',{site,version,desired,kind:job.phase,size:job.size});
+  const result=await request('erebor-start',{site,version,desired,kind:job.surface?'surface':job.phase,size:job.size});
   if(!result.started||verifyAlignment(job.desired,result.observed,job.desired)||!same(result.observed?.components?.['create:schematic_bounds'],job.size))
    throw new HttpError(409,'Der Start wurde nicht bestätigt. Kanonenstatus prüfen.');
   return result;
@@ -226,7 +242,7 @@ export function registerEreborQueue(app,campus){
  }
  async function startAutomatic(site,s,version,observed){
   const mode=production.mode(version,site),job=s.job;
-  if(!mode.enabled||!job||job.tainted||(massif.enabled(version)&&!job.massif&&!job.interior&&job.phase!=='stone'))return;
+  if(!mode.enabled||!job||job.tainted||(massif.enabled(version)&&!job.massif&&!job.interior&&!job.surface&&job.phase!=='stone'))return;
   if(observed.state==='RUNNING'){
    if(mode.started_upload!==job.desired.file)production.started(version,site,job.desired.file);
    return;
@@ -247,7 +263,7 @@ export function registerEreborQueue(app,campus){
   const signal=report?.stations?.[site],tracked=s.job;
   if(!choice&&tracked?.loaded&&signal&&Date.now()-report.at<15000){
    const urn=tracked.massif?.includes('_URN_');
-   if(!tracked.interior&&signal.state==='STOPPED'&&['finished','schematicInvalid'].includes(signal.status)&&signal.empty&&(!signal.finish||tracked.tainted||massif.enabled(c.version))&&Date.now()/1000-tracked.seen>=(urn?4:90)){
+   if(!tracked.interior&&!tracked.surface&&signal.state==='STOPPED'&&['finished','schematicInvalid'].includes(signal.status)&&signal.empty&&(!signal.finish||tracked.tainted||massif.enabled(c.version))&&Date.now()/1000-tracked.seen>=(urn?4:90)){
     s.inserted=false;s.status='Wartet auf bestätigten Abschluss';
     if(!automatic()||!massif.enabled(c.version)||!verifyStone||!isStationStone(tracked,site)||signal.upload||
        Date.now()-(tracked.lastWorldCheck||0)<(urn?15000:120000))return;
@@ -378,9 +394,9 @@ export function registerEreborQueue(app,campus){
   if(!s.job&&(automatic()||production.priority(c.version,site))){
    const mass=automatic()?massif.reserve(c.version,site,'A'):null;
    const next=mass?null:available(p,site)[0];
-   const inside=!mass&&!next&&automatic()?await interiorCandidate(p,site,parallelLayout.sites.find(s=>s.site===site).main,helpers.reserved(c.version,site)):null;
+   const inside=!mass&&!next&&automatic()?await interiorCandidate(p,site,parallelLayout.sites.find(s=>s.site===site).main,helpers.reserved(c.version,site),report?.ereborProjectWork===1):null;
    if(inside&&(!automatic()||!current(c.version)||choices.next(c.version,site)))return;
-   if(!next&&!mass&&!inside){s.status=massif.enabled(c.version)?'Wartet auf erreichbare Steinpläne':'Baufolge erledigt';s.exhausted=true;return;}
+   if(!next&&!mass&&!inside){s.status=massif.enabled(c.version)?'Wartet auf den nächsten erreichbaren, freigegebenen Bauabschnitt':'Baufolge erledigt';s.exhausted=true;return;}
    const {job,bytes}=mass??inside??published(p,site,next);
    s.job={...job,next:s.cursor};
    tx(db,()=>{inside?.release();db.prepare('UPDATE erebor_queue_sites SET state=?,payload=? WHERE site=?').run(JSON.stringify(s),bytes,site);});
@@ -405,7 +421,7 @@ export function registerEreborQueue(app,campus){
   const j=s.job,{options,...desired}=j.desired;
   const bytes=db.prepare('SELECT payload FROM erebor_queue_sites WHERE site=?').get(site).payload;
   if(!bytes)throw Error('Vorbereitete Datei fehlt.');
-  const res=await request('erebor-prepare',{...data,desired,kind:j.phase,size:j.size,nbtBase64:Buffer.from(bytes).toString('base64')});
+  const res=await request('erebor-prepare',{...data,desired,kind:j.surface?'surface':j.phase,size:j.size,nbtBase64:Buffer.from(bytes).toString('base64')});
   if(j.massif?.includes('_URN_')&&res.urnWarming===true&&res.applied===false){
    s.status='Urnenziel reserviert · Zielchunk lädt';return;
   }
@@ -476,6 +492,52 @@ export function registerEreborQueue(app,campus){
    });
   }
  }
+ // A full fleet rotation can outlast short excavations. Pick up their actual
+ // native finishes between batches and offer the same empty cannon its next job.
+ const roomChecks=new Map();
+ async function finishRooms(p,report){
+  const v=p.current_version;
+  if(!report?.stations||Date.now()-report.at>=15000||!current(v))return;
+  const {mains,helperJobs}=assignments(v);
+  const waiting=[];
+  for(const row of [...mains.map(s=>({...s,slot:'A'})),...helperJobs]){
+   const {site,slot,job}=row,key=slot==='A'?site:site+slot,s=report.stations[key];
+   if(!(job?.loaded&&(job.interior||job.surface))||s?.state!=='STOPPED'||s.status!=='finished'||!s.empty||s.upload)continue;
+   const last=roomChecks.get(key),when=last?.file===job.desired.file?last.at:0;
+   if(Date.now()-when>=25000)waiting.push({site,slot,key,job,s,when});
+  }
+  for(const {site,slot,key,job,s} of waiting.sort((a,b)=>a.when-b.when).slice(0,4)){
+   if(!current(v)||Date.now()-report.at>=20000)return;
+   roomChecks.set(key,{file:job.desired.file,at:Date.now()});
+   const active=()=>current(v)&&(slot==='A'?production.mode(v,site).enabled:cfg().phase==='stone'&&helpers.isEnabled(v));
+   const matches=()=>(slot==='A'?read(site).job:helpers.jobAt(v,site,slot))?.desired.file===job.desired.file;
+   try{
+    const {observed:o}=await request('erebor-inspect',{site:key,version:v});
+    if(!current(v)||!matches()||!emptyStopped(o)||o.status!=='finished')continue;
+    const receipt=recordedFinish(o,job,s.finish,Date.now(),{signal:s,at:report.at});
+    if(!receipt){
+     if(!config.worldSources.live||!job.seen)continue;
+     const entry=job.source??production.catalog(p,site).find(e=>e.name===job.desired.blueprint);
+     if(!entry)continue;
+     const pkg=job.surface?landscape.restore(v,entry):published(p,site,entry);
+     if(pkg.job.desired.sha256!==job.desired.sha256||!same(pkg.job.desired.anchor,job.desired.anchor)||!same(pkg.job.size,job.size))continue;
+     if(!await generate(p,{interiorCheck:{bytes:pkg.bytes,anchor:job.desired.anchor,kind:job.surface?'surface':job.phase,completed:true,minimumSave:Math.floor(job.seen)*1000}}))continue;
+     const {observed:after}=await request('erebor-inspect',{site:key,version:v});
+     if(!emptyStopped(after)||after.status!=='finished'||!same(after.options,o.options)||after.outputCount!==o.outputCount)continue;
+    }
+    if(!current(v)||!matches())continue;
+    tx(db,()=>{
+     if(slot!=='A'){helpers.complete(v,site,slot,job);return;}
+     const state=read(site);
+     production.finish(v,site,job.desired.blueprint,new Date().toISOString());
+     if(job.surface)landscape.finish(v,site,slot,job);
+     choices.mark(job.selection,'finished');
+     state.cursor=job.next;state.completed++;state.job=null;state.inserted=false;state.status='Abschluss bestätigt, nächster Bauabschnitt folgt';persist(site,state);
+    });
+    if(slot!=='A'&&active())await helpers.refill(p,site,slot,report,active,read(site),()=>current(v));
+   }catch(e){app.log.warn({station:key,err:e.message},'Baufolge wartet auf bestätigten Planwechsel');}
+  }
+ }
  async function tick(){
   const c=cfg(),p=project();
   if(!c||!p||c.version!==p.current_version||closed)return;
@@ -490,9 +552,10 @@ export function registerEreborQueue(app,campus){
    let report=await liveReport(c.version);
    await startReadyMainPack(c.version,report);
    await reconcileUrns(p,report);
+   await finishRooms(p,report);
    for(const site of new Set([...active,...(c.enabled&&c.phase!=='finished'?sites:[])])){
     if(!current(c.version))return;
-    if(report&&Date.now()-report.at>=30000)report=await liveReport(c.version);
+    if(report&&Date.now()-report.at>=15000){report=await liveReport(c.version);await finishRooms(p,report);}
     // V4 emits an empty row when the station chunk is asleep or the cannon is absent.
     // A missing row is inconclusive. Keep the native check in that case.
     const signal=report?.stations?.[site];
@@ -513,6 +576,7 @@ export function registerEreborQueue(app,campus){
      const fresh=await liveReport(c.version);
      await startReadyMainPack(c.version,fresh);
      await reconcileUrns(p,fresh);
+     await finishRooms(p,fresh);
      return fresh;
     });
    }
@@ -594,6 +658,7 @@ export function registerEreborQueue(app,campus){
   if(dashboard){
    Object.assign(counter,dashboardData(db,p.current_version,sites,report,jobs,filling,massif));
    counter.surface=surfaceOverview(db,p);
+   counter.overall=overallProgress(db,p.current_version,production,filling,counter.stages.stone,counter.surface?.task,jobs);
    counter.forecast=massifForecast(db,p.current_version,filling,counter.balance.enabled);
   }
   return reply.header('Cache-Control','private, no-store').send(counter);
