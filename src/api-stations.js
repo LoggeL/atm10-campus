@@ -468,6 +468,11 @@ export function registerStationRoutes(app, campus, mat, alignment, schematics) {
         for(const item of materials)if(!items.includes(item))items.push(item);
       }
       if (!items.includes('minecraft:gunpowder')) items.push('minecraft:gunpowder');
+      if (items.includes('minecraft:coarse_dirt')) {
+        for (const input of ['minecraft:dirt','minecraft:gravel']) {
+          if (!items.includes(input)) items.push(input);
+        }
+      }
       if (items.includes('minecraft:gold_block')) {
         for (const input of ['minecraft:gold_ingot','mysticalagriculture:gold_essence']) {
           if (!items.includes(input)) items.push(input);
