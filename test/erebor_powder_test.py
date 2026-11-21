@@ -6,6 +6,33 @@ from lupa import LuaRuntime
 
 
 class PowderReserve(unittest.TestCase):
+    def test_grass_uses_its_own_stock_and_only_orders_confirmed_demand(self):
+        code = (Path(__file__).resolve().parents[1] / "public/cc/erebor-powder.lua").read_text(encoding="utf-8")
+        lua = LuaRuntime()
+        run = lua.execute("""
+          GUNPOWDER="minecraft:gunpowder"; clock=0; orders=0; otherJob=true
+          state={}; view={}; function now() return clock end; function saveState() end
+          bridge={getItems=function() return {{name=GUNPOWDER,count=8192},{name="minecraft:grass_block",count=20}} end,
+            getCraftingCPUs=function() return {{isBusy=otherJob,craftingJob={resource={name="minecraft:grass_block"}}},{isBusy=false}} end,
+            craftItem=function(f)
+              orders=orders+1; ordered=f
+              return {isCraftingStarted=function() return true end, isDone=function() return false end,
+                hasErrorOccurred=function()return false end,isCalculationNotSuccessful=function()return false end,
+                isCanceled=function()return false end}
+            end}
+        """ + code + """
+          return function() clock=clock+10; maintainGrass({low=480,target=480}); return view.grassReserve.stage end
+        """)
+        g = lua.globals()
+        self.assertEqual(run(), "crafting")
+        self.assertEqual(g.orders, 0)
+        g.otherJob = False
+        self.assertEqual(run(), "calculating")
+        self.assertEqual((g.ordered.name, g.ordered["count"]), ("minecraft:grass_block", 460))
+        self.assertEqual(run(), "crafting")
+        self.assertEqual(g.view.grassReserve.lastQuantity, 460)
+        self.assertEqual(g.orders, 1)
+
     def test_positive_stock_refill_dedup_and_missing_material(self):
         code = (Path(__file__).resolve().parents[1] / "public/cc/erebor-powder.lua").read_text(encoding="utf-8")
         lua = LuaRuntime()

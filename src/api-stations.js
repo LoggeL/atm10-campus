@@ -49,6 +49,8 @@ const currentVersion = /local VERSION = "([^"]+)"/.exec(stationSource())?.[1] ??
 // stations keep their installed compatible release.
 const scriptVersion = row => {
   const installed = JSON.parse(row.status_json || '{}').script;
+  // 1.4.14 adds a job to the central computer only.
+  if(currentVersion==='1.4.14'&&row.name!=='erebor-K02'&&installed==='1.4.13')return installed;
   return !isEreborStation(row.name) && /^1\.4\.(?:[3-9]|10)$/.test(installed)
     ? installed : currentVersion;
 };
@@ -70,6 +72,7 @@ export function normalizeStatus(b = {}) {
     delivered,
     ...(b.powderReserve && typeof b.powderReserve==='object' ? {powderReserve:reserveStatus(b.powderReserve)} : {}),
     ...(b.brickReserve && typeof b.brickReserve==='object' ? {brickReserve:reserveStatus(b.brickReserve)} : {}),
+    ...(b.grassReserve && typeof b.grassReserve==='object' ? {grassReserve:reserveStatus(b.grassReserve)} : {}),
     shortages: asList(b.shortages).slice(0, 100).filter(s => s && typeof s === 'object').map(s => ({
       item: clip(s.item, 120), missing: int(s.missing), inME: int(s.inME), craftable: !!s.craftable, crafting: !!s.crafting, error: clip(s.error, 200),
     })),
@@ -410,9 +413,12 @@ export function registerStationRoutes(app, campus, mat, alignment, schematics) {
       // A transient printer lease gates chest transfers, not crafting into ME storage.
       const powderReserve=row.name==='erebor-K02' && reported.computerId===13 && !options.paused && options.gunpowder>0
         ? {computerId:13,low:8192,target:16384} : null;
-      const brickTarget=row.name==='erebor-K02'&&reported.computerId===13&&!options.paused?campus.ereborFeeder.brickTarget():0;
+      const central=row.name==='erebor-K02'&&reported.computerId===13&&!options.paused;
+      const brickTarget=central?campus.ereborFeeder.reserveTarget('minecraft:stone_bricks',65536):0;
       const brickReserve=brickTarget>0?{computerId:13,low:Math.min(16384,brickTarget),target:brickTarget}:null;
-      return {...plan, powderReserve, brickReserve, connectingOrder:reported.script === currentVersion ? meOrder.attemptFor(row.name,actor) : null};
+      const grassTarget=central&&reported.script==='1.4.14'?campus.ereborFeeder.reserveTarget('minecraft:grass_block',8192):0;
+      const grassReserve=grassTarget>0?{computerId:13,low:Math.min(4096,grassTarget),target:grassTarget}:null;
+      return {...plan, powderReserve, brickReserve, grassReserve, connectingOrder:reported.script === currentVersion ? meOrder.attemptFor(row.name,actor) : null};
     }
     return alignment.gate(row.name, planFor(row, liveSnap()));
   });
