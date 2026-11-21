@@ -238,7 +238,9 @@ export function parallelFleet(db,production,choices,request,recordedFinish,resum
       await service(p,r.station,r.slot,r.signal,report.at,active,read(r.station.site),current);
     }
   }
-  return {reserved,list,jobs,complete,isEnabled,switchAll,jobAt,startFueledExtras,async refill(p,site,slot,report,enabled,main,current){
+  return {reserved,list,jobs,complete,isEnabled,switchAll,jobAt,startFueledExtras,
+    replaySurface(v,site,slot,job){save.run(JSON.stringify(job),'Aktueller Außenhautplan zum Einlegen bereit',v,site,slot);},
+    async refill(p,site,slot,report,enabled,main,current){
     const pair=parallelLayout.sites.find(r=>r.site===site);
     if(pair&&enabled()&&current()&&Date.now()-report.at<15000)
       await service(p,pair,slot,report.stations[site+slot],report.at,enabled,main,current,report.interiorHelpers===1,report.ereborProjectWork===1);

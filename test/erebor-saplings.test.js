@@ -3,7 +3,8 @@ import assert from 'node:assert/strict';
 import {createHash} from 'node:crypto';
 import {DatabaseSync} from 'node:sqlite';
 import {convertSurfaceTrees} from '../src/erebor-saplings.js';
-import {landscapeQueue,carrySurfaceJobs} from '../src/erebor-landscape-work.js';
+import {landscapeQueue,carrySurfaceJobs,releasedSurface} from '../src/erebor-landscape-work.js';
+import {ereborUploadName} from '../src/erebor-file.js';
 import {parseStructure} from '../src/nbt.js';
 import {tileNBT} from '../src/erebor-tiles.js';
 import {zipStore,storedZipEntry} from '../src/zip.js';
@@ -58,5 +59,42 @@ test('a requested helper can resume its reserved sapling revision without counti
   queue.releasePrevious(12,'K20','C',job);
   assert.equal(queue.successor(12,'K20','C',job),null);
   assert.deepEqual({...db.prepare('SELECT sha,site,slot,done FROM erebor_surface_dispatch').get()},{sha:'new',site:'K20',slot:'C',done:0});
+ }finally{db.close();}
+});
+
+test('released main and helper inputs can use only their own published revision once',()=>{
+ const db=new DatabaseSync(':memory:');
+ try{
+  const queue=landscapeQueue(db);
+  db.exec('CREATE TABLE erebor_landscape(project_version,revision); INSERT INTO erebor_landscape VALUES(12,2); CREATE TABLE erebor_surface_parts(v,r,id,report)');
+  const fixture=[
+   ['K20','A','R-3_-20',[-1312,64,-9792]],
+   ['K20','B','R-3_-20',[-1344,64,-10016]],
+   ['K36','A','R-1_-18',[-480,64,-9056]],
+  ];
+  for(const [site,slot,part,origin] of fixture){
+   db.exec('DELETE FROM erebor_surface_parts');
+   const [x,y,z]=origin,blueprint='EREBOR_HAUT_'+part+'_X'+x+'_Y'+y+'_Z'+z,fileName=blueprint+'.nbt';
+   const before='a'.repeat(64),after=slot==='B'?before:'b'.repeat(64);
+   const source={part,r:2,fileName,sha256:before};
+   const job={loaded:true,surface:true,phase:'build',size:[32,32,32],source,desired:{owner:'Erebor',version:12,anchor:origin,blueprint,file:ereborUploadName(fileName,before),sha256:before}};
+   const signal={ready:true,state:'STOPPED',status:'idle',upload:'',empty:true,finish:null};
+   assert.ok(releasedSurface(site,slot,job,signal));
+   for(const changed of [{status:'finished'},{state:'PAUSED'},{upload:'foreign.nbt'},{ready:false},{finish:{file:'other'}}])
+    assert.ok(!releasedSurface(site,slot,job,{...signal,...changed}));
+   assert.ok(!releasedSurface(site,slot,{...job,replayedAfterRelease:true},signal));
+   db.prepare('INSERT INTO erebor_surface_parts VALUES(12,2,?,?)').run(part,JSON.stringify({files:[{origin,fileName,sha256:after}]}));
+   const reserve=db.prepare('INSERT INTO erebor_surface_dispatch VALUES(12,2,?,?,?,?,0)');
+   reserve.run(fileName,before,site,slot);
+   if(before!==after){
+    reserve.run(fileName,after,site,slot);
+    assert.equal(queue.idleRevision(12,site,slot,job),null);
+    db.prepare('INSERT INTO erebor_surface_legacy VALUES(12,2,?,?,?,?,?)').run(fileName,before,after,'{}',Buffer.alloc(0));
+   }
+   assert.deepEqual(queue.idleRevision(12,site,slot,job),{...source,sha256:after});
+   assert.equal(queue.idleRevision(12,site,'C',job),null);
+   db.prepare('UPDATE erebor_surface_dispatch SET done=1 WHERE file=? AND sha=?').run(fileName,after);
+   assert.equal(queue.idleRevision(12,site,slot,job),null);
+  }
  }finally{db.close();}
 });

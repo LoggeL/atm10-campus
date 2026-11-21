@@ -16,6 +16,17 @@ export function readySurface(job,report,key){
 }
 
 const catalogs=new WeakMap();
+// These particular inputs were removed before Create could issue a finish receipt.
+const releasedSurfaceJobs=new Map([
+ ['K20A','EREBOR_HAUT_R-3_-20_X-1312_Y64_Z-9792'],
+ ['K20B','EREBOR_HAUT_R-3_-20_X-1344_Y64_Z-10016'],
+ ['K36A','EREBOR_HAUT_R-1_-18_X-480_Y64_Z-9056'],
+]);
+export function releasedSurface(site,slot,job,signal){
+ return job?.surface===true&&job.loaded===true&&!job.replayedAfterRelease&&job.phase==='build'&&
+  job.desired?.blueprint===releasedSurfaceJobs.get(site+slot)&&job.desired?.owner==='Erebor'&&
+  signal?.ready===true&&signal.state==='STOPPED'&&signal.status==='idle'&&signal.empty===true&&signal.upload===''&&!signal.finish;
+}
 export function initLandscapeWork(db){
  db.exec(`CREATE TABLE IF NOT EXISTS erebor_surface_dispatch(v INTEGER,r INTEGER,file TEXT,sha TEXT,site TEXT,slot TEXT,done INTEGER DEFAULT 0,PRIMARY KEY(v,r,file,sha))`);
  db.exec(`CREATE TABLE IF NOT EXISTS erebor_surface_legacy(v INTEGER,r INTEGER,file TEXT,sha TEXT,next_sha TEXT,entry TEXT,nbt BLOB,PRIMARY KEY(v,r,file,sha))`);
@@ -99,7 +110,21 @@ export function landscapeQueue(db){
   if(!next||revision(v)!==s.r)return null;
   return {...s,sha256:next.sha};
  }
- return {restore,successor,releasePrevious(v,site,slot,job){
+ function idleRevision(v,site,slot,job){
+  const s=job.source,d=job.desired;
+  if(!s||d.version!==v||releasedSurfaceJobs.get(site+slot)!==d.blueprint||d.blueprint+'.nbt'!==s.fileName||
+     d.sha256!==s.sha256||d.file!==ereborUploadName(s.fileName,s.sha256)||revision(v)!==s.r)return null;
+  const row=db.prepare('SELECT report FROM erebor_surface_parts WHERE v=? AND r=? AND id=?').get(v,s.r,s.part);
+  const file=row&&JSON.parse(row.report).files.find(f=>f.fileName===s.fileName&&same(f.origin,d.anchor));
+  if(!file||!same(job.size,[32,32,32]))return null;
+  const owns=db.prepare('SELECT 1 FROM erebor_surface_dispatch WHERE v=? AND r=? AND file=? AND sha=? AND site=? AND slot=? AND done=0');
+  const reserved=sha=>owns.get(v,s.r,s.fileName,sha,site,slot);
+  if(!reserved(s.sha256)||!reserved(file.sha256))return null;
+  if(file.sha256!==s.sha256&&!db.prepare('SELECT 1 FROM erebor_surface_legacy WHERE v=? AND r=? AND file=? AND sha=? AND next_sha=?')
+     .get(v,s.r,s.fileName,s.sha256,file.sha256))return null;
+  return {...s,sha256:file.sha256};
+ }
+ return {restore,successor,idleRevision,releasePrevious(v,site,slot,job){
   const s=job.source;
   if(!db.prepare('DELETE FROM erebor_surface_dispatch WHERE v=? AND r=? AND file=? AND sha=? AND site=? AND slot=? AND done=0').run(v,s.r,s.fileName,s.sha256,site,slot).changes)throw Error('Vorherige Reservierung hat gewechselt.');
  },finish(v,site,slot,job){

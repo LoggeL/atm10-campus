@@ -1,5 +1,5 @@
 import {interiorColumns,interiorFrontier,interiorGroup,interiorRelease,inRange,insideMassif} from './erebor-interior.js';
-import {landscapeQueue,readySurface} from './erebor-landscape-work.js';
+import {landscapeQueue,readySurface,releasedSurface} from './erebor-landscape-work.js';
 import {mountainTop} from './project-stone.js';
 import {groupOf,slotsFor} from './erebor-groups.js';
 import {cannonProgressRows} from './cannon-progress-rows.js';
@@ -510,16 +510,52 @@ export function registerEreborQueue(app,campus){
   const waiting=[];
   for(const row of [...mains.map(s=>({...s,slot:'A'})),...helperJobs]){
    const {site,slot,job}=row,key=slot==='A'?site:site+slot,s=report.stations[key];
-   if(!(job?.loaded&&(job.interior||job.surface))||s?.state!=='STOPPED'||s.status!=='finished'||!s.empty||s.upload)continue;
+   const released=releasedSurface(site,slot,job,s);
+   if(!(job?.loaded&&(job.interior||job.surface))||s?.state!=='STOPPED'||(!released&&s.status!=='finished')||!s.empty||s.upload)continue;
    const last=roomChecks.get(key),when=last?.file===job.desired.file?last.at:0;
-   if(Date.now()-when>=25000)waiting.push({site,slot,key,job,s,when});
+   if(Date.now()-when>=25000)waiting.push({site,slot,key,job,s,when,released});
   }
-  for(const {site,slot,key,job,s} of waiting.sort((a,b)=>a.when-b.when).slice(0,4)){
+  for(const {site,slot,key,job,s,released} of waiting.sort((a,b)=>a.when-b.when).slice(0,4)){
    if(!current(v)||Date.now()-report.at>=20000)return;
    roomChecks.set(key,{file:job.desired.file,at:Date.now()});
    const active=()=>current(v)&&(slot==='A'?production.mode(v,site).enabled:cfg().phase==='stone'&&helpers.isEnabled(v));
    const matches=()=>(slot==='A'?read(site).job:helpers.jobAt(v,site,slot))?.desired.file===job.desired.file;
    try{
+    if(released){
+     const allowed=()=>active()&&cfg().enabled&&!choices.next(v,site)&&!job.selection;
+     if(!allowed()||!config.worldSources.live||report.surfaceModeTracker!==1||report.ereborProjectWork!==1)continue;
+     const source=landscape.idleRevision(v,site,slot,job);
+     if(!source)continue;
+     const pkg=landscape.restore(v,source);
+     const check={bytes:pkg.bytes,anchor:pkg.job.desired.anchor,kind:'surface'};
+     const done=await generate(p,{interiorCheck:{...check,completed:true,minimumSave:Math.floor(job.seen||0)*1000}});
+     if(!done&&!await generate(p,{interiorCheck:check}))continue;
+     const {observed}=await request('erebor-inspect',{site:key,version:v});
+     if(!emptyStopped(observed)||observed.status!=='idle'||!allowed()||!matches()||
+        !same(source,landscape.idleRevision(v,site,slot,job)))continue;
+     const next={...pkg.job,next:job.next,replayedAfterRelease:true};
+     tx(db,()=>{
+      if(job.source.sha256!==source.sha256)landscape.releasePrevious(v,site,slot,job);
+      if(slot!=='A'){
+       if(done)helpers.complete(v,site,slot,next);
+       else helpers.replaySurface(v,site,slot,next);
+       return;
+      }
+      const state=read(site);
+      state.inserted=false;
+      production.started(v,site,null);
+      if(done){
+       production.finish(v,site,next.desired.blueprint,new Date().toISOString());
+       landscape.finish(v,site,slot,next);
+       state.cursor=job.next;state.completed++;state.job=null;
+       state.status='Außenhaut vollständig im Weltstand bestätigt';
+      }else{
+       state.job=next;state.status='Aktueller Außenhautplan zum Einlegen bereit';
+      }
+      db.prepare('UPDATE erebor_queue_sites SET state=?,payload=? WHERE site=?').run(JSON.stringify(state),done?null:pkg.bytes,site);
+     });
+     continue;
+    }
     const {observed:o}=await request('erebor-inspect',{site:key,version:v});
     if(!current(v)||!matches()||!emptyStopped(o)||o.status!=='finished')continue;
     const receipt=recordedFinish(o,job,s.finish,Date.now(),{signal:s,at:report.at});
