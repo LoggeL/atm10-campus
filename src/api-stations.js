@@ -48,12 +48,15 @@ const currentVersion = /local VERSION = "([^"]+)"/.exec(stationSource())?.[1] ??
 // stations keep their installed compatible release.
 const scriptVersion = row => {
   const installed = JSON.parse(row.status_json || '{}').script;
+  if(isEreborStation(row.name)&&row.name!=='erebor-K02'&&installed==='1.4.11')return installed;
   return !isEreborStation(row.name) && /^1\.4\.(?:[3-9]|10)$/.test(installed)
     ? installed : currentVersion;
 };
 const clip = (v, n) => (v == null ? null : String(v).slice(0, n));
 const int = v => Math.max(0, Math.floor(Number(v) || 0));
 const asList = v => (Array.isArray(v) ? v : v && typeof v === 'object' ? Object.values(v) : []);
+const reserveStatus=b=>({stage:clip(b.stage,32),stock:int(b.stock),quantity:int(b.quantity),
+  lastStart:int(b.lastStart),lastQuantity:int(b.lastQuantity),message:clip(b.message,300)});
 
 // What a computer reports about its cannon; only known fields are kept.
 export function normalizeStatus(b = {}) {
@@ -65,10 +68,8 @@ export function normalizeStatus(b = {}) {
     chestSide: typeof b.chestSide === 'string' && b.chestSide.trim() ? b.chestSide.trim().slice(0,60) : null,
     chest: b.chest && typeof b.chest === 'object' ? { slots: int(b.chest.slots), used: int(b.chest.used), name: clip(b.chest.name, 60) } : null,
     delivered,
-    ...(b.powderReserve && typeof b.powderReserve==='object' ? {powderReserve:{
-      stage:clip(b.powderReserve.stage,32),stock:int(b.powderReserve.stock),quantity:int(b.powderReserve.quantity),
-      lastStart:int(b.powderReserve.lastStart),lastQuantity:int(b.powderReserve.lastQuantity),message:clip(b.powderReserve.message,300),
-    }} : {}),
+    ...(b.powderReserve && typeof b.powderReserve==='object' ? {powderReserve:reserveStatus(b.powderReserve)} : {}),
+    ...(b.brickReserve && typeof b.brickReserve==='object' ? {brickReserve:reserveStatus(b.brickReserve)} : {}),
     shortages: asList(b.shortages).slice(0, 100).filter(s => s && typeof s === 'object').map(s => ({
       item: clip(s.item, 120), missing: int(s.missing), inME: int(s.inME), craftable: !!s.craftable, crafting: !!s.crafting, error: clip(s.error, 200),
     })),
@@ -409,7 +410,9 @@ export function registerStationRoutes(app, campus, mat, alignment, schematics) {
       // A transient printer lease gates chest transfers, not crafting into ME storage.
       const powderReserve=row.name==='erebor-K02' && reported.computerId===13 && !options.paused && options.gunpowder>0
         ? {computerId:13,low:8192,target:16384} : null;
-      return {...plan, powderReserve, connectingOrder:reported.script === currentVersion ? meOrder.attemptFor(row.name,actor) : null};
+      const brickTarget=row.name==='erebor-K02'&&reported.computerId===13&&!options.paused?campus.ereborFeeder.brickTarget():0;
+      const brickReserve=brickTarget>0?{computerId:13,low:Math.min(16384,brickTarget),target:brickTarget}:null;
+      return {...plan, powderReserve, brickReserve, connectingOrder:reported.script === currentVersion ? meOrder.attemptFor(row.name,actor) : null};
     }
     return alignment.gate(row.name, planFor(row, liveSnap()));
   });

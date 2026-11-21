@@ -71,7 +71,7 @@ export function limitSupplyReads(request){
 
 export function ereborFeeder(db,request,version,liveReport){
  const samples=new Map(),views=new Map(),pending=new Map();
- const craftOwners=new Map();
+ const craftOwners=new Map(),brickNeeds=new Map();
  const lookup=db.prepare("SELECT s.state FROM erebor_queue_sites s JOIN erebor_queue_config q ON q.id=1 JOIN build_projects p ON p.id='erebor' WHERE s.site=? AND q.version=? AND p.current_version=q.version");
  const jobAt=site=>JSON.parse(lookup.get(site,version)?.state||'{}').job;
  const stationAt=db.prepare('SELECT status_json,options_json FROM cannons WHERE name=?');
@@ -179,8 +179,14 @@ export function ereborFeeder(db,request,version,liveReport){
     const projectCraft=!base.options.paused&&entries.some(([slot])=>group[slot].phase==='build'&&(group[slot].interior||group[slot].surface));
     // One requesting computer orders an output for the shared ME. Other groups
     // still export it as soon as it arrives. A stopped computer loses its lease.
-    if(projectCraft&&reported.script==='1.4.11'){
+    if(projectCraft&&['1.4.11','1.4.12'].includes(reported.script)){
+     const bricks=items.find(it=>it.item==='minecraft:stone_bricks');
+     brickNeeds.set(row.name,{at:Date.now(),amount:bricks?.needed??0});
+     const central=JSON.parse(stationAt.get('erebor-K02')?.status_json||'null');
+     const bricksManaged=central?.computerId===13&&central.script==='1.4.12'&&central.brickReserve
+       &&Math.abs(Date.now()-Date.parse(central.at))<45000;
      for(const it of items){
+      if(bricksManaged&&it.item==='minecraft:stone_bricks')continue;
       const shortage=reported.assignment===assignment&&reported.shortages?.find(s=>s.item===it.item&&s.craftable&&s.missing>s.inME);
       const owner=craftOwners.get(it.item);
       if(shortage&&(!owner||owner.until<=Date.now()||owner.name===row.name)){
@@ -221,7 +227,13 @@ export function ereborFeeder(db,request,version,liveReport){
    return {...base,state:base.options.paused?'paused':'feeding',alignment:{enabled:true,state:'aligned',leaseSeconds:10,probeAttempts:attempt,probeMode:confirmation?'compact':'full'},blueprint:{id:j.desired.blueprint,name:j.desired.blueprint,version,origin:j.desired.anchor,size:j.size},items,totals:{start:total,needed:total,kinds:items.length}};
   }catch(e){return held(e.message);}
  };
- const feeder=async(row,opts)=>{const plan=await poll(row,opts);views.set(row.name,{plan,at:Date.now()});return plan;};
+ const feeder=async(row,opts)=>{
+  const plan=await poll(row,opts);
+  if(opts.options.paused||(plan.state==='feeding'&&!plan.options.projectSupply))brickNeeds.delete(row.name);
+  views.set(row.name,{plan,at:Date.now()});
+  return plan;
+ };
+ feeder.brickTarget=()=>Math.min(65536,[...brickNeeds.values()].reduce((total,r)=>total+(Date.now()-r.at<60000?r.amount:0),0));
  // Cached samples serve only the read-only dashboard and background monitoring.
  // A material lease or an explicit plan change always takes a new live sample.
  feeder.sample=site=>{const o=samples.get(site);return o&&Math.abs(Date.now()/1000-o.at)<5?o:null;};

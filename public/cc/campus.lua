@@ -3,7 +3,7 @@
 -- through an Advanced Peripherals ME Bridge. Which blueprint and the options are set in the web app (tab "Kanonen");
 -- this computer only knows URL, a station token and its cannon name (install: wget run <url>/cc/install.lua).
 -- Strings shown on screen use Latin-1 escapes (\228 = ae-umlaut ...), the CC font is ISO-8859-1.
-local VERSION = "1.4.11"
+local VERSION = "1.4.12"
 
 settings.define("campus.url", { description = "Campus-URL", type = "string" })
 settings.define("campus.token", { description = "API-Token mit Scope Station", type = "string" })
@@ -233,7 +233,7 @@ local function startAssignment(p)
     if n > 0 then notice(n .. " Reste ins ME zur\252ck") end
   end
   view.craftError = nil
-  state = { assignment = p.assignment, delivered = {}, cap = {}, craftAt = state.craftAt or {}, powder = state.powder, projectItems = state.projectItems }
+  state = { assignment = p.assignment, delivered = {}, cap = {}, craftAt = state.craftAt or {}, powder = state.powder, bricks = state.bricks, projectItems = state.projectItems }
   saveState()
 end
 
@@ -504,7 +504,7 @@ local function reportStatus()
     assignment = plan and plan.assignment or 0, state = view.state, script = VERSION, api = api, computerId = os.getComputerID(),
     message = (view.state == "error" and view.error) or view.message or view.craftError,
     chest = view.chest, chestSide = chestName, delivered = state.delivered, shortages = view.shortages,
-    powderReserve = view.powderReserve,
+    powderReserve = view.powderReserve, brickReserve = view.brickReserve,
   }, plan and plan.intervals and plan.intervals.status or 30)
 end
 
@@ -650,6 +650,11 @@ local function tick()
     local success, why = pcall(maintainPowder, plan.powderReserve)
     if not success then view.powderReserve = {stage="retrying",message=tostring(why)} end
   else view.powderReserve = nil end
+  if NAME == "erebor-K02" and ok and plan and plan.brickReserve and now() - planReceivedAt < 120
+      and os.getComputerID() == plan.brickReserve.computerId then
+    local success, why = pcall(maintainBricks, plan.brickReserve)
+    if not success then view.brickReserve = {stage="retrying",message=tostring(why)} end
+  else view.brickReserve = nil end
   local _, reportError = reportStatus()
   if reportError then view.error = reportError end
   if ok and settings.get("campus.stock") and now() - stockAt >= iv.stock then
