@@ -17,6 +17,12 @@ test('only an untouched, matching and fueled additive plan qualifies for priorit
  for(const change of [{options:[2,false,false]},{anchor:[0,0,0]},{upload:'other'},{fuel:0},{placed:1},{status:'missingBlock'}])
   assert.ok(!readySurface(job,{...report,stations:{K01B:{...signal,...change}}},'K01B'));
  for(const change of [{started:true},{tainted:true},{surface:false}])assert.ok(!readySurface({...job,...change},report,'K01B'));
+ const grove={...job,surface:false,interior:true,source:{part:'E01_901'}};
+ const hangReport={...report,stations:{K10G:signal,K10I:signal,K10H:signal}};
+ for(const key of ['K10G','K10I'])assert.ok(readySurface(grove,hangReport,key));
+ assert.ok(!readySurface(grove,hangReport,'K10H'));
+ assert.ok(!readySurface({...grove,source:{part:'E01_001'}},hangReport,'K10G'));
+ assert.ok(!readySurface(grove,{...hangReport,stations:{K10G:{...signal,options:[2,false,false]}}},'K10G'));
 });
 test('additive summit preserves occupied columns and emits only surveyed blocks above the stone profile',t=>{
  const plan={worldOrigin:[500,88,500],mountainFill:{peak:[0,232,0],bounds:[[-32,-40,-32],[32,313,32]],roofReserves:[],protectedBoxes:[]},zones:[],cannonLayout:{stations:[]}};

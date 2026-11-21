@@ -6,7 +6,8 @@ import {isDeepStrictEqual as same} from 'node:util';
 
 export function readySurface(job,report,key){
  const signal=report?.stations?.[key],d=job?.desired;
- return report?.ereborProjectWork===1&&report.surfaceModeTracker===1&&job?.surface===true&&
+ const grove=(key==='K10G'||key==='K10I')&&job?.interior===true&&job.source?.part==='E01_901';
+ return report?.ereborProjectWork===1&&report.surfaceModeTracker===1&&(job?.surface===true||grove)&&
   job.phase==='build'&&!job.started&&!job.tainted&&!job.placed&&d?.owner==='Erebor'&&
   d.options?.replace_mode===0&&d.options.skip_missing===false&&d.options.replace_block_entities===false&&
   signal?.state==='PAUSED'&&signal.status==='ready'&&signal.ready&&signal.aligned&&
