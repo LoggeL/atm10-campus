@@ -153,6 +153,19 @@ export function ereborFeeder(db,request,version,liveReport){
    if(live?.sharedChest===4&&(extra||group.B||group.C||live.stations?.[site+'B']?.state||live.stations?.[site+'C']?.state)){
     const targets=groupTargets(group,site,live);
     if(!Object.keys(targets).length)return held('Wartet auf den ersten eingelegten Bauplan.');
+    const groupSlots=extra?Object.keys(extra.slots):['A','B','C'];
+    // A changed input cannot pass the host's shared-chest proof. Wait for its
+    // reservation locally so other chests can use the two physical probe slots.
+    if(Number.isFinite(live.at)&&Math.abs(Date.now()-live.at)<10000){
+     for(const slot of groupSlots){
+      const signal=live.stations?.[site+(slot==='A'?'':slot)];
+      if(!signal?.upload||signal.empty)continue;
+      const t=targets[slot];
+      if(!t||signal.upload!==t.file||signal.owner!=='Erebor'||!signal.aligned||
+         !same(signal.anchor,t.anchor)||!same(signal.size,t.size)||!same(signal.options,t.options))
+       return held('Bauplan, Ausrichtung oder Optionen an '+site+slot+' prüfen.');
+     }
+    }
     const waiting=Object.keys(targets).some(slot=>['missingBlock','missingItem','noGunpowder'].includes(live.stations?.[site+(slot==='A'?'':slot)]?.status));
     const result=await supplyRead({site:extra?.name??site,version,computerId:reported.computerId,chestSide:reported.chestSide,targets},waiting);
     const station=stationAt.get(row.name),after=JSON.parse(station?.status_json||'null');
@@ -203,7 +216,6 @@ export function ereborFeeder(db,request,version,liveReport){
       }
      }
     }
-    const groupSlots=extra?Object.keys(extra.slots):['A','B','C'];
     const rebalance=projectCraft&&groupSlots.every(slot=>{
      const s=live.stations?.[site+(slot==='A'?'':slot)];
      return s?.ready&&(result.confirmed?.[slot]?.file&&s.upload===result.confirmed[slot].file||s.empty&&s.state==='STOPPED');

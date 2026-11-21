@@ -5,6 +5,19 @@ import {Region} from '../src/region.js';
 import {buildSurfacePart,summitHeight} from '../src/erebor-surface.js';
 import {loadModel} from '../src/structure-edit.js';
 import {storedZipEntry} from '../src/zip.js';
+import {readySurface} from '../src/erebor-landscape-work.js';
+test('only an untouched, matching and fueled additive plan qualifies for priority inspection',()=>{
+ const desired={file:'campus_test.nbt',owner:'Erebor',anchor:[32,64,96],options:{replace_mode:0,skip_missing:false,replace_block_entities:false}};
+ const job={phase:'build',surface:true,desired,size:[32,32,32],loaded:false};
+ const signal={state:'PAUSED',status:'ready',ready:true,aligned:true,fuel:1,placed:0,
+  owner:desired.owner,upload:desired.file,anchor:desired.anchor,size:job.size,options:[0,false,false]};
+ const report={ereborProjectWork:1,surfaceModeTracker:1,stations:{K01B:signal}};
+ assert.ok(readySurface(job,report,'K01B'));
+ assert.ok(!readySurface(job,{...report,surfaceModeTracker:0},'K01B'));
+ for(const change of [{options:[2,false,false]},{anchor:[0,0,0]},{upload:'other'},{fuel:0},{placed:1},{status:'missingBlock'}])
+  assert.ok(!readySurface(job,{...report,stations:{K01B:{...signal,...change}}},'K01B'));
+ for(const change of [{started:true},{tainted:true},{surface:false}])assert.ok(!readySurface({...job,...change},report,'K01B'));
+});
 test('additive summit preserves occupied columns and emits only surveyed blocks above the stone profile',t=>{
  const plan={worldOrigin:[500,88,500],mountainFill:{peak:[0,232,0],bounds:[[-32,-40,-32],[32,313,32]],roofReserves:[],protectedBoxes:[]},zones:[],cannonLayout:{stations:[]}};
  const draft={summit:[0,319,0],profile:[[-20,250],[0,319],[20,250]]};

@@ -2,6 +2,17 @@ import {createHash} from 'node:crypto';
 import {storedZipEntry} from './zip.js';
 import {ereborUploadName} from './erebor-file.js';
 import {inRange} from './erebor-interior.js';
+import {isDeepStrictEqual as same} from 'node:util';
+
+export function readySurface(job,report,key){
+ const signal=report?.stations?.[key],d=job?.desired;
+ return report?.ereborProjectWork===1&&report.surfaceModeTracker===1&&job?.surface===true&&
+  job.phase==='build'&&!job.started&&!job.tainted&&!job.placed&&d?.owner==='Erebor'&&
+  d.options?.replace_mode===0&&d.options.skip_missing===false&&d.options.replace_block_entities===false&&
+  signal?.state==='PAUSED'&&signal.status==='ready'&&signal.ready&&signal.aligned&&
+  signal.fuel>0&&signal.placed===0&&signal.owner===d.owner&&signal.upload===d.file&&
+  same(signal.anchor,d.anchor)&&same(signal.size,job.size)&&same(signal.options,[0,false,false]);
+}
 
 const catalogs=new WeakMap();
 export function initLandscapeWork(db){

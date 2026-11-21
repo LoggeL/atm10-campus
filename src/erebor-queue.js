@@ -1,5 +1,5 @@
 import {interiorColumns,interiorFrontier,interiorGroup,interiorRelease,inRange,insideMassif} from './erebor-interior.js';
-import {landscapeQueue} from './erebor-landscape-work.js';
+import {landscapeQueue,readySurface} from './erebor-landscape-work.js';
 import {mountainTop} from './project-stone.js';
 import {groupOf,slotsFor} from './erebor-groups.js';
 import {cannonProgressRows} from './cannon-progress-rows.js';
@@ -300,6 +300,13 @@ export function registerEreborQueue(app,campus){
     return;
    }
    const waiting=signal.state==='PAUSED'&&['targetNotLoaded','missingBlock','missingItem','noGunpowder'].includes(signal.status);
+   // Create resumes resource waits itself. Leave the controller available for physical chest checks.
+   if(waiting&&(tracked.interior||tracked.surface)&&!tracked.tainted&&signal.ready&&signal.aligned&&
+      signal.upload===tracked.desired.file&&signal.owner===tracked.desired.owner&&same(signal.anchor,tracked.desired.anchor)&&
+      same(signal.size,tracked.size)&&same(signal.options,[tracked.desired.options.replace_mode,tracked.desired.options.skip_missing,tracked.desired.options.replace_block_entities])&&
+      Number.isSafeInteger(signal.placed)&&signal.placed>=(tracked.placed||0)&&report.at>=tracked.seen*1000){
+    tracked.placed=signal.placed;tracked.seen=report.at/1000;s.inserted=true;s.status='Pausiert: '+signal.status;return;
+   }
    if(isStationStone(tracked,site)&&signal.upload===tracked.desired.file&&(signal.state==='RUNNING'||waiting)&&signal.aligned&&
       signal.owner===tracked.desired.owner&&same(signal.anchor,tracked.desired.anchor)&&same(signal.size,tracked.size)&&
       ((!needsSolidReplacement(tracked.desired)&&same(signal.options,[0,false,false]))||same(signal.options,[2,false,false]))&&Number.isSafeInteger(signal.placed)&&report.at>=tracked.seen*1000){
@@ -439,11 +446,11 @@ export function registerEreborQueue(app,campus){
  const lastUrnCheck=new Map(),lastPackStart=new Map();
  // A failed first-start read leaves a valid prepared main waiting through the helper rotation.
  // On the same queue lease, retry one eligible main at each fresh fleet report.
- async function startReadyMainPack(v,report){
-  if(report?.urnPacks!==3||!current(v)||!massif.enabled(v)||Date.now()-report.at>=15000)return;
+ async function startPreparedMain(v,report){
+  if(!report||!current(v)||!massif.enabled(v)||Date.now()-report.at>=15000)return;
   const eligible=production.enabled(v).flatMap(site=>{
    const state=read(site),job=state.job;
-   if(!readyUrnPack(job,report.stations?.[site])||choices.next(v,site)||
+   if(!(readySurface(job,report,site)||report.urnPacks===3&&readyUrnPack(job,report.stations?.[site]))||choices.next(v,site)||
       production.mode(v,site).started_upload===job.desired.file)return [];
    const last=lastPackStart.get(site);
    return [{site,state,job,at:last?.file===job.desired.file?last.at:0}];
@@ -550,7 +557,7 @@ export function registerEreborQueue(app,campus){
   try{
    const archive=c.archive?JSON.parse(c.archive):null;
    let report=await liveReport(c.version);
-   await startReadyMainPack(c.version,report);
+   await startPreparedMain(c.version,report);
    await reconcileUrns(p,report);
    await finishRooms(p,report);
    for(const site of new Set([...active,...(c.enabled&&c.phase!=='finished'?sites:[])])){
@@ -574,7 +581,7 @@ export function registerEreborQueue(app,campus){
     const report=await liveReport(c.version);
     await helpers.tick(p,report,()=>c.phase==='stone'&&helpers.isEnabled(c.version),read,renew,async()=>{
      const fresh=await liveReport(c.version);
-     await startReadyMainPack(c.version,fresh);
+     await startPreparedMain(c.version,fresh);
      await reconcileUrns(p,fresh);
      await finishRooms(p,fresh);
      return fresh;

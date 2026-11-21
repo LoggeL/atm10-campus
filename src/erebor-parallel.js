@@ -6,6 +6,7 @@ import {isStationStone,needsSolidReplacement,observedEreborOptions,completedSton
 import {publishedPlan} from './erebor-selection.js';
 import {tx} from './db.js';
 import {witnessedUrn} from './erebor-manual-urn.js';
+import {readySurface} from './erebor-landscape-work.js';
 
 export const parallelLayout=JSON.parse(readFileSync(new URL('./erebor-fleet/parallel.json',import.meta.url)));
 for(const station of parallelLayout.sites){
@@ -194,14 +195,15 @@ export function parallelFleet(db,production,choices,request,recordedFinish,resum
         }
         if(signal?.state!=='PAUSED'||signal.status!=='ready'||!signal.ready||!signal.aligned||signal.placed!==0)continue;
         const job=jobAt(p.current_version,station.site,slot);
-        if(!isStationStone(job,station.site)||job.started||job.tainted||job.placed>0||
+        const surface=readySurface(job,report,key);
+        if((!surface&&!isStationStone(job,station.site))||job.started||job.tainted||job.placed>0||
            signal.upload!==job.desired.file||signal.owner!==job.desired.owner||
            !same(signal.anchor,job.desired.anchor)||!same(signal.size,job.size))continue;
         // A prepare response may time out after a one-block plan was inserted.
         // Service re-inspects the file/hash, printer, fuel and output before start.
         const urn=report.urnPreparation===2&&job.massif?.includes('_URN_')&&
           (same(job.size,[1,1,1])||report.urnPacks===3&&job.massif.includes('_URN_PACK_'))&&same(signal.options,[0,false,false]);
-        if(!urn&&(slot<'D'||!job.loaded||!Number.isInteger(job.baseline)))continue;
+        if(!surface&&!urn&&(slot<'D'||!job.loaded||!Number.isInteger(job.baseline)))continue;
         const previous=lastFirstStart.get(key);
         const last=previous?.file===signal.upload?previous.at:0;
         if(Date.now()-last>=30000)ready.push({key,station,slot,signal,last});
