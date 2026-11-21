@@ -6,6 +6,7 @@ import { validateMountain } from './project-stone.js';
 import { registerEreborQueue } from './erebor-queue.js';
 import { registerEreborFleet } from './api-erebor-fleet.js';
 import {registerSurface} from './api-erebor-surface.js';
+import {registerSpawnPlans} from './api-erebor-spawn.js';
 import {registerLandscape} from './erebor-landscape.js';
 
 // Projects describe plans or link existing blueprints; saving has no world side effects.
@@ -15,6 +16,7 @@ export function registerProjectRoutes(app, campus) {
   const db = campus.db;
   registerLandscape(app,db);
   registerSurface(app,campus);
+  registerSpawnPlans(app,campus);
   db.exec('CREATE TABLE IF NOT EXISTS project_archive(project_id TEXT PRIMARY KEY REFERENCES build_projects(id),archived_at TEXT NOT NULL)');
   const archivedAt=id=>db.prepare('SELECT archived_at FROM project_archive WHERE project_id=?').get(id)?.archived_at??null;
   const decode = r => ({ archivedAt:archivedAt(r.id), id: r.id, version: r.current_version, createdAt: r.created_at, updatedAt: r.updated_at, plan: JSON.parse(r.plan_json) });

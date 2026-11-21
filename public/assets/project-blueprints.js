@@ -101,6 +101,15 @@ const [prepared,architecture,manifest,icons]=await Promise.all([api('/api/projec
   $('liveLine').textContent=`Erebor · ${architecture.packages.length} von ${manifest.packages.length} Architekturpaketen veröffentlicht.`;
   const surface=await api('/api/projects/erebor/landschaft/bauplaene').catch(()=>null);
   if(!isSelected())return;
+  const spawn=await api('/api/projects/erebor/mobschutz').catch(()=>null);
+  if(!isSelected())return;
+  if($('ereborSpawnPlans')){
+   $('ereborSpawnPlans').hidden=!spawn?.published;
+   if(spawn?.published){
+    $('spawnPlanCounts').textContent=fmt(spawn.torches)+' Mega Torches · '+fmt(spawn.runs)+' Kanoneneinsätze. '+fmt(spawn.ready)+' Positionen sind laut Weltprüfung zum Einbau bereit.'+(spawn.openCells?' Für '+fmt(spawn.openCells)+' Prüfabschnitte ist die Abdeckung noch offen.':'');
+    if(new URLSearchParams(location.search).get('mobschutz')==='1')$('ereborSpawnPlans').open=true;
+   }
+  }
   if($('surfaceCatalog')){
    const parts=surface?.parts.filter(p=>p.files>0)||[];
    $('surfaceCatalog').hidden=!parts.length;

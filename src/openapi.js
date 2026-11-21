@@ -39,6 +39,11 @@ export function openapi(baseUrl) {
     },
     security: [{ bearer: [] }],
     paths: {
+      '/api/projects/erebor/mobschutz': {
+        get:{summary:'Veröffentlichte Mega-Torch-Schematics, Platzierungen und Abdeckung.',responses:ok},
+        put:{summary:'Spawnschutz gegen gespeicherte Welt und Architektur prüfen und als separates Paket veröffentlichen. Bei HTTP 202 denselben dryRun wiederholen.',
+          requestBody:json({type:'object',required:['projectVersion','baseVersion','dryRun'],properties:{projectVersion:{type:'integer'},baseVersion:{type:'integer'},dryRun:{type:'boolean'},preview:{type:'string'}}}),responses:{...ok,202:{description:'Weltprüfung läuft'},409:{description:'Versionsstand oder Vorprüfung abweichend'}}}
+      },
       '/api/projects/erebor/landschaft': {
         get:{summary:'Landschaftsentwurf der aktuellen Erebor-Version mit bestehendem und vorgeschlagenem Gipfelprofil',responses:ok},
         put:{summary:'Entwurf unabhängig von der laufenden Baufolge prüfen oder speichern. Erwartet projectVersion, baseVersion des Entwurfs, dryRun und draft.',responses:ok}
