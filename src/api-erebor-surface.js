@@ -68,7 +68,7 @@ export function registerSurface(app,campus){
     const previous=convert&&select('report,zip').get(...keys);
     if(convert&&!previous)throw new HttpError(404,'Bestehendes Paket fehlt.');
     if(previous)previous.report=JSON.parse(previous.report);
-    if(previous?.report.treeMode==='saplings')return {dryRun:true,unchanged:true};
+    if(previous&&previous.report.treeMode==='saplings')return {dryRun:true,unchanged:true};
     const result=await new Promise((resolve,reject)=>{
      const w=new Worker(new URL('./erebor-surface-worker.js',import.meta.url),{workerData:{plan:s.plan,draft:s.draft,world:config.worldSources.live,part,previous}});
      w.once('message',m=>m.error?reject(Error(m.error)):resolve(m));w.once('error',reject);w.once('exit',c=>{if(c)reject(Error('Landschaftsexport unterbrochen.'));});
