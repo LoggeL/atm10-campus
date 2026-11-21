@@ -28,7 +28,7 @@ class FeederTests(unittest.TestCase):
         """+feed+"""
           return function() feed();return counts["minecraft:stone"],counts.brick,counts.tuff,counts.personal,counts[GUNPOWDER] end
         """)
-        self.assertEqual(run(),(0,256,128,64,64))
+        self.assertEqual(run(),(0,1536,128,64,64))
 
     def test_one_station_orders_only_missing_stone_with_a_live_lease(self):
         code=(Path(__file__).resolve().parents[1]/'public/cc/campus.lua').read_text()

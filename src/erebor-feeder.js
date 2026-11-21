@@ -78,15 +78,23 @@ export function ereborFeeder(db,request,version,liveReport){
  let legacyUntil=0;
  const supplyRead=limitSupplyReads(request);
  const helperRows=db.prepare('SELECT slot,job FROM erebor_helpers WHERE site=? AND version=? AND job IS NOT NULL ORDER BY slot');
- function groupJobs(site){
+ function groupJobs(site,live){
   const jobs={},main=jobAt(site);
   // A counter discontinuity invalidates completion evidence. The host can still
   // independently prove the identity of the loaded stone plan for material supply.
-  const eligible=job=>job?.loaded&&(!job.tainted||isStationStone(job,site));
-  if(eligible(main))jobs.A=main;
+  const eligible=(job,slot)=>{
+   if(job?.loaded&&(!job.tainted||isStationStone(job,site)))return true;
+   const s=live?.stations?.[site+(slot==='A'?'':slot)],d=job?.desired;
+   // The tracker can see an installed room before the scheduler reads back
+   // its first shot. The independent physical chest/file check still follows.
+   return d&&(job.interior||job.surface)&&s?.ready&&s.aligned&&['RUNNING','PAUSED'].includes(s.state)
+    &&s.upload===d.file&&s.owner===d.owner&&same(s.anchor,d.anchor)&&same(s.size,job.size)
+    &&same(s.options,[d.options.replace_mode,d.options.skip_missing,d.options.replace_block_entities]);
+  };
+  if(eligible(main,'A'))jobs.A=main;
   for(const r of helperRows.all(site,version)){
    const job=JSON.parse(r.job);
-   if(eligible(job))jobs[r.slot]=job;
+   if(eligible(job,r.slot))jobs[r.slot]=job;
   }
   return jobs;
  }
@@ -141,14 +149,14 @@ export function ereborFeeder(db,request,version,liveReport){
   if(!Number.isInteger(reported.computerId)||!reported.chestSide||!(Math.abs(Date.now()-Date.parse(reported.at))<180000))return held('Wartet auf aktuelle Computer-ID und Kistenseite.');
   try{
    const live=await liveReport(version);
-   const group=supplyGroup(groupJobs(site),extra);
+   const group=supplyGroup(groupJobs(site,live),extra);
    if(live?.sharedChest===4&&(extra||group.B||group.C||live.stations?.[site+'B']?.state||live.stations?.[site+'C']?.state)){
     const targets=groupTargets(group,site,live);
     if(!Object.keys(targets).length)return held('Wartet auf den ersten eingelegten Bauplan.');
     const waiting=Object.keys(targets).some(slot=>['missingBlock','missingItem','noGunpowder'].includes(live.stations?.[site+(slot==='A'?'':slot)]?.status));
     const result=await supplyRead({site:extra?.name??site,version,computerId:reported.computerId,chestSide:reported.chestSide,targets},waiting);
     const station=stationAt.get(row.name),after=JSON.parse(station?.status_json||'null');
-    if(!same(targets,groupTargets(supplyGroup(groupJobs(site),extra),site,live))||station?.options_json!==row.options_json||
+    if(!same(targets,groupTargets(supplyGroup(groupJobs(site,live),extra),site,live))||station?.options_json!==row.options_json||
        after?.computerId!==reported.computerId||after?.chestSide!==reported.chestSide||
        !Number.isFinite(result.at)||Math.abs(Date.now()/1000-result.at)>10)
      return held('Aufträge oder Standort während der Materialprüfung geändert.');
@@ -179,11 +187,11 @@ export function ereborFeeder(db,request,version,liveReport){
     const projectCraft=!base.options.paused&&entries.some(([slot])=>group[slot].phase==='build'&&(group[slot].interior||group[slot].surface));
     // One requesting computer orders an output for the shared ME. Other groups
     // still export it as soon as it arrives. A stopped computer loses its lease.
-    if(projectCraft&&['1.4.11','1.4.12'].includes(reported.script)){
+    if(projectCraft&&['1.4.11','1.4.12','1.4.13'].includes(reported.script)){
      const bricks=items.find(it=>it.item==='minecraft:stone_bricks');
      brickNeeds.set(row.name,{at:Date.now(),amount:bricks?.needed??0});
      const central=JSON.parse(stationAt.get('erebor-K02')?.status_json||'null');
-     const bricksManaged=central?.computerId===13&&central.script==='1.4.12'&&central.brickReserve
+     const bricksManaged=central?.computerId===13&&['1.4.12','1.4.13'].includes(central.script)&&central.brickReserve
        &&Math.abs(Date.now()-Date.parse(central.at))<45000;
      for(const it of items){
       if(bricksManaged&&it.item==='minecraft:stone_bricks')continue;

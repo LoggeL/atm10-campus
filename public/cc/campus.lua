@@ -3,7 +3,7 @@
 -- through an Advanced Peripherals ME Bridge. Which blueprint and the options are set in the web app (tab "Kanonen");
 -- this computer only knows URL, a station token and its cannon name (install: wget run <url>/cc/install.lua).
 -- Strings shown on screen use Latin-1 escapes (\228 = ae-umlaut ...), the CC font is ISO-8859-1.
-local VERSION = "1.4.12"
+local VERSION = "1.4.13"
 
 settings.define("campus.url", { description = "Campus-URL", type = "string" })
 settings.define("campus.token", { description = "API-Token mit Scope Station", type = "string" })
@@ -324,7 +324,7 @@ local function feed()
   if plan.options.projectSupply then
     -- The stone-only setting is per chest. Multiplying 64 stacks by every
     -- decorative variant crowds out both minority materials and gunpowder.
-    buffer = math.max(1, math.min(buffer, 4, math.floor((size - 2) / math.max(1, #plan.items))))
+    buffer = math.max(1, math.min(buffer, 24, math.floor((size - 2) / math.max(1, #plan.items))))
     -- Older feeders did not journal their previous assignment. These five
     -- supplies were already distributed to the dedicated Erebor build chests.
     state.projectItems = state.projectItems or {
@@ -604,8 +604,9 @@ local function tick()
       and #plan.items > 0 and now() - planAt < 15 + os.getComputerID() % 7 then
     local counts, used, slots = chestContents()
     stocked = (counts[GUNPOWDER] or 0) >= math.ceil(plan.options.gunpowder / 2)
+    local share = math.max(1, math.min(plan.options.bufferStacks, 24, math.floor((slots-2)/#plan.items)))
     for _, it in ipairs(plan.items) do
-      if (counts[it.item] or 0) < math.min(it.needed, it.stack) then stocked = false; break end
+      if (counts[it.item] or 0) < math.ceil(math.min(it.needed,it.stack*share)*0.6) then stocked = false; break end
     end
     if stocked then view.chest = {slots=slots,used=used,name=chestName} end
   end

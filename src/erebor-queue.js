@@ -134,7 +134,7 @@ export function registerEreborQueue(app,campus){
    if(!current(v)||!massif.enabled(v)||!releases.allows(v,cols)||cols.some(k=>after.has(k.join(','))))return null;
    return {...pkg,entry:e,job:{...pkg.job,interior:true,source:e},release:()=>releases.mark(v,cols)};
   }
-  if(projectWork)return landscape.candidate(p,site,slot,position,async pkg=>generate(p,{interiorCheck:{bytes:pkg.bytes,anchor:pkg.job.desired.anchor,kind:'surface'}}));
+  if(projectWork&&liveCache?.surfaceModeTracker===1)return landscape.candidate(p,site,slot,position,async pkg=>generate(p,{interiorCheck:{bytes:pkg.bytes,anchor:pkg.job.desired.anchor,kind:'surface'}}));
   return null;
  }
  campus.ereborHelpers=helpers;

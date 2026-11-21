@@ -48,7 +48,6 @@ const currentVersion = /local VERSION = "([^"]+)"/.exec(stationSource())?.[1] ??
 // stations keep their installed compatible release.
 const scriptVersion = row => {
   const installed = JSON.parse(row.status_json || '{}').script;
-  if(isEreborStation(row.name)&&row.name!=='erebor-K02'&&installed==='1.4.11')return installed;
   return !isEreborStation(row.name) && /^1\.4\.(?:[3-9]|10)$/.test(installed)
     ? installed : currentVersion;
 };
