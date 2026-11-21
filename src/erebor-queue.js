@@ -157,7 +157,7 @@ export function registerEreborQueue(app,campus){
   const [x,y,z]=extra?Object.values(extra.slots)[0]:layout.sites.find(s=>s.site===name.slice(-3).toUpperCase()).cannon;
   return {x,y,z,dimension:'minecraft:overworld',owner:'Erebor'};
  };
- campus.ereborFeeder=ereborFeeder(db,request,layout.version,liveReport);
+ campus.ereborFeeder=ereborFeeder(db,request,layout.version,liveReport,savedMissingItems);
  const owner=randomUUID();let worker=null,working=null,closed=false,queued=false;
  function stopWorker(){if(worker){void worker.terminate();worker=null;}}
  function generate(p,input){
@@ -678,26 +678,34 @@ export function registerEreborQueue(app,campus){
  }
  app.get('/api/projects/erebor/bauzaehler',(req,reply)=>buildingProgress(req,reply,false));
  let missingRead=null,missingAt=0;
- app.get('/api/projects/erebor/materialengpaesse',async(req,reply)=>{
-  requireActor(req,'read');
-  const p=project(),report=liveCache;
-  if(!config.worldSources.live||!p||report?.version!==p.current_version||Math.abs(Date.now()-report.at)>45000)
-   throw new HttpError(503,'Aktuelle Kanonenmeldung fehlt.');
+ function waitingPrinters(report){
   const rows=[];
   for(const site of parallelLayout.sites)for(const slot of slotsFor(site.site)){
    const key=slot==='A'?site.site:site.site+slot,s=report.stations?.[key];
    if(s?.ready&&s.aligned&&s.upload&&s.state==='PAUSED'&&['missingBlock','missingItem'].includes(s.status))
     rows.push({key,file:s.upload,placed:s.placed,status:s.status,pos:site[slot==='A'?'main':slot]});
   }
+  return rows;
+ }
+ async function savedMissingItems(report){
+  if(!config.worldSources.live||!report||Math.abs(Date.now()-report.at)>45000)return new Map();
   if(!missingRead||Date.now()-missingAt>30000){
    missingAt=Date.now();
+   const rows=waitingPrinters(report);
    missingRead=new Promise((resolve,reject)=>{
     const w=new Worker(new URL('./erebor-missing-worker.js',import.meta.url),{workerData:{world:config.worldSources.live,rows}});
-    w.once('message',resolve);w.once('error',reject);w.once('exit',code=>{if(code)reject(Error('Weltprüfung unterbrochen.'));});
+    w.once('message',found=>resolve(new Map(found.map(row=>[row.key,row]))));w.once('error',reject);w.once('exit',code=>{if(code)reject(Error('Weltprüfung unterbrochen.'));});
    });
   }
-  const saved=new Map((await missingRead).map(row=>[row.key,row]));
-  const materials=rows.map(({key,file,placed,status})=>{
+  return missingRead;
+ }
+ app.get('/api/projects/erebor/materialengpaesse',async(req,reply)=>{
+  requireActor(req,'read');
+  const p=project(),report=liveCache;
+  if(!config.worldSources.live||!p||report?.version!==p.current_version||Math.abs(Date.now()-report.at)>45000)
+   throw new HttpError(503,'Aktuelle Kanonenmeldung fehlt.');
+  const saved=await savedMissingItems(report);
+  const materials=waitingPrinters(report).map(({key,file,placed,status})=>{
    const r=saved.get(key);
    return {cannon:key.length===3?key+'A':key,item:r?.file===file&&r.placed===placed&&r.status===status?r.item:null};
   });

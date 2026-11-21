@@ -2,6 +2,7 @@ import {mountainTop} from './project-stone.js';
 import {Region} from './region.js';
 import {chunkBlockReader} from './terrain.js';
 import {parseStructure} from './nbt.js';
+import {saplingSoil} from './erebor-saplings.js';
 
 export const interiorGroup=id=>/^(?:E(?:0[5-9]|1[0-46-9]|21[AB]|3[0-9])|S[1-4])$/.test(id);
 // Each architecture file occupies one aligned 32³ tile. Excavations on other
@@ -69,17 +70,20 @@ export function interiorWorldCheck(world,{bytes,anchor,kind,completed=false,mini
   for(const b of chunk.block_entities||[])if(b.y>=oy-4&&b.y<oy+sy+4)tech.push(b);
  }
  const index=pt=>pt.x+sx*(pt.z+sz*pt.y);
- const planned=kind==='surface'?new Set(points.map(index)):null;
+ const planned=kind==='surface'?new Map(points.map(pt=>[index(pt),pt.name])):null;
  for(const pt of points){
   const x=pt.x+anchor[0],y=pt.y+anchor[1],z=pt.z+anchor[2],cx=x>>4,cz=z>>4,key=cx+','+cz;
   if(minimumSave&&stamps.get(key)<minimumSave)return false;
   const at=readers.get(key),state=at(x,y,z),name=state.Name;
   if(tech.some(b=>Math.abs(b.x-x)<=4&&Math.abs(b.y-y)<=4&&Math.abs(b.z-z)<=4))return false;
-  const matches=kind==='clear'?air(name):name===pt.name;
+  const sapling=kind==='surface'&&/^minecraft:(?:oak|spruce|birch)_sapling$/.test(pt.name);
+  const grown=sapling&&name===pt.name.replace('_sapling','_log');
+  const matches=kind==='clear'?air(name):name===pt.name||grown;
   if(completed){
-   if(!matches||Object.entries(pt.properties??{}).some(([key,val])=>state.Properties?.[key]!==val))return false;
+   if(!matches||(!sapling&&Object.entries(pt.properties??{}).some(([key,val])=>state.Properties?.[key]!==val)))return false;
   }else if(kind==='surface'){
    if(!matches&&!air(name))return false;
+   if(sapling&&!grown&&!saplingSoil(planned.get(index(pt)-sx*sz)??at(x,y-1,z).Name))return false;
    if(!pt.name.endsWith('_leaves')&&!planned.has(index(pt)-sx*sz)&&air(at(x,y-1,z).Name))return false;
   }else if(!matches&&!air(name)&&name!=='minecraft:stone'&&!(outdoor&&/^minecraft:(?:dirt|grass_block|gravel|sand|andesite|diorite|granite|tuff|deepslate)$/.test(name)))return false;
  }

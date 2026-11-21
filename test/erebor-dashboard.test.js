@@ -26,7 +26,7 @@ test('exterior publication uses only the current draft revision',()=>{
   const add=db.prepare("INSERT INTO erebor_surface_parts VALUES(12,?,'R0',1,?,?)");
   for(const revision of [1,2])add.run(revision,JSON.stringify({files:1,blocks:139,trees:2}),JSON.stringify({files:[{fileName:'snow.nbt',sha256:'rev'+revision,origin:[0,64,0]}]}));
   db.exec("INSERT INTO erebor_surface_dispatch VALUES(12,1,'snow.nbt','rev1','K01','B',1)");
-  assert.deepEqual(surfaceOverview(db,project),{regions:2,revision:2,summitY:319,files:1,blocks:139,trees:2,published:1,task:{total:1,open:1,done:0,inProgress:0}});
+  assert.deepEqual(surfaceOverview(db,project),{regions:2,revision:2,summitY:319,files:1,blocks:139,trees:2,published:1,saplingParts:0,task:{total:1,open:1,done:0,inProgress:0}});
   db.exec("CREATE TABLE erebor_finished_plans(version,name); INSERT INTO erebor_finished_plans VALUES(12,'room')");
   const catalog=new Map([['K04',[{name:'room',stage:'clear'}]],['outside',[{name:'bridge',stage:'build'},{name:'room',stage:'clear'}]]]);
   const total=overallProgress(db,12,{architecture:()=>catalog},{solid:{done:2,total:3,inProgress:1,open:0}},{done:100,total:100},surfaceOverview(db,project).task,new Map());

@@ -4,7 +4,7 @@ import {requireActor,HttpError} from './auth.js';
 import {tx,logActivity} from './db.js';
 import {surfaceParts} from './erebor-surface.js';
 import {storedZipEntry} from './zip.js';
-import {landscapeProgress} from './erebor-landscape-work.js';
+import {landscapeProgress,carrySurfaceJobs} from './erebor-landscape-work.js';
 
 // Publication totals are distinct from blocks placed in the Minecraft world.
 export function surfaceOverview(db,project){
@@ -13,7 +13,8 @@ export function surfaceOverview(db,project){
  if(!row)return null;
  const draft=JSON.parse(row.draft),parts=surfaceParts(JSON.parse(project.plan_json),draft);
  const totals=db.prepare(`SELECT count(*) AS published,coalesce(sum(json_extract(summary,'$.files')),0) AS files,
-  coalesce(sum(json_extract(summary,'$.blocks')),0) AS blocks,coalesce(sum(json_extract(summary,'$.trees')),0) AS trees
+  coalesce(sum(json_extract(summary,'$.blocks')),0) AS blocks,coalesce(sum(json_extract(summary,'$.trees')),0) AS trees,
+  count(CASE WHEN json_extract(summary,'$.treeMode')='saplings' THEN 1 END) AS saplingParts
   FROM erebor_surface_parts WHERE v=? AND r=?`).get(v,row.revision);
  return {revision:row.revision,regions:parts.length,summitY:draft.summit[1],...totals,task:landscapeProgress(db,v,row.revision)};
 }
@@ -37,7 +38,7 @@ export function registerSurface(app,campus){
  app.get(path,async req=>{
   requireActor(req,'read');const s=source();
   return {projectVersion:s.v,revision:s.r,parts:surfaceParts(s.plan,s.draft).map(p=>{
-   const r=summary.get(s.v,s.r,p.id);return {id:p.id,published:!!r,...r&&JSON.parse(r.summary)};
+   const r=summary.get(s.v,s.r,p.id);return {id:p.id,published:!!r,version:r?.version??0,...r&&JSON.parse(r.summary)};
   })};
  });
  app.get(path+'/:id',async req=>{
@@ -56,26 +57,33 @@ export function registerSurface(app,campus){
   const actor=requireActor(req,'write'),s=source(),id=req.params.id,b=req.body,part=partFor(s,id);
   if(s.v!==b?.projectVersion||s.r!==b.revision||typeof b.dryRun!=='boolean'||!Number.isInteger(b.baseVersion))throw new HttpError(409,'Versionsstand prüfen.');
   const keys=[s.v,s.r,id],version=()=>summary.get(...keys)?.version??0;
+  const convert=b.treeMode==='saplings';
+  if(b.treeMode!==undefined&&!convert)throw new HttpError(400,'Unbekannter Baummodus.');
   if(version()!==b.baseVersion)throw new HttpError(409,'Paket inzwischen geändert.');
   if(!s.draft.placement?.surfaceOnly||s.draft.placement.excavation!==false||!config.worldSources.live)throw new HttpError(409,'Additiver Entwurf und gespeicherte Welt erforderlich.');
   if(b.dryRun){
    if(preparing)throw new HttpError(429,'Ein Landschaftspaket wird geprüft.');
    preparing=true;
    try{
+    const previous=convert&&select('report,zip').get(...keys);
+    if(convert&&!previous)throw new HttpError(404,'Bestehendes Paket fehlt.');
+    if(previous)previous.report=JSON.parse(previous.report);
+    if(previous?.report.treeMode==='saplings')return {dryRun:true,unchanged:true};
     const result=await new Promise((resolve,reject)=>{
-     const w=new Worker(new URL('./erebor-surface-worker.js',import.meta.url),{workerData:{plan:s.plan,draft:s.draft,world:config.worldSources.live,part}});
+     const w=new Worker(new URL('./erebor-surface-worker.js',import.meta.url),{workerData:{plan:s.plan,draft:s.draft,world:config.worldSources.live,part,previous}});
      w.once('message',m=>m.error?reject(Error(m.error)):resolve(m));w.once('error',reject);w.once('exit',c=>{if(c)reject(Error('Landschaftsexport unterbrochen.'));});
     });
     const {report,zip}=result,preview=createHash('sha256').update(zip).digest('hex');
-    latest={keys,baseVersion:b.baseVersion,report,zip,preview};
+    latest={keys,baseVersion:b.baseVersion,report,zip,preview,convert};
     return {dryRun:true,preview,files:report.files.length,blocks:report.blocks};
    }finally{preparing=false;}
   }
   const check=latest;
-  if(!check||check.preview!==b.preview||check.keys.join('/')!==keys.join('/')||check.baseVersion!==b.baseVersion)throw new HttpError(409,'Vorprüfung erneut ausführen.');
+  if(!check||check.preview!==b.preview||check.keys.join('/')!==keys.join('/')||check.baseVersion!==b.baseVersion||check.convert!==convert)throw new HttpError(409,'Vorprüfung erneut ausführen.');
   return tx(db,()=>{
    if(version()!==b.baseVersion)throw new HttpError(409,'Paket inzwischen geändert.');
-   const report=check.report,stats={files:report.files.length,blocks:report.blocks,trees:report.trees,unknown:report.unknown.length,supportedLater:report.supportedLater,savedAt:report.savedAt};
+   const report=check.report,stats={files:report.files.length,blocks:report.blocks,trees:report.trees,treeMode:report.treeMode,unknown:report.unknown.length,supportedLater:report.supportedLater,savedAt:report.savedAt};
+   if(convert){const old=select('report,zip').get(...keys);carrySurfaceJobs(db,s.v,s.r,JSON.parse(old.report),old.zip,report);}
    db.prepare('INSERT OR REPLACE INTO erebor_surface_parts VALUES(?,?,?,?,?,?,?)').run(...keys,b.baseVersion+1,JSON.stringify(stats),JSON.stringify(report),check.zip);
    logActivity(db,actor,'project.landscape.publish',id,{projectVersion:s.v,revision:s.r,...stats});latest=null;return stats;
   });

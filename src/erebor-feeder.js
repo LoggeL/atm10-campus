@@ -4,6 +4,7 @@ import {verifyAlignment} from './alignment.js';
 import {itemsFor,stackSize} from './materials.js';
 import {setTimeout as delay} from 'node:timers/promises';
 import {createHash} from 'node:crypto';
+import {latestStock} from './me-stock.js';
 
 export const isEreborStation=name=>!!groupOf(name)||/^erebor-K(?:0[1-9]|[12][0-9]|3[0-7])$/i.test(name);
 export const needsSolidReplacement=desired=>desired?.blueprint?.includes('_MASSIV_')&&!desired.blueprint.includes('_LUFT_')&&!desired.blueprint.includes('_URN_');
@@ -43,7 +44,7 @@ export function isStationStone(job,site){
 // transport timeout starts, rather than sending 37 expiring HTTP requests.
 export function limitSupplyReads(request){
  const waiting=[];
- let active=0;
+ let active=0,lastWasStocked=false;
  async function run(entry){
   active++;
   try{
@@ -56,20 +57,22 @@ export function limitSupplyReads(request){
     // A waiting printer gets the next slot ahead of routine top-ups. Age
     // the queue so a continuously busy group cannot starve the others.
     const urgent=waiting.findIndex(entry=>entry.urgent);
-    const next=Date.now()-waiting[0].at<5000 && urgent>=0 ? urgent : 0;
+    const stocked=lastWasStocked?-1:waiting.findIndex(entry=>entry.stocked);
+    const next=stocked>=0?stocked:Date.now()-waiting[0].at<5000&&urgent>=0?urgent:0;
+    lastWasStocked=stocked>=0;
     void run(waiting.splice(next,1)[0]);
    }
   }
  }
- return (args,urgent=false)=>new Promise((resolve,reject)=>{
-  const entry={args,urgent,at:Date.now(),resolve,reject};
+ return (args,urgent=false,stocked=false)=>new Promise((resolve,reject)=>{
+  const entry={args,urgent,stocked:stocked===true,at:Date.now(),resolve,reject};
   if(active<2)void run(entry);
   else if(waiting.length<37+groupCount)waiting.push(entry);
   else reject(new Error('Materialprüfung wartet auf freie Controller-Kapazität.'));
  });
 }
 
-export function ereborFeeder(db,request,version,liveReport){
+export function ereborFeeder(db,request,version,liveReport,savedMissingItems){
  const samples=new Map(),views=new Map(),pending=new Map();
  const craftOwners=new Map(),brickNeeds=new Map();
  const lookup=db.prepare("SELECT s.state FROM erebor_queue_sites s JOIN erebor_queue_config q ON q.id=1 JOIN build_projects p ON p.id='erebor' WHERE s.site=? AND q.version=? AND p.current_version=q.version");
@@ -167,7 +170,21 @@ export function ereborFeeder(db,request,version,liveReport){
      }
     }
     const waiting=Object.keys(targets).some(slot=>['missingBlock','missingItem','noGunpowder'].includes(live.stations?.[site+(slot==='A'?'':slot)]?.status));
-    const result=await supplyRead({site:extra?.name??site,version,computerId:reported.computerId,chestSide:reported.chestSide,targets},waiting);
+    // A saved missing item is only a scheduling hint. The physical proof below
+    // still has to confirm each occupied printer and the shared chest.
+    const deliverFirst=new Set();
+    if(waiting&&savedMissingItems){
+     const stock=latestStock(db);
+     if(stock&&Math.abs(Date.now()-Date.parse(stock.at))<60000){
+      const saved=await savedMissingItems(live).catch(()=>new Map());
+      for(const [slot,target] of Object.entries(targets)){
+       const key=slot==='A'?site:site+slot,signal=live.stations[key],r=saved.get(key);
+       if(r&&signal?.state==='PAUSED'&&r.file===target.file&&r.file===signal.upload&&r.placed===signal.placed&&
+          r.status===signal.status&&stock.items[r.item]?.[0]>0)deliverFirst.add(r.item);
+      }
+     }
+    }
+    const result=await supplyRead({site:extra?.name??site,version,computerId:reported.computerId,chestSide:reported.chestSide,targets},waiting,deliverFirst.size>0);
     const station=stationAt.get(row.name),after=JSON.parse(station?.status_json||'null');
     if(!same(targets,groupTargets(supplyGroup(groupJobs(site,live),extra),site,live))||station?.options_json!==row.options_json||
        after?.computerId!==reported.computerId||after?.chestSide!==reported.chestSide||
@@ -190,6 +207,7 @@ export function ereborFeeder(db,request,version,liveReport){
       if(n>0&&!item.endsWith('_bucket'))amounts.set(item,(amounts.get(item)||0)+count*n);
     }
     const items=[...amounts].map(([item,needed])=>({item,needed,stack:stackSize(item)}));
+    if(deliverFirst.size)items.sort((a,b)=>Number(deliverFirst.has(b.item))-Number(deliverFirst.has(a.item)));
     if(entries.every(([slot])=>isStationStone(group[slot],site))){
      const stone=items.find(i=>i.item==='minecraft:stone');
      if(stone)stone.confirmedPlaced=entries.reduce((n,[,r])=>n+r.placed,0);

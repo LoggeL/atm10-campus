@@ -3,12 +3,12 @@ import { crc32 } from 'node:zlib';
 
 // Read one entry from our store-only package format without unpacking to disk.
 export function storedZipEntry(input,name) {
-  const zip=Buffer.from(input);let offset=0;
+  const zip=input instanceof Uint8Array?Buffer.from(input.buffer,input.byteOffset,input.byteLength):Buffer.from(input);let offset=0;
   while(offset+4<=zip.length&&zip.readUInt32LE(offset)===0x04034b50){
     if(offset+30>zip.length)throw Error('ZIP-Header unvollständig.');
     const flags=zip.readUInt16LE(offset+6),method=zip.readUInt16LE(offset+8),size=zip.readUInt32LE(offset+18),rawSize=zip.readUInt32LE(offset+22),len=zip.readUInt16LE(offset+26),extra=zip.readUInt16LE(offset+28),start=offset+30+len+extra,end=start+size;
     if(method!==0||(flags&9)||size!==rawSize||end>zip.length)throw Error('Ungültiges gespeichertes ZIP-Paket.');
-    if(zip.subarray(offset+30,offset+30+len).toString('utf8')===name){const bytes=zip.subarray(start,end);if(crc32(bytes)!==zip.readUInt32LE(offset+14))throw Error('ZIP-Prüfsumme stimmt nicht.');return bytes;}
+    if(zip.subarray(offset+30,offset+30+len).toString('utf8')===name){const bytes=zip.subarray(start,end);if(crc32(bytes)!==zip.readUInt32LE(offset+14))throw Error('ZIP-Prüfsumme stimmt nicht.');return Buffer.from(bytes);}
     offset=end;
   }
   return null;

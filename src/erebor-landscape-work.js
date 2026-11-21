@@ -17,6 +17,25 @@ export function readySurface(job,report,key){
 const catalogs=new WeakMap();
 export function initLandscapeWork(db){
  db.exec(`CREATE TABLE IF NOT EXISTS erebor_surface_dispatch(v INTEGER,r INTEGER,file TEXT,sha TEXT,site TEXT,slot TEXT,done INTEGER DEFAULT 0,PRIMARY KEY(v,r,file,sha))`);
+ db.exec(`CREATE TABLE IF NOT EXISTS erebor_surface_legacy(v INTEGER,r INTEGER,file TEXT,sha TEXT,next_sha TEXT,entry TEXT,nbt BLOB,PRIMARY KEY(v,r,file,sha))`);
+}
+export function carrySurfaceJobs(db,v,r,old,zip,next){
+ const updated=new Map(next.files.map(f=>[f.fileName,f.sha256]));
+ const find=db.prepare('SELECT site,slot,done FROM erebor_surface_dispatch WHERE v=? AND r=? AND file=? AND sha=?');
+ const keep=db.prepare('INSERT INTO erebor_surface_legacy VALUES(?,?,?,?,?,?,?)');
+ const carry=db.prepare('INSERT INTO erebor_surface_dispatch(v,r,file,sha,site,slot,done) VALUES(?,?,?,?,?,?,?)');
+ for(const f of old.files){
+  const sha=updated.get(f.fileName);
+  if(sha===f.sha256)continue;
+  const key=[v,r,f.fileName,f.sha256],row=find.get(...key);
+  if(!row)continue;
+  if(!row.done){
+   const data=storedZipEntry(zip,f.fileName);
+   if(!data||createHash('sha256').update(data).digest('hex')!==f.sha256)throw Error('Vorherige aktive NBT nicht bestätigt.');
+   keep.run(...key,sha??null,JSON.stringify(f),data);
+  }
+  if(sha)carry.run(v,r,f.fileName,sha,row.site,row.slot,row.done);
+ }
 }
 export function landscapeFiles(db,v,r){
  const parts=db.prepare('SELECT id,version FROM erebor_surface_parts WHERE v=? AND r=? ORDER BY id').all(v,r);
@@ -49,9 +68,14 @@ export function landscapeQueue(db){
  const revision=v=>db.prepare('SELECT revision FROM erebor_landscape WHERE project_version=?').get(v)?.revision;
  function restore(v,source){
   const row=db.prepare('SELECT report,zip FROM erebor_surface_parts WHERE v=? AND r=? AND id=?').get(v,source.r,source.part);
-  const f=row&&JSON.parse(row.report).files.find(f=>f.fileName===source.fileName&&f.sha256===source.sha256);
+  let f=row&&JSON.parse(row.report).files.find(f=>f.fileName===source.fileName&&f.sha256===source.sha256);
+  let bytes;
+  if(f)bytes=storedZipEntry(row.zip,f.fileName);
+  else{
+   const previous=db.prepare('SELECT entry,nbt FROM erebor_surface_legacy WHERE v=? AND r=? AND file=? AND sha=?').get(v,source.r,source.fileName,source.sha256);
+   if(previous){f=JSON.parse(previous.entry);bytes=Buffer.from(previous.nbt);}
+  }
   if(!f)throw Error('Veröffentlichter Landschaftsplan hat sich geändert.');
-  const bytes=storedZipEntry(row.zip,f.fileName);
   if(!bytes||createHash('sha256').update(bytes).digest('hex')!==f.sha256)throw Error('Landschaftsdatei stimmt nicht mit dem Paket überein.');
   const desired={file:ereborUploadName(f.fileName,f.sha256),blueprint:f.fileName.slice(0,-4),sha256:f.sha256,anchor:f.origin,version:v,owner:'Erebor',mirror:'none',rotation:'none',options:{replace_mode:0,replace_block_entities:false,skip_missing:false}};
   return {bytes,job:{desired,size:[32,32,32],blocks:f.blocks,materials:f.materials,source,phase:'build',surface:true,loaded:false,seen:0}};
@@ -61,6 +85,8 @@ export function landscapeQueue(db){
   const s=job.source;
   const changed=db.prepare('UPDATE erebor_surface_dispatch SET done=1 WHERE v=? AND r=? AND site=? AND slot=? AND file=? AND sha=? AND done=0').run(v,s.r,site,slot,s.fileName,s.sha256);
   if(!changed.changes)throw Error('Landschaftsreservierung passt nicht zur Kanone.');
+  const old=db.prepare('SELECT next_sha FROM erebor_surface_legacy WHERE v=? AND r=? AND file=? AND sha=?').get(v,s.r,s.fileName,s.sha256);
+  if(old?.next_sha)db.prepare('UPDATE erebor_surface_dispatch SET done=1 WHERE v=? AND r=? AND site=? AND slot=? AND file=? AND sha=?').run(v,s.r,site,slot,s.fileName,old.next_sha);
  },async candidate(p,site,slot,pos,verify){
   const v=p.current_version,r=revision(v);
   if(r==null)return null;

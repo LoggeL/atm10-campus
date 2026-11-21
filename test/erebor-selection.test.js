@@ -29,6 +29,21 @@ test('37 simultaneous feeder reads reach the serial controller in bounded FIFO o
  assert.deepEqual(settled.slice(1).map(r=>r.value),stations.slice(1));
 });
 
+test('a printer with its requested block in ME gets a turn between ordinary chest probes',async()=>{
+ const started=[],release=[];
+ const read=limitSupplyReads(async(action,name)=>{
+  started.push(name);
+  await new Promise(resolve=>release.push(resolve));
+ });
+ const results=Promise.all([read('active1'),read('active2'),read('ordinary'),read('stocked1',true,true),read('stocked2',true,true)]);
+ release[0]();await new Promise(resolve=>setImmediate(resolve));
+ assert.equal(started[2],'stocked1');
+ release[1]();await new Promise(resolve=>setImmediate(resolve));
+ // An older ordinary request also needs an opportunity when supply is scarce.
+ release[2]();await new Promise(resolve=>setImmediate(resolve));
+ assert.ok(started.includes('ordinary'));
+ release[3]();release[4]();await results;
+});
 const layout=JSON.parse(readFileSync(new URL('../src/erebor-fleet/stations.json',import.meta.url)));
 const printer={DeferredBlocks:[],PrintStage:'BLOCKS',EntityProgress:-1};
 const options={replace_mode:0,skip_missing:false,replace_block_entities:false};

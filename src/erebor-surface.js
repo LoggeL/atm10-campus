@@ -7,8 +7,8 @@ import {createHash} from 'node:crypto';
 
 const AIR=new Set(['minecraft:air','minecraft:cave_air','minecraft:void_air']);
 const GROUND=new Set(['stone','andesite','diorite','granite','tuff','deepslate','sand','gravel','clay','dirt','grass_block','podzol','coarse_dirt','rooted_dirt','moss_block','snow_block','calcite'].map(n=>'minecraft:'+n));
-const names=['structure_void','stone','andesite','tuff','dirt','grass_block','podzol','rooted_dirt','coarse_dirt','moss_block','snow_block','spruce_log','spruce_leaves','oak_log','oak_leaves','birch_log','birch_leaves'];
-const palette=names.map(n=>({name:'minecraft:'+n,props:n.endsWith('_leaves')?{persistent:'true'}:{}}));
+const names=['structure_void','stone','andesite','tuff','dirt','grass_block','podzol','rooted_dirt','coarse_dirt','moss_block','snow_block','spruce_sapling','oak_sapling','birch_sapling'];
+const palette=names.map(n=>({name:'minecraft:'+n}));
 const index=Object.fromEntries(names.map((n,i)=>[n,i]));
 const external=/^(E0[23]|E15|E20|E2[2-8])$/;
 const within=(x,z,b)=>x>=b[0][0]&&x<b[1][0]&&z>=b[0][2]&&z<b[1][2];
@@ -36,19 +36,6 @@ function boxes(p){
  spans.push([[gx-36,0,gz-125],[gx+144,320,gz+125]],[[-395,0,-10024],[-335,320,-9976]]);
  return spans;
 }
-function tree(cells,ground,x,z,h,species){
- const crown=species==='spruce'?2:3,points=[];
- for(let dy=1;dy<=h;dy++)points.push([x,ground+dy,z,species+'_log']);
- for(let dy=species==='spruce'?3:h-2;dy<=h+1;dy++){
-  const radius=dy===h+1?0:species==='spruce'?(h-dy)%2+1:(dy===h?1:crown);
-  for(let a=-radius;a<=radius;a++)for(let b=-radius;b<=radius;b++){
-   if((!a&&!b&&dy<=h)||(radius>1&&Math.abs(a)+Math.abs(b)>radius+1))continue;
-   points.push([x+a,ground+dy,z+b,species+'_leaves']);
-  }
- }
- if(points.every(([a,y,b])=>cells.has(a+','+b)&&cells.get(a+','+b)<y&&y<=319))return points;
- return [];
-}
 export function buildSurfacePart(p,d,part,world){
  const {rx,rz,id}=part,region=Region.open(world,rx,rz),mtime=regionMtime(world,rx,rz);
  const protectedAreas=boxes(p),tiles=new Map(),unknown=[],entries=[],files=[];
@@ -68,7 +55,6 @@ export function buildSurfacePart(p,d,part,world){
   const chunk=region?.chunk(cx,cz);
   if(!['full','minecraft:full'].includes(chunk?.Status)||!chunk.sections?.length){unknown.push([cx,cz]);continue;}
   const at=chunkBlockReader(chunk),sections=chunk.sections.filter(s=>s.block_states?.palette?.some(b=>!AIR.has(b.Name))).sort((a,b)=>b.Y-a.Y);
-  const plot=new Map(),candidates=[];
   const protections=protectedAreas.filter(b=>x0+16>b[0][0]&&x0<b[1][0]&&z0+16>b[0][2]&&z0<b[1][2]);
   const entities=chunk.block_entities||[];
   for(let z=z0;z<z0+16;z++)for(let x=x0;x<x0+16;x++){
@@ -95,13 +81,12 @@ export function buildSurfacePart(p,d,part,world){
    }else if(base<319&&wave>1&&slope<4){put(x,++top,z,wave>1.65?'tuff':'andesite');}
    if(top===base)continue;
    columns++;if(observed<planned)supportedLater++;
-   plot.set(x+','+z,top);
    const r=seed(cx,cz),ax=x0+4+r%8,az=z0+4+(r>>>8)%8;
-   if(x===ax&&z===az&&alt<207&&slope<=1&&forest>(alt>176?1.12:-.35)){
-    candidates.push([x,top,z,alt>176?5:6+r%4,alt>116||r%3===0?'spruce':r%3===1?'oak':'birch']);
+   if(profile===base&&x===ax&&z===az&&alt<207&&slope<=1&&forest>(alt>176?1.12:-.35)){
+    const species=alt>116||r%3===0?'spruce':r%3===1?'oak':'birch';
+    put(x,top+1,z,species+'_sapling');trees++;
    }
   }
-  for(const [x,y,z,h,species] of candidates){const points=tree(plot,y,x,z,h,species);if(points.length){trees++;for(const pt of points)put(...pt);}}
  }
  for(const t of [...tiles.values()].sort((a,b)=>a.origin[1]-b.origin[1]||a.origin[2]-b.origin[2]||a.origin[0]-b.origin[0])){
   const {bytes,placed,materials}=tileNBT(palette,t.cells,'surface'),[x,y,z]=t.origin;
@@ -110,7 +95,7 @@ export function buildSurfacePart(p,d,part,world){
   files.push({fileName,origin:t.origin,blocks:placed,materials,cannon:station?.d<256?station.id:null,sha256:createHash('sha256').update(bytes).digest('hex')});
   entries.push({name:fileName,data:bytes});
  }
- const report={id,files,columns,trees,supportedLater,unknown,blocks:files.reduce((sum,f)=>sum+f.blocks,0),region:[rx,rz],savedAt:mtime?new Date(mtime).toISOString():null};
+ const report={id,files,columns,trees,treeMode:'saplings',supportedLater,unknown,blocks:files.reduce((sum,f)=>sum+f.blocks,0),region:[rx,rz],savedAt:mtime?new Date(mtime).toISOString():null};
  entries.push({name:'Baufolge.json',data:Buffer.from(JSON.stringify({settings:{replace_mode:0,replace_block_entities:false},...report}))});
  return {report,zip:zipStore(entries)};
 }
