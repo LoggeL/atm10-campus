@@ -22,7 +22,7 @@ export function publishedPlan(db,p,b){
  if(!f)throw new HttpError(409,'Diese Datei ist für die ausgewählte Kanone nicht veröffentlicht.');
  const bytes=storedZipEntry(row.zip,f.fileName);
  if(!bytes||createHash('sha256').update(bytes).digest('hex')!==f.sha256)throw new HttpError(503,'Bauplandatei konnte nicht geprüft werden.');
- const phase=f.kind||'stone',mode={stone:2,build:2,clear:3}[phase];
+ const phase=f.kind||'stone',mode=b.part==='E01_901'&&phase==='build'?0:{stone:2,build:2,clear:3}[phase];
  if(mode==null)throw new HttpError(409,'Unbekannte Bauplanart.');
  const desired={file:ereborUploadName(f.fileName,f.sha256),sha256:f.sha256,blueprint:f.fileName.slice(0,-4),owner:'Erebor',anchor:f.origin,version:b.version,rotation:'none',mirror:'none',options:{replace_mode:mode,skip_missing:false,replace_block_entities:false}};
  return {job:{desired,phase,size:f.size,blocks:f.blocks,materials:f.materials,loaded:false,seen:0},bytes};

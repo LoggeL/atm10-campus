@@ -16,20 +16,12 @@ export function drawHillsideGroves(d){
   for(const [dx,dz,positions] of groves)for(const [i,[a,b]] of positions.entries()){
     const x=px+dx+a,z=pz+dz+b,ground=mountainTop(p,x,z);
     if(ground==null)throw Error('Gehölz liegt außerhalb des Bergprofils');
-    const birch=i===2&&dz>0,species=birch?'birch':'spruce',height=birch?8:[11,8,10,13,9,12][i];
+    const birch=i===2&&dz>0,species=birch?'birch':'spruce';
     for(let u=-3;u<=3;u++)for(let v=-3;v<=3;v++){
       if(u*u+v*v>7+(i%3))continue;
       const h=mountainTop(p,x+u,z+v);
       if(h!=null&&Math.abs(h-ground)<=2)block(x+u,h+1,z+v,(u+v+i)%3===0?'minecraft:moss_block':birch?'minecraft:grass_block':'minecraft:podzol');
     }
-    const leaves={name:'minecraft:'+species+'_leaves',props:{persistent:'true',distance:'1',waterlogged:'false'}};
-    for(let k=3;k<=height+1;k++){
-      const r=birch?(k===height+1?1:2):(k===height+1?0:Math.max(1,Math.floor((height+1-k)/3)+(k%2)));
-      for(let u=-r;u<=r;u++)for(let v=-r;v<=r;v++){
-        if(Math.abs(u)+Math.abs(v)>r+Math.floor(r/2)||(!u&&!v&&k<=height))continue;
-        block(x+u,ground+1+k,z+v,leaves);
-      }
-    }
-    for(let k=1;k<=height;k++)block(x,ground+1+k,z,{name:'minecraft:'+species+'_log',props:{axis:'y'}});
+    block(x,ground+2,z,'minecraft:'+species+'_sapling');
   }
 }
