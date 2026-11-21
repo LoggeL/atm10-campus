@@ -5,6 +5,7 @@ import {itemsFor,stackSize} from './materials.js';
 import {setTimeout as delay} from 'node:timers/promises';
 import {createHash} from 'node:crypto';
 import {latestStock} from './me-stock.js';
+import {hasFeederPatch} from './feeder-version.js';
 
 export const isEreborStation=name=>!!groupOf(name)||/^erebor-K(?:0[1-9]|[12][0-9]|3[0-7])$/i.test(name);
 export const needsSolidReplacement=desired=>desired?.blueprint?.includes('_MASSIV_')&&!desired.blueprint.includes('_LUFT_')&&!desired.blueprint.includes('_URN_');
@@ -218,16 +219,17 @@ export function ereborFeeder(db,request,version,liveReport,savedMissingItems){
     const projectCraft=!base.options.paused&&entries.some(([slot])=>group[slot].phase==='build'&&(group[slot].interior||group[slot].surface));
     // One requesting computer orders an output for the shared ME. Other groups
     // still export it as soon as it arrives. A stopped computer loses its lease.
-    if(projectCraft&&['1.4.11','1.4.12','1.4.13','1.4.14','1.4.15'].includes(reported.script)){
+    if(projectCraft&&hasFeederPatch(reported.script,11)){
      reserveNeeds.set(row.name,{at:Date.now(),amounts});
      const central=JSON.parse(stationAt.get('erebor-K02')?.status_json||'null');
      const centralOnline=central?.computerId===13&&Math.abs(Date.now()-Date.parse(central.at))<45000;
      const managed=new Set();
      if(centralOnline){
-      if(['1.4.12','1.4.13','1.4.14','1.4.15'].includes(central.script)&&central.brickReserve)managed.add('minecraft:stone_bricks');
-      if(['1.4.14','1.4.15'].includes(central.script)&&central.grassReserve)managed.add('minecraft:grass_block');
-      if(central.script==='1.4.15'&&central.mossReserve)managed.add('minecraft:moss_block');
-      if(central.script==='1.4.15'&&central.podzolReserve)managed.add('minecraft:podzol');
+      if(hasFeederPatch(central.script,12)&&central.brickReserve)managed.add('minecraft:stone_bricks');
+      if(hasFeederPatch(central.script,14)&&central.grassReserve)managed.add('minecraft:grass_block');
+      if(hasFeederPatch(central.script,15)&&central.mossReserve)managed.add('minecraft:moss_block');
+      if(hasFeederPatch(central.script,15)&&central.podzolReserve)managed.add('minecraft:podzol');
+      if(hasFeederPatch(central.script,16)&&central.spruceReserve)managed.add('minecraft:spruce_sapling');
      }
      for(const it of items){
       if(managed.has(it.item))continue;

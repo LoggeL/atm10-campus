@@ -19,9 +19,11 @@ class PowderReserve(unittest.TestCase):
         """ + code + """
           surfaceReserves.mossReserve({low=30,target=30})
           surfaceReserves.podzolReserve({low=1024,target=2048})
+          surfaceReserves.spruceReserve({low=2,target=2})
         """)
         self.assertEqual(g.orders["minecraft:moss_block"], 25)
         self.assertEqual(g.orders["minecraft:podzol"], 512)
+        self.assertEqual(g.orders["minecraft:spruce_sapling"], 2)
         self.assertEqual((g.state.moss.pending, g.state.podzol.pending), (25, 512))
         self.assertIsNone(g.state.grass)
 

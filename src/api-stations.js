@@ -1,5 +1,5 @@
 import {groupOf} from './erebor-groups.js';
-import {supportsAlignment} from './feeder-version.js';
+import {supportsAlignment,hasFeederPatch} from './feeder-version.js';
 // ME stock and Schematicannon feeders: CC:Tweaked computers with an Advanced Peripherals ME Bridge
 // report AE2 stock and fetch per cannon what still has to go into the chest next to it.
 import { readFileSync } from 'node:fs';
@@ -50,7 +50,7 @@ const currentVersion = /local VERSION = "([^"]+)"/.exec(stationSource())?.[1] ??
 const scriptVersion = row => {
   const installed = JSON.parse(row.status_json || '{}').script;
   // Surface reserves run on the central computer only.
-  if(currentVersion==='1.4.15'&&row.name!=='erebor-K02'&&['1.4.13','1.4.14'].includes(installed))return installed;
+  if(currentVersion==='1.4.16'&&row.name!=='erebor-K02'&&hasFeederPatch(installed,13))return installed;
   return !isEreborStation(row.name) && /^1\.4\.(?:[3-9]|10)$/.test(installed)
     ? installed : currentVersion;
 };
@@ -75,6 +75,7 @@ export function normalizeStatus(b = {}) {
     ...(b.grassReserve && typeof b.grassReserve==='object' ? {grassReserve:reserveStatus(b.grassReserve)} : {}),
     ...(b.mossReserve && typeof b.mossReserve==='object' ? {mossReserve:reserveStatus(b.mossReserve)} : {}),
     ...(b.podzolReserve && typeof b.podzolReserve==='object' ? {podzolReserve:reserveStatus(b.podzolReserve)} : {}),
+    ...(b.spruceReserve && typeof b.spruceReserve==='object' ? {spruceReserve:reserveStatus(b.spruceReserve)} : {}),
     shortages: asList(b.shortages).slice(0, 100).filter(s => s && typeof s === 'object').map(s => ({
       item: clip(s.item, 120), missing: int(s.missing), inME: int(s.inME), craftable: !!s.craftable, crafting: !!s.crafting, error: clip(s.error, 200),
     })),
@@ -422,10 +423,11 @@ export function registerStationRoutes(app, campus, mat, alignment, schematics) {
         const target=central&&supported?campus.ereborFeeder.reserveTarget(item,cap):0;
         return target>0?{computerId:13,low:Math.min(cap/2,target),target}:null;
       };
-      const grassReserve=surfaceReserve('minecraft:grass_block',8192,['1.4.14','1.4.15'].includes(reported.script));
-      const mossReserve=surfaceReserve('minecraft:moss_block',4096,reported.script==='1.4.15');
-      const podzolReserve=surfaceReserve('minecraft:podzol',4096,reported.script==='1.4.15');
-      return {...plan,powderReserve,brickReserve,grassReserve,mossReserve,podzolReserve,connectingOrder:reported.script === currentVersion ? meOrder.attemptFor(row.name,actor) : null};
+      const grassReserve=surfaceReserve('minecraft:grass_block',8192,hasFeederPatch(reported.script,14));
+      const mossReserve=surfaceReserve('minecraft:moss_block',4096,hasFeederPatch(reported.script,15));
+      const podzolReserve=surfaceReserve('minecraft:podzol',4096,hasFeederPatch(reported.script,15));
+      const spruceReserve=surfaceReserve('minecraft:spruce_sapling',64,hasFeederPatch(reported.script,16));
+      return {...plan,powderReserve,brickReserve,grassReserve,mossReserve,podzolReserve,spruceReserve,connectingOrder:reported.script === currentVersion ? meOrder.attemptFor(row.name,actor) : null};
     }
     return alignment.gate(row.name, planFor(row, liveSnap()));
   });
@@ -466,6 +468,11 @@ export function registerStationRoutes(app, campus, mat, alignment, schematics) {
         for(const item of materials)if(!items.includes(item))items.push(item);
       }
       if (!items.includes('minecraft:gunpowder')) items.push('minecraft:gunpowder');
+      if (items.includes('minecraft:gold_block')) {
+        for (const input of ['minecraft:gold_ingot','mysticalagriculture:gold_essence']) {
+          if (!items.includes(input)) items.push(input);
+        }
+      }
       wantedCache = { key, items: items.sort() };
     }
     return { snapshot: snap.id, items: wantedCache.items };

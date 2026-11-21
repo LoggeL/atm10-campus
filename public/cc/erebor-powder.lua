@@ -90,4 +90,5 @@ local surfaceReserves = {
   grassReserve = maintainGrass,
   mossReserve = reserveKeeper("moss", "mossReserve", "minecraft:moss_block", 512, 4096),
   podzolReserve = reserveKeeper("podzol", "podzolReserve", "minecraft:podzol", 512, 4096),
+  spruceReserve = reserveKeeper("spruce", "spruceReserve", "minecraft:spruce_sapling", 8, 64),
 }
