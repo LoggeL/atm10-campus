@@ -3,7 +3,7 @@
 -- through an Advanced Peripherals ME Bridge. Which blueprint and the options are set in the web app (tab "Kanonen");
 -- this computer only knows URL, a station token and its cannon name (install: wget run <url>/cc/install.lua).
 -- Strings shown on screen use Latin-1 escapes (\228 = ae-umlaut ...), the CC font is ISO-8859-1.
-local VERSION = "1.4.10"
+local VERSION = "1.4.11"
 
 settings.define("campus.url", { description = "Campus-URL", type = "string" })
 settings.define("campus.token", { description = "API-Token mit Scope Station", type = "string" })
@@ -233,8 +233,56 @@ local function startAssignment(p)
     if n > 0 then notice(n .. " Reste ins ME zur\252ck") end
   end
   view.craftError = nil
-  state = { assignment = p.assignment, delivered = {}, cap = {}, craftAt = {}, powder = state.powder }
+  state = { assignment = p.assignment, delivered = {}, cap = {}, craftAt = state.craftAt or {}, powder = state.powder, projectItems = state.projectItems }
   saveState()
+end
+
+-- Each output has one elected requester across the Erebor stations. AP 0.8
+-- returns a job handle before checking its ingredients or actually starting.
+local projectJobs, projectRetry, projectBatch, projectReason = {}, {}, {}, {}
+local function projectOrder(it, s)
+  local item, stamp = it.item, now()
+  local job = projectJobs[item]
+  if job then
+    if job.hasErrorOccurred() or job.isCalculationNotSuccessful() or job.isCanceled() then
+      local detail = tostring(job.getDebugMessage() or "Auftrag abgebrochen")
+      local missing = job.getMissingItems and job.getMissingItems()
+      for _, entry in pairs(type(missing) == "table" and missing or {}) do
+        if type(entry) == "table" and entry.name then detail = detail .. " " .. tostring(entry.count or entry.amount or "?") .. "x " .. entry.name end
+      end
+      local previous = projectBatch[item]
+      projectBatch[item] = math.max(1, math.floor(previous / 2))
+      projectRetry[item], projectReason[item] = stamp + (previous > 1 and 5 or 45), detail
+      projectJobs[item] = nil
+    elseif not job.isDone() then
+      s.crafting = job.isCraftingStarted()
+      if not s.crafting then s.error = "AE2 berechnet den Auftrag" end
+      return
+    else
+      projectJobs[item], projectReason[item] = nil, nil
+      projectBatch[item] = math.min(2048, projectBatch[item] * 2)
+    end
+  end
+  s.error = projectReason[item]
+  if not it.orderBatch or stamp < (projectRetry[item] or 0) then return end
+  local cpus, why = call(bridge.getCraftingCPUs)
+  if type(cpus) ~= "table" then s.error = errText(why) or "ME-CPUs nicht erreichbar"; return end
+  local free = false
+  for _, cpu in pairs(cpus) do
+    local output = cpu.craftingJob and cpu.craftingJob.resource
+    if cpu.isBusy and type(output) == "table" and output.name == item then s.crafting = true; s.error = nil; return end
+    if cpu.isBusy == false then free = true end
+  end
+  if not free then s.error = "Keine freie ME-Crafting-CPU"; projectRetry[item] = stamp + 5; return end
+  if not alignmentReady(plan, planReceivedAt, now()) then return end
+  local n = math.min(it.orderBatch, projectBatch[item] or 1024, math.max(0, it.needed - s.inME))
+  if n <= 0 then return end
+  local result, err = call(bridge.craftItem, {name=item, count=n})
+  projectRetry[item] = stamp + 8
+  if type(result) == "table" and result.isDone then
+    projectJobs[item], projectBatch[item], projectReason[item] = result, n, nil
+    s.error = "AE2 berechnet den Auftrag"
+  else s.error = errText(err) or "Kein AE2-Auftragsbeleg" end
 end
 
 local stoneOrderAt = -1e9
@@ -245,6 +293,11 @@ local function shortage(it, missing, have, err)
   if inME < missing then
     s.craftable = isCraftable(it.item)
     if s.craftable then
+      if plan.options.projectSupply then
+        projectOrder(it, s)
+        view.shortages[#view.shortages + 1] = s
+        return
+      end
       s.crafting = isCrafting(it.item)
       local last = state.craftAt[it.item] or 0
       local stoneOrder = NAME == "erebor-K02" and plan.options.stoneAutoCraft and it.item == "minecraft:stone"
@@ -265,15 +318,50 @@ end
 local function feed()
   local still = {}
   for _, it in ipairs(plan.items) do if it.needed > 0 then still[it.item] = true end end
-  local back = 0
-  for _, it in pairs(chest.list()) do
-    if it.name ~= GUNPOWDER and not still[it.name] and (state.delivered[it.name] or 0) > 0 then back = back + import(it.name, it.count) end
-  end
-  if back > 0 then notice(back .. " nicht mehr ben\246tigte Items ins ME zur\252ck") end
+  local buffer = plan.options.bufferStacks or 2
+  local dirty = false
   local counts, used, size = chestContents()
+  if plan.options.projectSupply then
+    -- The stone-only setting is per chest. Multiplying 64 stacks by every
+    -- decorative variant crowds out both minority materials and gunpowder.
+    buffer = math.max(1, math.min(buffer, 4, math.floor((size - 2) / math.max(1, #plan.items))))
+    -- Older feeders did not journal their previous assignment. These five
+    -- supplies were already distributed to the dedicated Erebor build chests.
+    state.projectItems = state.projectItems or {
+      ["minecraft:stone"]=true, ["rechiseled:blackstone_tiles_connecting"]=true,
+      ["rechiseled:gold_block_polished_connecting"]=true, ["rechiseled:dark_prismarine_large_tiles_connecting"]=true,
+      ["rechiseledcreate:veridium_cut_polished_connecting"]=true
+    }
+    for item in pairs(still) do
+      if not state.projectItems[item] then state.projectItems[item] = true; dirty = true end
+    end
+  end
+  local back = 0
+  for item, have in pairs(counts) do
+    local extra = 0
+    if plan.options.projectSupply then
+      if plan.options.rebalance and state.projectItems[item] then
+        extra = have
+        for _, it in ipairs(plan.items) do
+          if it.item == item then extra = have - math.min(it.needed, buffer * it.stack); break end
+        end
+      end
+    elseif not still[item] and (state.delivered[item] or 0) > 0 then extra = have end
+    if item ~= GUNPOWDER and extra > 0 and alignmentReady(plan, planReceivedAt, now()) then
+      local returned = import(item, extra)
+      if returned > 0 then
+        back = back + returned
+        state.delivered[item] = math.max(0, (state.delivered[item] or 0) - returned)
+        dirty = true
+      end
+    end
+  end
+  if back > 0 then
+    counts, used, size = chestContents()
+    notice(back .. " nicht mehr ben\246tigte Items ins ME zur\252ck")
+  end
   local free = size - used
   view.shortages, view.chest, view.full = {}, { slots = size, used = used, name = chestName }, false
-  local dirty = false
 
   local gp = plan.options.gunpowder or 0
   local haveGp = counts[GUNPOWDER] or 0
@@ -285,7 +373,6 @@ local function feed()
     end
   end
 
-  local buffer = plan.options.bufferStacks or 2
   for _, it in ipairs(plan.items) do
     local have = counts[it.item] or 0
     -- Delivery limit per assignment: protects the ME from a hopper or player draining the chest.
@@ -511,6 +598,15 @@ local function tick()
     local low = math.ceil(math.min(item.needed, plan.options.bufferStacks * item.stack) * 0.75)
     stocked = low > 0 and (counts[item.item] or 0) >= low
       and (counts[GUNPOWDER] or 0) >= math.ceil(plan.options.gunpowder / 2)
+    if stocked then view.chest = {slots=slots,used=used,name=chestName} end
+  end
+  if ok and plan and plan.options.projectSupply and plan.alignment.state == "aligned"
+      and #plan.items > 0 and now() - planAt < 15 + os.getComputerID() % 7 then
+    local counts, used, slots = chestContents()
+    stocked = (counts[GUNPOWDER] or 0) >= math.ceil(plan.options.gunpowder / 2)
+    for _, it in ipairs(plan.items) do
+      if (counts[it.item] or 0) < math.min(it.needed, it.stack) then stocked = false; break end
+    end
     if stocked then view.chest = {slots=slots,used=used,name=chestName} end
   end
 

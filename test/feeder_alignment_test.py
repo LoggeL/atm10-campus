@@ -4,6 +4,32 @@ import unittest
 from lupa import LuaRuntime
 
 class FeederTests(unittest.TestCase):
+    def test_mixed_job_returns_surplus_stone_and_leaves_room_for_each_required_item(self):
+        code=(Path(__file__).resolve().parents[1]/'public/cc/campus.lua').read_text()
+        feed=code[code.index("local function feed()"):code.index("-- ---------- reporting")]
+        run=LuaRuntime(unpack_returned_tuples=True).execute("""
+          local GUNPOWDER="minecraft:gunpowder"
+          local plan={items={{item="brick",needed=3000,stack=64},{item="tuff",needed=128,stack=64}},
+            options={bufferStacks=64,gunpowder=64,projectSupply=true,rebalance=true},alignment={probeMode="shared"}}
+          local state={cap={},delivered={}}
+          local view={}
+          local counts={["minecraft:stone"]=4096,brick=4032,[GUNPOWDER]=64,personal=64}
+          local function chestContents()
+            local copy,used={},0
+            for k,v in pairs(counts) do copy[k]=v;used=used+math.ceil(v/64) end
+            return copy,used,132
+          end
+          local function now() return 0 end
+          local function alignmentReady() return true end
+          local function notice() end
+          local function saveState() end
+          local function import(k,n) counts[k]=counts[k]-n;return n end
+          local function export(k,n) counts[k]=(counts[k] or 0)+n;return n end
+        """+feed+"""
+          return function() feed();return counts["minecraft:stone"],counts.brick,counts.tuff,counts.personal,counts[GUNPOWDER] end
+        """)
+        self.assertEqual(run(),(0,256,128,64,64))
+
     def test_one_station_orders_only_missing_stone_with_a_live_lease(self):
         code=(Path(__file__).resolve().parents[1]/'public/cc/campus.lua').read_text()
         helper=code[code.index("local stoneOrderAt"):code.index("local function feed()")]

@@ -71,6 +71,7 @@ export function limitSupplyReads(request){
 
 export function ereborFeeder(db,request,version,liveReport){
  const samples=new Map(),views=new Map(),pending=new Map();
+ const craftOwners=new Map();
  const lookup=db.prepare("SELECT s.state FROM erebor_queue_sites s JOIN erebor_queue_config q ON q.id=1 JOIN build_projects p ON p.id='erebor' WHERE s.site=? AND q.version=? AND p.current_version=q.version");
  const jobAt=site=>JSON.parse(lookup.get(site,version)?.state||'{}').job;
  const stationAt=db.prepare('SELECT status_json,options_json FROM cannons WHERE name=?');
@@ -176,7 +177,24 @@ export function ereborFeeder(db,request,version,liveReport){
     const identity=entries.map(([slot,r])=>slot+'='+r.file).sort().join('|');
     const assignment=parseInt(createHash('sha256').update(identity).digest('hex').slice(0,12),16);
     const projectCraft=!base.options.paused&&entries.some(([slot])=>group[slot].phase==='build'&&(group[slot].interior||group[slot].surface));
-    return {...base,assignment,state:base.options.paused?'paused':'feeding',options:{...base.options,autoCraft:base.options.autoCraft||projectCraft,returnLeftovers:false},
+    // One requesting computer orders an output for the shared ME. Other groups
+    // still export it as soon as it arrives. A stopped computer loses its lease.
+    if(projectCraft&&reported.script==='1.4.11'){
+     for(const it of items){
+      const shortage=reported.assignment===assignment&&reported.shortages?.find(s=>s.item===it.item&&s.craftable&&s.missing>s.inME);
+      const owner=craftOwners.get(it.item);
+      if(shortage&&(!owner||owner.until<=Date.now()||owner.name===row.name)){
+       craftOwners.set(it.item,{name:row.name,until:Date.now()+30000});
+       it.orderBatch=Math.min(2048,it.needed);
+      }
+     }
+    }
+    const groupSlots=extra?Object.keys(extra.slots):['A','B','C'];
+    const rebalance=projectCraft&&groupSlots.every(slot=>{
+     const s=live.stations?.[site+(slot==='A'?'':slot)];
+     return s?.ready&&(result.confirmed?.[slot]?.file&&s.upload===result.confirmed[slot].file||s.empty&&s.state==='STOPPED');
+    });
+    return {...base,assignment,state:base.options.paused?'paused':'feeding',options:{...base.options,projectSupply:projectCraft,rebalance,autoCraft:base.options.autoCraft||projectCraft,returnLeftovers:false},
      alignment:{enabled:true,state:'aligned',leaseSeconds:10,probeMode:'shared'},blueprint:{id:first.desired.blueprint,
      name:site+' · '+entries.map(([slot])=>slot).join(' + '),origin:first.desired.anchor,size:first.size,version},items,
      totals:{start:total,needed:total,kinds:items.length}};

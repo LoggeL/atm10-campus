@@ -44,11 +44,11 @@ const cannonItems = items => items.filter(i => !/_bucket$/.test(i.item));
 const nextAssignment = prev => Math.max((prev || 0) + 1, Math.floor(Date.now() / 1000));
 
 const currentVersion = /local VERSION = "([^"]+)"/.exec(stationSource())?.[1] ?? '0';
-// The connecting-order release is needed only on K02. Existing 1.4.3 feeders
-// at other sites keep supplying their cannons without a fleet-wide reboot.
+// Only Erebor stations need shared-chest balancing. Other established
+// stations keep their installed compatible release.
 const scriptVersion = row => {
   const installed = JSON.parse(row.status_json || '{}').script;
-  return currentVersion === '1.4.10' && row.name !== 'erebor-K02' && ['1.4.3','1.4.4','1.4.5','1.4.6','1.4.7','1.4.8','1.4.9'].includes(installed)
+  return !isEreborStation(row.name) && /^1\.4\.(?:[3-9]|10)$/.test(installed)
     ? installed : currentVersion;
 };
 const clip = (v, n) => (v == null ? null : String(v).slice(0, n));
@@ -437,12 +437,11 @@ export function registerStationRoutes(app, campus, mat, alignment, schematics) {
     if (wantedCache?.key !== key) {
       const merged = mat.aggregate(bps, snap);
       const items = [...merged.items].filter(([, e]) => e.needed > 0).map(([item]) => item);
-      const chiseled=db.prepare(`SELECT DISTINCT material.key AS item
+      const architecture=db.prepare(`SELECT DISTINCT material.key AS item
         FROM project_architecture_packages a JOIN build_projects p ON p.id=a.project_id AND p.current_version=a.base_version,
         json_each(a.report_json,'$.materials') material
-        WHERE p.id='erebor' AND a.revision=? AND material.value>0
-        AND (material.key GLOB 'rechiseled:*' OR material.key GLOB 'rechiseledcreate:*')`).all(DESIGN_REVISION);
-      for(const {item} of chiseled)if(!items.includes(item))items.push(item);
+        WHERE p.id='erebor' AND a.revision=? AND material.value>0`).all(DESIGN_REVISION);
+      for(const {item} of architecture)if(!items.includes(item))items.push(item);
       if (!items.includes('minecraft:gunpowder')) items.push('minecraft:gunpowder');
       wantedCache = { key, items: items.sort() };
     }

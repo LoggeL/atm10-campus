@@ -664,6 +664,32 @@ export function registerEreborQueue(app,campus){
   return reply.header('Cache-Control','private, no-store').send(counter);
  }
  app.get('/api/projects/erebor/bauzaehler',(req,reply)=>buildingProgress(req,reply,false));
+ let missingRead=null,missingAt=0;
+ app.get('/api/projects/erebor/materialengpaesse',async(req,reply)=>{
+  requireActor(req,'read');
+  const p=project(),report=liveCache;
+  if(!config.worldSources.live||!p||report?.version!==p.current_version||Math.abs(Date.now()-report.at)>45000)
+   throw new HttpError(503,'Aktuelle Kanonenmeldung fehlt.');
+  const rows=[];
+  for(const site of parallelLayout.sites)for(const slot of slotsFor(site.site)){
+   const key=slot==='A'?site.site:site.site+slot,s=report.stations?.[key];
+   if(s?.ready&&s.aligned&&s.upload&&s.state==='PAUSED'&&['missingBlock','missingItem'].includes(s.status))
+    rows.push({key,file:s.upload,placed:s.placed,status:s.status,pos:site[slot==='A'?'main':slot]});
+  }
+  if(!missingRead||Date.now()-missingAt>30000){
+   missingAt=Date.now();
+   missingRead=new Promise((resolve,reject)=>{
+    const w=new Worker(new URL('./erebor-missing-worker.js',import.meta.url),{workerData:{world:config.worldSources.live,rows}});
+    w.once('message',resolve);w.once('error',reject);w.once('exit',code=>{if(code)reject(Error('Weltprüfung unterbrochen.'));});
+   });
+  }
+  const saved=new Map((await missingRead).map(row=>[row.key,row]));
+  const materials=rows.map(({key,file,placed,status})=>{
+   const r=saved.get(key);
+   return {cannon:key.length===3?key+'A':key,item:r?.file===file&&r.placed===placed&&r.status===status?r.item:null};
+  });
+  return reply.header('Cache-Control','private, no-store').send({at:report.at,materials});
+ });
  app.get('/api/projects/erebor/dashboard',(req,reply)=>buildingProgress(req,reply,true));
  app.get(base,async(req,reply)=>{requireActor(req,'read');const report=await liveReport(cfg()?.version);return reply.header('Cache-Control','private, no-store').send(status(report,req.query.site,req.query.view==='orders'));});
  app.get(base+'/drucker-reparatur.zip',async(req,reply)=>{
