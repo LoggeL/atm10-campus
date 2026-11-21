@@ -218,15 +218,19 @@ export function ereborFeeder(db,request,version,liveReport,savedMissingItems){
     const projectCraft=!base.options.paused&&entries.some(([slot])=>group[slot].phase==='build'&&(group[slot].interior||group[slot].surface));
     // One requesting computer orders an output for the shared ME. Other groups
     // still export it as soon as it arrives. A stopped computer loses its lease.
-    if(projectCraft&&['1.4.11','1.4.12','1.4.13','1.4.14'].includes(reported.script)){
+    if(projectCraft&&['1.4.11','1.4.12','1.4.13','1.4.14','1.4.15'].includes(reported.script)){
      reserveNeeds.set(row.name,{at:Date.now(),amounts});
      const central=JSON.parse(stationAt.get('erebor-K02')?.status_json||'null');
      const centralOnline=central?.computerId===13&&Math.abs(Date.now()-Date.parse(central.at))<45000;
-     const bricksManaged=centralOnline&&['1.4.12','1.4.13','1.4.14'].includes(central.script)&&central.brickReserve;
-     const grassManaged=centralOnline&&central.script==='1.4.14'&&central.grassReserve;
+     const managed=new Set();
+     if(centralOnline){
+      if(['1.4.12','1.4.13','1.4.14','1.4.15'].includes(central.script)&&central.brickReserve)managed.add('minecraft:stone_bricks');
+      if(['1.4.14','1.4.15'].includes(central.script)&&central.grassReserve)managed.add('minecraft:grass_block');
+      if(central.script==='1.4.15'&&central.mossReserve)managed.add('minecraft:moss_block');
+      if(central.script==='1.4.15'&&central.podzolReserve)managed.add('minecraft:podzol');
+     }
      for(const it of items){
-      if(bricksManaged&&it.item==='minecraft:stone_bricks')continue;
-      if(grassManaged&&it.item==='minecraft:grass_block')continue;
+      if(managed.has(it.item))continue;
       const shortage=reported.assignment===assignment&&reported.shortages?.find(s=>s.item===it.item&&s.craftable&&s.missing>s.inME);
       const owner=craftOwners.get(it.item);
       if(shortage&&(!owner||owner.until<=Date.now()||owner.name===row.name)){

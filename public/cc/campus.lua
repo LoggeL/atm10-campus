@@ -3,7 +3,7 @@
 -- through an Advanced Peripherals ME Bridge. Which blueprint and the options are set in the web app (tab "Kanonen");
 -- this computer only knows URL, a station token and its cannon name (install: wget run <url>/cc/install.lua).
 -- Strings shown on screen use Latin-1 escapes (\228 = ae-umlaut ...), the CC font is ISO-8859-1.
-local VERSION = "1.4.14"
+local VERSION = "1.4.15"
 
 settings.define("campus.url", { description = "Campus-URL", type = "string" })
 settings.define("campus.token", { description = "API-Token mit Scope Station", type = "string" })
@@ -233,7 +233,7 @@ local function startAssignment(p)
     if n > 0 then notice(n .. " Reste ins ME zur\252ck") end
   end
   view.craftError = nil
-  state = { assignment = p.assignment, delivered = {}, cap = {}, craftAt = state.craftAt or {}, powder = state.powder, bricks = state.bricks, grass = state.grass, projectItems = state.projectItems }
+  state = { assignment = p.assignment, delivered = {}, cap = {}, craftAt = state.craftAt or {}, powder = state.powder, bricks = state.bricks, grass = state.grass, moss = state.moss, podzol = state.podzol, projectItems = state.projectItems }
   saveState()
 end
 
@@ -505,6 +505,7 @@ local function reportStatus()
     message = (view.state == "error" and view.error) or view.message or view.craftError,
     chest = view.chest, chestSide = chestName, delivered = state.delivered, shortages = view.shortages,
     powderReserve = view.powderReserve, brickReserve = view.brickReserve, grassReserve = view.grassReserve,
+    mossReserve = view.mossReserve, podzolReserve = view.podzolReserve,
   }, plan and plan.intervals and plan.intervals.status or 30)
 end
 
@@ -656,11 +657,14 @@ local function tick()
     local success, why = pcall(maintainBricks, plan.brickReserve)
     if not success then view.brickReserve = {stage="retrying",message=tostring(why)} end
   else view.brickReserve = nil end
-  if NAME == "erebor-K02" and ok and plan and plan.grassReserve and now() - planReceivedAt < 120
-      and os.getComputerID() == plan.grassReserve.computerId then
-    local success, why = pcall(maintainGrass, plan.grassReserve)
-    if not success then view.grassReserve = {stage="retrying",message=tostring(why)} end
-  else view.grassReserve = nil end
+  for field, maintain in pairs(surfaceReserves) do
+    local policy = plan and plan[field]
+    if NAME == "erebor-K02" and ok and policy and now() - planReceivedAt < 120
+        and os.getComputerID() == policy.computerId then
+      local success, why = pcall(maintain, policy)
+      if not success then view[field] = {stage="retrying",message=tostring(why)} end
+    else view[field] = nil end
+  end
   local _, reportError = reportStatus()
   if reportError then view.error = reportError end
   if ok and settings.get("campus.stock") and now() - stockAt >= iv.stock then

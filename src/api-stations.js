@@ -49,8 +49,8 @@ const currentVersion = /local VERSION = "([^"]+)"/.exec(stationSource())?.[1] ??
 // stations keep their installed compatible release.
 const scriptVersion = row => {
   const installed = JSON.parse(row.status_json || '{}').script;
-  // 1.4.14 adds a job to the central computer only.
-  if(currentVersion==='1.4.14'&&row.name!=='erebor-K02'&&installed==='1.4.13')return installed;
+  // Surface reserves run on the central computer only.
+  if(currentVersion==='1.4.15'&&row.name!=='erebor-K02'&&['1.4.13','1.4.14'].includes(installed))return installed;
   return !isEreborStation(row.name) && /^1\.4\.(?:[3-9]|10)$/.test(installed)
     ? installed : currentVersion;
 };
@@ -73,6 +73,8 @@ export function normalizeStatus(b = {}) {
     ...(b.powderReserve && typeof b.powderReserve==='object' ? {powderReserve:reserveStatus(b.powderReserve)} : {}),
     ...(b.brickReserve && typeof b.brickReserve==='object' ? {brickReserve:reserveStatus(b.brickReserve)} : {}),
     ...(b.grassReserve && typeof b.grassReserve==='object' ? {grassReserve:reserveStatus(b.grassReserve)} : {}),
+    ...(b.mossReserve && typeof b.mossReserve==='object' ? {mossReserve:reserveStatus(b.mossReserve)} : {}),
+    ...(b.podzolReserve && typeof b.podzolReserve==='object' ? {podzolReserve:reserveStatus(b.podzolReserve)} : {}),
     shortages: asList(b.shortages).slice(0, 100).filter(s => s && typeof s === 'object').map(s => ({
       item: clip(s.item, 120), missing: int(s.missing), inME: int(s.inME), craftable: !!s.craftable, crafting: !!s.crafting, error: clip(s.error, 200),
     })),
@@ -416,9 +418,14 @@ export function registerStationRoutes(app, campus, mat, alignment, schematics) {
       const central=row.name==='erebor-K02'&&reported.computerId===13&&!options.paused;
       const brickTarget=central?campus.ereborFeeder.reserveTarget('minecraft:stone_bricks',65536):0;
       const brickReserve=brickTarget>0?{computerId:13,low:Math.min(16384,brickTarget),target:brickTarget}:null;
-      const grassTarget=central&&reported.script==='1.4.14'?campus.ereborFeeder.reserveTarget('minecraft:grass_block',8192):0;
-      const grassReserve=grassTarget>0?{computerId:13,low:Math.min(4096,grassTarget),target:grassTarget}:null;
-      return {...plan, powderReserve, brickReserve, grassReserve, connectingOrder:reported.script === currentVersion ? meOrder.attemptFor(row.name,actor) : null};
+      const surfaceReserve=(item,cap,supported)=>{
+        const target=central&&supported?campus.ereborFeeder.reserveTarget(item,cap):0;
+        return target>0?{computerId:13,low:Math.min(cap/2,target),target}:null;
+      };
+      const grassReserve=surfaceReserve('minecraft:grass_block',8192,['1.4.14','1.4.15'].includes(reported.script));
+      const mossReserve=surfaceReserve('minecraft:moss_block',4096,reported.script==='1.4.15');
+      const podzolReserve=surfaceReserve('minecraft:podzol',4096,reported.script==='1.4.15');
+      return {...plan,powderReserve,brickReserve,grassReserve,mossReserve,podzolReserve,connectingOrder:reported.script === currentVersion ? meOrder.attemptFor(row.name,actor) : null};
     }
     return alignment.gate(row.name, planFor(row, liveSnap()));
   });

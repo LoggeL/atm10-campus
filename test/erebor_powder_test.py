@@ -6,6 +6,25 @@ from lupa import LuaRuntime
 
 
 class PowderReserve(unittest.TestCase):
+    def test_moss_and_podzol_orders_are_independent_and_demand_limited(self):
+        code = (Path(__file__).resolve().parents[1] / "public/cc/erebor-powder.lua").read_text(encoding="utf-8")
+        lua = LuaRuntime()
+        g = lua.globals()
+        lua.execute("""
+          GUNPOWDER="minecraft:gunpowder"; state={}; view={}; orders={}
+          function now() return 1000 end; function saveState() end
+          bridge={getItems=function() return {{name="minecraft:moss_block",count=5}} end,
+            getCraftingCPUs=function() return {{isBusy=false}} end,
+            craftItem=function(f) orders[f.name]=f.count; return {} end}
+        """ + code + """
+          surfaceReserves.mossReserve({low=30,target=30})
+          surfaceReserves.podzolReserve({low=1024,target=2048})
+        """)
+        self.assertEqual(g.orders["minecraft:moss_block"], 25)
+        self.assertEqual(g.orders["minecraft:podzol"], 512)
+        self.assertEqual((g.state.moss.pending, g.state.podzol.pending), (25, 512))
+        self.assertIsNone(g.state.grass)
+
     def test_grass_uses_its_own_stock_and_only_orders_confirmed_demand(self):
         code = (Path(__file__).resolve().parents[1] / "public/cc/erebor-powder.lua").read_text(encoding="utf-8")
         lua = LuaRuntime()

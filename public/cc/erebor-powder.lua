@@ -86,3 +86,8 @@ end
 local maintainPowder = reserveKeeper("powder", "powderReserve", GUNPOWDER, 1024, 4096)
 local maintainBricks = reserveKeeper("bricks", "brickReserve", "minecraft:stone_bricks", 8192, 32768)
 local maintainGrass = reserveKeeper("grass", "grassReserve", "minecraft:grass_block", 2048, 8192)
+local surfaceReserves = {
+  grassReserve = maintainGrass,
+  mossReserve = reserveKeeper("moss", "mossReserve", "minecraft:moss_block", 512, 4096),
+  podzolReserve = reserveKeeper("podzol", "podzolReserve", "minecraft:podzol", 512, 4096),
+}
