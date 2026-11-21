@@ -109,8 +109,12 @@ def install(base):
         previous=controller.read_bytes()
         before=tracker.read_bytes()
         content=Path(__file__).read_bytes()
-        if extension.exists() and extension.read_bytes()!=content:
-            raise ValueError('Abweichende lokale Moduldatei.')
+        if extension.exists():
+            installed=extension.read_bytes()
+            # A rolled-back first installation can leave the original published module.
+            # Its imported tracker code is identical. Only its installer used the old command.
+            if installed!=content and hashlib.sha256(installed).hexdigest()!='e3741b055b12f8d7545cbe284d6c16ee7e5a35194eb12b8ab246eddbb03725e7':
+                raise ValueError('Abweichende lokale Moduldatei.')
         after=before if b'surfaceModeTracker:1' in before else update_tracker(before.decode()).encode()
         new=previous if HOOK in previous else previous+HOOK
         compile(new,str(controller),'exec')
@@ -127,7 +131,7 @@ def install(base):
             print('Außenhaut-Modus bereits aktiv.')
             return
         container=container_for(base)
-        reload_cmd=['docker','exec',container,'rcon-cli','minecraft:reload']
+        reload_cmd=['docker','exec',container,'rcon-cli','reload']
         registry=kube/'config'/REGISTRY
         if not registry.exists():
             atomic(registry,b'{}',0o644)
