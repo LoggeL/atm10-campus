@@ -48,7 +48,8 @@ export function insideMassif(plan,origin,size){
  return true;
 }
 const air=name=>['minecraft:air','minecraft:cave_air','minecraft:void_air'].includes(name);
-export function interiorWorldCheck(world,{bytes,anchor,kind,completed=false,minimumSave=0,outdoor=false}){
+export function interiorWorldCheck(world,{bytes,anchor,kind,completed=false,minimumSave=0,outdoor=false,details=false}){
+ const rejected=reason=>details?reason:false;
  const plan=parseStructure(bytes,completed);
  if(plan.entities||plan.blockEntities||!['build','clear','surface'].includes(kind))return false;
  const points=kind==='clear'?[]:plan.placed;
@@ -63,7 +64,7 @@ export function interiorWorldCheck(world,{bytes,anchor,kind,completed=false,mini
   const rk=(cx>>5)+','+(cz>>5);
   if(!regions.has(rk))regions.set(rk,Region.open(world,cx>>5,cz>>5));
   const region=regions.get(rk),chunk=region?.chunk(cx,cz);
-  if(!chunk?.sections?.length||chunk.xPos!==cx||chunk.zPos!==cz||!['full','minecraft:full'].includes(chunk.Status))return false;
+  if(!chunk?.sections?.length||chunk.xPos!==cx||chunk.zPos!==cz||!['full','minecraft:full'].includes(chunk.Status))return rejected('Weltstand fehlt für Chunk '+cx+' / '+cz);
   const key=cx+','+cz;
   readers.set(key,chunkBlockReader(chunk,true));
   if(minimumSave)stamps.set(key,region.buf.readUInt32BE(4096+4*((cx&31)+(cz&31)*32))*1000);
@@ -75,16 +76,16 @@ export function interiorWorldCheck(world,{bytes,anchor,kind,completed=false,mini
   const x=pt.x+anchor[0],y=pt.y+anchor[1],z=pt.z+anchor[2],cx=x>>4,cz=z>>4,key=cx+','+cz;
   if(minimumSave&&stamps.get(key)<minimumSave)return false;
   const at=readers.get(key),state=at(x,y,z),name=state.Name;
-  if(tech.some(b=>Math.abs(b.x-x)<=4&&Math.abs(b.y-y)<=4&&Math.abs(b.z-z)<=4))return false;
+  if(tech.some(b=>Math.abs(b.x-x)<=4&&Math.abs(b.y-y)<=4&&Math.abs(b.z-z)<=4))return rejected('Geschützte Block-Entity bei Ziel '+[x,y,z].join(' / '));
   const sapling=kind==='surface'&&/^minecraft:(?:oak|spruce|birch)_sapling$/.test(pt.name);
   const grown=sapling&&name===pt.name.replace('_sapling','_log');
   const matches=kind==='clear'?air(name):name===pt.name||grown;
   if(completed){
    if(!matches||(!sapling&&Object.entries(pt.properties??{}).some(([key,val])=>state.Properties?.[key]!==val)))return false;
   }else if(kind==='surface'){
-   if(!matches&&!air(name))return false;
-   if(sapling&&!grown&&!saplingSoil(planned.get(index(pt)-sx*sz)??at(x,y-1,z).Name))return false;
-   if(!pt.name.endsWith('_leaves')&&!planned.has(index(pt)-sx*sz)&&air(at(x,y-1,z).Name))return false;
+   if(!matches&&!air(name))return rejected([x,y,z].join(' / ')+': '+name+' vorhanden, '+pt.name+' geplant');
+   if(sapling&&!grown&&!saplingSoil(planned.get(index(pt)-sx*sz)??at(x,y-1,z).Name))return rejected('Pflanzboden fehlt bei '+[x,y,z].join(' / '));
+   if(!pt.name.endsWith('_leaves')&&!planned.has(index(pt)-sx*sz)&&air(at(x,y-1,z).Name))return rejected('Untergrund fehlt bei '+[x,y,z].join(' / '));
   }else if(!matches&&!air(name)&&name!=='minecraft:stone'&&!(outdoor&&/^minecraft:(?:dirt|grass_block|gravel|sand|andesite|diorite|granite|tuff|deepslate)$/.test(name)))return false;
  }
  return true;

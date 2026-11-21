@@ -502,7 +502,7 @@ export function registerEreborQueue(app,campus){
  }
  // A full fleet rotation can outlast short excavations. Pick up their actual
  // native finishes between batches and offer the same empty cannon its next job.
- const roomChecks=new Map();
+ const roomChecks=new Map(),surfaceRepairStatus=new Map();
  async function finishRooms(p,report){
   const v=p.current_version;
   if(!report?.stations||Date.now()-report.at>=15000||!current(v))return;
@@ -522,17 +522,21 @@ export function registerEreborQueue(app,campus){
    const matches=()=>(slot==='A'?read(site).job:helpers.jobAt(v,site,slot))?.desired.file===job.desired.file;
    try{
     if(released){
+     const note=message=>surfaceRepairStatus.set(site+slot,{file:job.desired.blueprint,at:Date.now(),message});
      const allowed=()=>active()&&cfg().enabled&&!choices.next(v,site)&&!job.selection;
-     if(!allowed()||!config.worldSources.live||report.surfaceModeTracker!==1||report.ereborProjectWork!==1)continue;
+     if(!allowed()||!config.worldSources.live||report.surfaceModeTracker!==1||report.ereborProjectWork!==1){note('Wartet auf Automatikfreigabe, Weltstand und Außenhaut-Controller');continue;}
      const source=landscape.idleRevision(v,site,slot,job);
-     if(!source)continue;
+     if(!source){note('Veröffentlichte Revision passt nicht zur offenen Reservierung');continue;}
      const pkg=landscape.restore(v,source);
      const check={bytes:pkg.bytes,anchor:pkg.job.desired.anchor,kind:'surface'};
      const done=await generate(p,{interiorCheck:{...check,completed:true,minimumSave:Math.floor(job.seen||0)*1000}});
-     if(!done&&!await generate(p,{interiorCheck:check}))continue;
+     if(!done){
+      const safe=await generate(p,{interiorCheck:{...check,details:true}});
+      if(safe!==true){note(typeof safe==='string'?safe:'Weltprüfung offen');continue;}
+     }
      const {observed}=await request('erebor-inspect',{site:key,version:v});
      if(!emptyStopped(observed)||observed.status!=='idle'||!allowed()||!matches()||
-        !same(source,landscape.idleRevision(v,site,slot,job)))continue;
+        !same(source,landscape.idleRevision(v,site,slot,job))){note('Wartet auf zurückgesetzten Drucker und unveränderte Reservierung');continue;}
      const next={...pkg.job,next:job.next,replayedAfterRelease:true};
      tx(db,()=>{
       if(job.source.sha256!==source.sha256)landscape.releasePrevious(v,site,slot,job);
@@ -554,7 +558,7 @@ export function registerEreborQueue(app,campus){
       }
       db.prepare('UPDATE erebor_queue_sites SET state=?,payload=? WHERE site=?').run(JSON.stringify(state),done?null:pkg.bytes,site);
      });
-     continue;
+     note(done?'Vollständig im Weltstand bestätigt':'Aktuelle Revision zum Einlegen bereit');continue;
     }
     const {observed:o}=await request('erebor-inspect',{site:key,version:v});
     if(!current(v)||!matches()||!emptyStopped(o)||o.status!=='finished')continue;
@@ -579,7 +583,10 @@ export function registerEreborQueue(app,campus){
      state.cursor=job.next;state.completed++;state.job=null;state.inserted=false;state.status='Abschluss bestätigt, nächster Bauabschnitt folgt';persist(site,state);
     });
     if(slot!=='A'&&active())await helpers.refill(p,site,slot,report,active,read(site),()=>current(v));
-   }catch(e){app.log.warn({station:key,err:e.message},'Baufolge wartet auf bestätigten Planwechsel');}
+   }catch(e){
+    if(released)surfaceRepairStatus.set(site+slot,{file:job.desired.blueprint,at:Date.now(),message:e.message});
+    app.log.warn({station:key,err:e.message},'Baufolge wartet auf bestätigten Planwechsel');
+   }
   }
  }
  async function tick(){
@@ -682,7 +689,8 @@ export function registerEreborQueue(app,campus){
   const state=hasSite&&c?read(focus):null;
   const projectWaiting=c&&c.version===v?waiting:v?choices.waiting(v):[];
   const queue=v&&hasSite?stationQueue(p,focus,state,projectWaiting):null;
-  if(ordersOnly)return {...header,queue,waiting:waiting.filter(r=>r.site===focus),stations:state?[stationSummary({...state,site:focus},c,report)]:[]};
+  if(ordersOnly)return {...header,queue,waiting:waiting.filter(r=>r.site===focus),stations:state?[stationSummary({...state,site:focus},c,report)]:[],
+   surfaceRepair:Object.fromEntries([...surfaceRepairStatus].filter(([key])=>key.slice(0,3)===focus))};
   const {mains,helperJobs}=assignments(v);
   const counts=p?projectProgress(db,production,p,sites,[...(c?.version===v?mains:[]),...helperJobs]).counts:null;
   if(queue)queue.counts=counts.stations[focus];
