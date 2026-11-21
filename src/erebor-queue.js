@@ -689,8 +689,20 @@ export function registerEreborQueue(app,campus){
   const state=hasSite&&c?read(focus):null;
   const projectWaiting=c&&c.version===v?waiting:v?choices.waiting(v):[];
   const queue=v&&hasSite?stationQueue(p,focus,state,projectWaiting):null;
-  if(ordersOnly)return {...header,queue,waiting:waiting.filter(r=>r.site===focus),stations:state?[stationSummary({...state,site:focus},c,report)]:[],
-   surfaceRepair:Object.fromEntries([...surfaceRepairStatus].filter(([key])=>key.slice(0,3)===focus))};
+  if(ordersOnly){
+   const surfaceRepair=Object.fromEntries([...surfaceRepairStatus].filter(([key])=>key.slice(0,3)===focus));
+   for(const slot of slotsFor(focus)){
+    const job=slot==='A'?state?.job:helpers.jobAt(v,focus,slot);
+    if(!job?.surface)continue;
+    const key=focus+slot,signal=report?.stations?.[slot==='A'?focus:key];
+    if(!signal?.empty||signal.status!=='idle')continue;
+    const last=surfaceRepair[key];
+    surfaceRepair[key]={...(last?.file===job.desired.blueprint?last:{}),file:job.desired.blueprint,
+     loaded:job.loaded,phase:job.phase,replayed:!!job.replayedAfterRelease,ready:signal.ready,
+     eligible:releasedSurface(focus,slot,job,signal),receipt:!!signal.finish,owner:job.desired.owner};
+   }
+   return {...header,queue,waiting:waiting.filter(r=>r.site===focus),stations:state?[stationSummary({...state,site:focus},c,report)]:[],surfaceRepair};
+  }
   const {mains,helperJobs}=assignments(v);
   const counts=p?projectProgress(db,production,p,sites,[...(c?.version===v?mains:[]),...helperJobs]).counts:null;
   if(queue)queue.counts=counts.stations[focus];
