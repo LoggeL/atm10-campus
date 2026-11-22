@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {placeProtection,spawnBundles,torch} from '../src/erebor-spawn-plan.js';
+import {placeProtection,spawnBundles,torch,enclosedCore} from '../src/erebor-spawn-plan.js';
 import {loadModel} from '../src/structure-edit.js';
 
 test('coverage checks every corner, including upper floors, and reports inaccessible cells',()=>{
@@ -19,8 +19,13 @@ test('batch files reconstruct exactly the targets within range, with no air or d
  const result=spawnBundles(sites,[{id:'K01',position:[0,70,0]}]),rebuilt=[];
  for(const r of result.runs){
   const m=loadModel(result.files.get(r.file));assert.equal(r.count,m.cells.size);
-  for(const [k,c] of m.cells){assert.equal(c.name,torch);const point=k.split(',').map((v,i)=>Number(v)+r.origin[i]);
+  for(const [k,c] of m.cells){assert.equal(c.name,torch);assert.equal(c.props.waterlogged,'false');const point=k.split(',').map((v,i)=>Number(v)+r.origin[i]);
    assert.ok(Math.hypot(...point.map((n,i)=>n-r.cannon[i]))<255);rebuilt.push(point.join(','));}
  }
  assert.deepEqual(rebuilt.sort(),coords.map(p=>p.join(',')).sort());
+});
+test('finish-stage cores need opaque masonry on every side, including diagonal openings',()=>{
+ assert.equal(enclosedCore(()=>'minecraft:stone_bricks'),true);
+ for(const unsafe of [null,'minecraft:air','minecraft:stone_brick_slab','minecraft:chest','minecraft:glass'])
+  assert.equal(enclosedCore((x,y,z)=>x===1&&y===-1&&z===1?unsafe:'minecraft:stone_bricks'),false);
 });
