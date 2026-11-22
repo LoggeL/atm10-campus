@@ -51,6 +51,9 @@ export function openapi(baseUrl) {
       '/api/projects/erebor/planfolge/setzlingswechsel.pyz': {
         get:{summary:'Homebox-Sammelwechsel für laufende Laubpläne mit veröffentlichter Setzlingsfassung herunterladen. Lesezugriff. Der Download ändert die Welt erst bei Ausführung durch den Serverbetreiber.',responses:{200:{description:'Python-ZIP-Anwendung mit den bestätigten Kanonen. X-Erebor-Plans nennt ihre Anzahl.'},409:{description:'Keine passenden Altpläne oder keine aktuelle Baufolge.'}}}
       },
+      '/api/projects/erebor/planfolge/setzlingswechsel/pruefung/{slot}': {
+        get:{summary:'Liest die Zuordnung und prüft die veröffentlichte Setzlingsfassung gegen die gespeicherte Erebor-Welt, während der Altplan eingelegt ist.',parameters:[{name:'slot',in:'path',required:true,schema:{type:'string',example:'K01C'}}],responses:{...ok,409:{description:'Aktuelle Zuordnung fehlt oder hat gewechselt.'},429:{description:'Andere Weltprüfung läuft.'}}}
+      },
       '/api/projects/erebor/connecting-auftrag': {
         get:{summary:'Bestellstatus und AE2-Bestätigungen für die vier Erebor-Connecting-Blöcke.',responses:ok},
         post:{summary:'Einmalauftrag über die ME Bridge an K02 starten. Admin-Sitzung mit CSRF-Header erforderlich.',

@@ -780,14 +780,14 @@ export function registerEreborQueue(app,campus){
   });
   return reply.header('Cache-Control','private, no-store').send({at:report.at,materials});
  });
- app.get(base+'/setzlingswechsel.pyz',async(req,reply)=>{
-  requireActor(req,'read');
+ async function saplingCandidates(onlySlot){
   const p=project(),v=p?.current_version,report=await liveReport(v);
-  if(!report||!cfg()?.enabled||cfg().version!==v||report.ereborProjectWork!==1||report.surfaceModeTracker!==1)
+  if(!report||!config.worldSources.live||!cfg()?.enabled||cfg().version!==v||cfg().phase!=='stone'||report.ereborProjectWork!==1||report.surfaceModeTracker!==1)
    throw new HttpError(409,'Aktuelle Freigabe für die Erebor-Baufolge fehlt.');
   const saved=await savedMissingItems(report),rows=[];
   for(const {key,file,placed,status:reason,pos} of waitingPrinters(report)){
    const site=key.slice(0,3),slot=key.slice(3)||'A',signal=report.stations[key],missing=saved.get(key);
+   if(onlySlot&&site+slot!==onlySlot)continue;
    const job=slot==='A'?read(site).job:helpers.jobAt(v,site,slot);
    if(!job?.loaded||!oldTreeInput(site+slot,job)||choices.next(v,site)||job.selection||
       !(slot==='A'?production.mode(v,site).enabled:helpers.isEnabled(v))||
@@ -796,11 +796,40 @@ export function registerEreborQueue(app,campus){
       !same(signal.anchor,job.desired.anchor)||!same(signal.size,job.size)||signal.owner!=='Erebor')continue;
    const source=treeSource(p,site,slot,job);
    if(!source)continue;
-   const next=(job.surface?landscape.restore(v,source):published(p,site,source)).job;
+   const {job:next,bytes}=job.surface?landscape.restore(v,source):published(p,site,source);
    if(next.desired.options.replace_mode!==0||!same(next.desired.anchor,signal.anchor)||
       !same(next.size,signal.size)||Object.keys(next.materials).some(id=>id.endsWith('_leaves')))continue;
-   rows.push({slot:site+slot,pos,anchor:signal.anchor,old:file,name:job.desired.blueprint,sha:next.desired.sha256,leaf:missing.item,reason});
+   const entry={slot:site+slot,pos,anchor:signal.anchor,old:file,name:job.desired.blueprint,sha:next.desired.sha256,leaf:missing.item,reason};
+   rows.push({entry,bytes,upload:next.desired.file,minimumSave:Math.floor(job.seen||0)*1000,reserved:!!job.surface});
   }
+  return {at:report.at,rows};
+ }
+ let checkingSapling=false;
+ app.get(base+'/setzlingswechsel/pruefung/:slot',async(req,reply)=>{
+  requireActor(req,'read');
+  const {slot}=req.params;
+  if(!/^K(?:0[1-9]|[12]\d|3[0-7])[A-I]$/.test(slot))throw new HttpError(400,'Ungültiger Kanonenplatz.');
+  if(checkingSapling)throw new HttpError(429,'Eine Weltprüfung läuft bereits.');
+  checkingSapling=true;
+  try{
+   const candidate=(await saplingCandidates(slot)).rows[0];
+   if(!candidate)throw new HttpError(409,'Kein bestätigter Altplan mit passendem Ersatz für diese Kanone.');
+   const {entry,upload,bytes,minimumSave,reserved}=candidate;
+   const world=await new Promise((resolve,reject)=>{
+    // The production queue worker has its own request/response stream.
+    const w=new Worker(new URL('./erebor-sapling-check-worker.js',import.meta.url),{workerData:{world:config.worldSources.live,bytes,anchor:entry.anchor,minimumSave}});
+    const timeout=setTimeout(()=>{void w.terminate();reject(new HttpError(503,'Weltprüfung hat das Zeitlimit erreicht.'));},30000);
+    w.once('message',resolve);w.once('error',reject);w.once('exit',()=>{clearTimeout(timeout);reject(new HttpError(503,'Weltprüfung beendet.'));});
+   });
+   const fresh=await saplingCandidates(slot),latest=fresh.rows[0];
+   if(!latest||!same(latest.entry,entry)||latest.upload!==upload||latest.reserved!==reserved)throw new HttpError(409,'Belegung oder Revision hat sich während der Prüfung geändert.');
+   return reply.header('Cache-Control','private, no-store').send({at:fresh.at,checkedAt:Date.now(),slot,old:entry.old,sha:entry.sha,upload,anchor:entry.anchor,reserved,world});
+  }finally{checkingSapling=false;}
+ });
+ app.get(base+'/setzlingswechsel.pyz',async(req,reply)=>{
+  requireActor(req,'read');
+  const {rows:candidates}=await saplingCandidates();
+  const rows=candidates.map(c=>c.entry);
   if(!rows.length)throw new HttpError(409,'Keine bestätigten belegten Laubpläne mit passender neuer Fassung.');
   const file=(path)=>readFileSync(new URL(path,import.meta.url));
   const bytes=zipStore([{name:'__main__.py',data:file('./erebor-fleet/sapling-exchange.py')},
