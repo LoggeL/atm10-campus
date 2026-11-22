@@ -75,7 +75,8 @@ class K10Groves(unittest.TestCase):
             hashes = {}
             for key, (pos, file, sha) in extension.GROVES.items():
                 x, y, z = pos
-                name = f'EREBOR_E01_AUSBAU_BAU_K10_X{x}_Y{y}_Z{z}_R5'
+                station.return_value={'cannon':list(pos)}
+                name = f'EREBOR_E01_AUSBAU_BAU_{key[:3]}_X{x}_Y{y}_Z{z}_R5'
                 digest = bytearray(hashlib.sha256(f'{name}.nbt\n{sha}'.encode()).digest()[:16])
                 digest[6] = 128 | (digest[6] & 15)
                 digest[8] = 128 | (digest[8] & 63)
@@ -88,7 +89,7 @@ class K10Groves(unittest.TestCase):
                 handle = r['wrap'](Mock())
                 handle(bridge, 'erebor-start', op)
                 self.assertEqual(start.call_args.args[3], dict(replace_mode=0, skip_missing=False, replace_block_entities=False))
-                handle(bridge, 'erebor-start', dict(op, site='K10H'))
+                handle(bridge, 'erebor-start', dict(op, site=key[:3]+'H'))
                 self.assertEqual(start.call_args.args[3]['replace_mode'], 2)
                 self.assertFalse(extension.grove_input(key, list(pos), file, '0'*64))
                 self.assertFalse(extension.grove_input(key, [0, 0, 0], file, sha))
@@ -98,7 +99,7 @@ class K10Groves(unittest.TestCase):
             handle = t['wrap'](lambda *args: report)
             handle(bridge, 'erebor-live', {})
             records = json.loads((cfg / t['REGISTRY']).read_text())
-            self.assertEqual(set(records), {'K10G', 'K10I'})
+            self.assertEqual(set(records), {'K10G','K10I','K01','K04E','K31','K31B'})
             self.assertEqual(records['K10I']['file'], rows['K10I']['upload'])
 
 

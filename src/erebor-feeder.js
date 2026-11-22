@@ -6,6 +6,12 @@ import {setTimeout as delay} from 'node:timers/promises';
 import {createHash} from 'node:crypto';
 import {latestStock} from './me-stock.js';
 import {hasFeederPatch} from './feeder-version.js';
+import {oldTreeInput} from './erebor-landscape-work.js';
+
+function deliverBlock(job,key,block){
+ if(block.endsWith('_leaves'))return false;
+ return !/^minecraft:(?:oak|birch|spruce)_log$/.test(block)||!oldTreeInput(key,job);
+}
 
 export const isEreborStation=name=>!!groupOf(name)||/^erebor-K(?:0[1-9]|[12][0-9]|3[0-7])$/i.test(name);
 export const needsSolidReplacement=desired=>desired?.blueprint?.includes('_MASSIV_')&&!desired.blueprint.includes('_LUFT_')&&!desired.blueprint.includes('_URN_');
@@ -204,7 +210,7 @@ export function ereborFeeder(db,request,version,liveReport,savedMissingItems){
      const missingStone=isStationStone(job,site)&&native?.upload===r.file&&native.state==='PAUSED'&&
       ['missingItem','missingBlock'].includes(native.status);
      const materials=isStationStone(job,site)||job.phase==='stone'?{'minecraft:stone':Math.max(missingStone?64:0,job.blocks-r.placed)}:job.phase==='build'?job.materials:{};
-     for(const [block,n] of Object.entries(materials||{}))for(const [item,count] of itemsFor(block))
+     for(const [block,n] of Object.entries(materials||{}))if(deliverBlock(job,site+slot,block))for(const [item,count] of itemsFor(block))
       if(n>0&&!item.endsWith('_bucket'))amounts.set(item,(amounts.get(item)||0)+count*n);
     }
     const items=[...amounts].map(([item,needed])=>({item,needed,stack:stackSize(item)}));
@@ -267,7 +273,7 @@ export function ereborFeeder(db,request,version,liveReport,savedMissingItems){
     samples.set(site,o);
    }
    const amounts=new Map(),materials=j.phase==='stone'?{'minecraft:stone':j.blocks}:j.phase==='build'?j.materials:{};
-   for(const [block,n] of Object.entries(materials||{}))for(const [item,each] of itemsFor(block))if(!item.endsWith('_bucket')&&n>0)amounts.set(item,(amounts.get(item)||0)+each*n);
+   for(const [block,n] of Object.entries(materials||{}))if(deliverBlock(j,site+'A',block))for(const [item,each] of itemsFor(block))if(!item.endsWith('_bucket')&&n>0)amounts.set(item,(amounts.get(item)||0)+each*n);
    const items=[...amounts].map(([item,needed])=>({item,needed,stack:stackSize(item)})),total=items.reduce((s,i)=>s+i.needed,0);
    return {...base,state:base.options.paused?'paused':'feeding',alignment:{enabled:true,state:'aligned',leaseSeconds:10,probeAttempts:attempt,probeMode:confirmation?'compact':'full'},blueprint:{id:j.desired.blueprint,name:j.desired.blueprint,version,origin:j.desired.anchor,size:j.size},items,totals:{start:total,needed:total,kinds:items.length}};
   }catch(e){return held(e.message);}

@@ -1,5 +1,5 @@
 import {interiorColumns,interiorFrontier,interiorGroup,interiorRelease,inRange,insideMassif} from './erebor-interior.js';
-import {landscapeQueue,readySurface,releasedSurface} from './erebor-landscape-work.js';
+import {landscapeQueue,readySurface,releasedSurface,oldTreeInput} from './erebor-landscape-work.js';
 import {mountainTop} from './project-stone.js';
 import {groupOf,slotsFor} from './erebor-groups.js';
 import {cannonProgressRows} from './cannon-progress-rows.js';
@@ -503,6 +503,11 @@ export function registerEreborQueue(app,campus){
  // A full fleet rotation can outlast short excavations. Pick up their actual
  // native finishes between batches and offer the same empty cannon its next job.
  const roomChecks=new Map(),surfaceRepairStatus=new Map();
+ function treeSource(p,site,slot,job){
+  if(job.surface)return landscape.idleRevision(p.current_version,site,slot,job);
+  if(!oldTreeInput(site+slot,job))return null;
+  return production.catalog(p,site).find(e=>e.part==='E01_901'&&e.name===job.desired.blueprint&&e.sha256!==job.desired.sha256&&same(e.origin,job.desired.anchor));
+ }
  async function finishRooms(p,report){
   const v=p.current_version;
   if(!report?.stations||Date.now()-report.at>=15000||!current(v))return;
@@ -525,9 +530,17 @@ export function registerEreborQueue(app,campus){
      const note=message=>surfaceRepairStatus.set(site+slot,{file:job.desired.blueprint,at:Date.now(),message});
      const allowed=()=>active()&&cfg().enabled&&!choices.next(v,site)&&!job.selection;
      if(!allowed()||!config.worldSources.live||report.surfaceModeTracker!==1||report.ereborProjectWork!==1){note('Wartet auf Automatikfreigabe, Weltstand und Außenhaut-Controller');continue;}
-     const source=landscape.idleRevision(v,site,slot,job);
+     const ref=oldTreeInput(site+slot,job);
+     const grove=ref&&job.interior===true;
+     const getSource=()=>treeSource(p,site,slot,job);
+     const source=getSource();
      if(!source){note('Veröffentlichte Revision passt nicht zur offenen Reservierung');continue;}
-     const pkg=landscape.restore(v,source);
+     const pkg=grove?published(p,site,source):landscape.restore(v,source);
+     if(ref&&(pkg.job.desired.sha256!==source.sha256||pkg.job.desired.options.replace_mode!==0||
+        !same(pkg.job.size,job.size)||!same(pkg.job.desired.anchor,job.desired.anchor)||
+        Object.keys(pkg.job.materials).some(id=>id.endsWith('_leaves')))){
+      note('Setzlingsrevision passt nicht zum ursprünglichen Bauplatz');continue;
+     }
      const check={bytes:pkg.bytes,anchor:pkg.job.desired.anchor,kind:'surface'};
      const done=await generate(p,{interiorCheck:{...check,completed:true,minimumSave:Math.floor(job.seen||0)*1000}});
      if(!done){
@@ -536,10 +549,10 @@ export function registerEreborQueue(app,campus){
      }
      const {observed}=await request('erebor-inspect',{site:key,version:v});
      if(!emptyStopped(observed)||observed.status!=='idle'||!allowed()||!matches()||
-        !same(source,landscape.idleRevision(v,site,slot,job))){note('Wartet auf zurückgesetzten Drucker und unveränderte Reservierung');continue;}
-     const next={...pkg.job,next:job.next,replayedAfterRelease:true};
+        !same(source,getSource())){note('Wartet auf zurückgesetzten Drucker und unveränderte Reservierung');continue;}
+     const next={...pkg.job,...grove&&{interior:true,source},next:job.next,replayedAfterRelease:true};
      tx(db,()=>{
-      if(job.source.sha256!==source.sha256)landscape.releasePrevious(v,site,slot,job);
+      if(job.surface&&job.source.sha256!==source.sha256)landscape.releasePrevious(v,site,slot,job);
       if(slot!=='A'){
        if(done)helpers.complete(v,site,slot,next);
        else helpers.replaySurface(v,site,slot,next);
@@ -550,7 +563,7 @@ export function registerEreborQueue(app,campus){
       production.started(v,site,null);
       if(done){
        production.finish(v,site,next.desired.blueprint,new Date().toISOString());
-       landscape.finish(v,site,slot,next);
+       if(next.surface)landscape.finish(v,site,slot,next);
        state.cursor=job.next;state.completed++;state.job=null;
        state.status='Außenhaut vollständig im Weltstand bestätigt';
       }else{
@@ -766,6 +779,35 @@ export function registerEreborQueue(app,campus){
    return {cannon:key.length===3?key+'A':key,item:r?.file===file&&r.placed===placed&&r.status===status?r.item:null};
   });
   return reply.header('Cache-Control','private, no-store').send({at:report.at,materials});
+ });
+ app.get(base+'/setzlingswechsel.pyz',async(req,reply)=>{
+  requireActor(req,'read');
+  const p=project(),v=p?.current_version,report=await liveReport(v);
+  if(!report||!cfg()?.enabled||cfg().version!==v||report.ereborProjectWork!==1||report.surfaceModeTracker!==1)
+   throw new HttpError(409,'Aktuelle Freigabe für die Erebor-Baufolge fehlt.');
+  const saved=await savedMissingItems(report),rows=[];
+  for(const {key,file,placed,status:reason,pos} of waitingPrinters(report)){
+   const site=key.slice(0,3),slot=key.slice(3)||'A',signal=report.stations[key],missing=saved.get(key);
+   const job=slot==='A'?read(site).job:helpers.jobAt(v,site,slot);
+   if(!job?.loaded||!oldTreeInput(site+slot,job)||choices.next(v,site)||job.selection||
+      !(slot==='A'?production.mode(v,site).enabled:helpers.isEnabled(v))||
+      missing?.file!==file||missing.placed!==placed||missing.status!==reason||
+      !/^minecraft:(oak|birch|spruce)_leaves$/.test(missing.item)||file!==job.desired.file||
+      !same(signal.anchor,job.desired.anchor)||!same(signal.size,job.size)||signal.owner!=='Erebor')continue;
+   const source=treeSource(p,site,slot,job);
+   if(!source)continue;
+   const next=(job.surface?landscape.restore(v,source):published(p,site,source)).job;
+   if(next.desired.options.replace_mode!==0||!same(next.desired.anchor,signal.anchor)||
+      !same(next.size,signal.size)||Object.keys(next.materials).some(id=>id.endsWith('_leaves')))continue;
+   rows.push({slot:site+slot,pos,anchor:signal.anchor,old:file,name:job.desired.blueprint,sha:next.desired.sha256,leaf:missing.item,reason});
+  }
+  if(!rows.length)throw new HttpError(409,'Keine bestätigten belegten Laubpläne mit passender neuer Fassung.');
+  const file=(path)=>readFileSync(new URL(path,import.meta.url));
+  const bytes=zipStore([{name:'__main__.py',data:file('./erebor-fleet/sapling-exchange.py')},
+   {name:'campus_grove_setup.py',data:file('../public/assets/erebor-k10-hangmodus.py')},
+   {name:'revisions.json',data:Buffer.from(JSON.stringify(rows))}]);
+  return reply.header('Cache-Control','private, no-store').header('X-Erebor-Plans',String(rows.length))
+   .header('Content-Disposition','attachment; filename="erebor-setzlingswechsel.pyz"').type('application/octet-stream').send(bytes);
  });
  app.get('/api/projects/erebor/dashboard',(req,reply)=>buildingProgress(req,reply,true));
  app.get(base,async(req,reply)=>{requireActor(req,'read');const report=await liveReport(cfg()?.version);return reply.header('Cache-Control','private, no-store').send(status(report,req.query.site,req.query.view==='orders'));});

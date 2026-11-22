@@ -3,10 +3,19 @@ import {storedZipEntry} from './zip.js';
 import {ereborUploadName} from './erebor-file.js';
 import {inRange} from './erebor-interior.js';
 import {isDeepStrictEqual as same} from 'node:util';
+const groveSlots=new Set(['K10G','K10I','K01A','K04E','K31A','K31B']);
+export function oldTreeInput(key,job){
+ const d=job?.desired,s=job?.source;
+ if(!s||!d||d.version!==12||d.owner!=='Erebor'||job.phase!=='build'||d.rotation!=='none'||d.mirror!=='none'||
+    !same(job.size,[32,32,32])||!Object.keys(job.materials??{}).some(id=>id.endsWith('_leaves'))||
+    d.file!==ereborUploadName(d.blueprint+'.nbt',d.sha256)||s.sha256!==d.sha256)return false;
+ return job.surface===true&&s.fileName===d.blueprint+'.nbt'||
+  job.interior===true&&groveSlots.has(key)&&s.part==='E01_901'&&s.name===d.blueprint;
+}
 
 export function readySurface(job,report,key){
  const signal=report?.stations?.[key],d=job?.desired;
- const grove=(key==='K10G'||key==='K10I')&&job?.interior===true&&job.source?.part==='E01_901';
+ const grove=groveSlots.has(key)&&job?.interior===true&&job.source?.part==='E01_901';
  return report?.ereborProjectWork===1&&report.surfaceModeTracker===1&&(job?.surface===true||grove)&&
   job.phase==='build'&&!job.started&&!job.tainted&&!job.placed&&d?.owner==='Erebor'&&
   d.options?.replace_mode===0&&d.options.skip_missing===false&&d.options.replace_block_entities===false&&
@@ -23,8 +32,8 @@ const releasedSurfaceJobs=new Map([
  ['K36A','EREBOR_HAUT_R-1_-18_X-480_Y64_Z-9056'],
 ]);
 export function releasedSurface(site,slot,job,signal){
- return job?.surface===true&&job.loaded===true&&!job.replayedAfterRelease&&job.phase==='build'&&
-  job.desired?.blueprint===releasedSurfaceJobs.get(site+slot)&&job.desired?.owner==='Erebor'&&
+ return job?.loaded===true&&!job.replayedAfterRelease&&job.phase==='build'&&
+  ((job.surface===true&&job.desired?.blueprint===releasedSurfaceJobs.get(site+slot))||!!oldTreeInput(site+slot,job))&&job.desired?.owner==='Erebor'&&
   signal?.ready===true&&signal.state==='STOPPED'&&signal.status==='idle'&&signal.empty===true&&signal.upload===''&&!signal.finish;
 }
 export function initLandscapeWork(db){
@@ -112,11 +121,12 @@ export function landscapeQueue(db){
  }
  function idleRevision(v,site,slot,job){
   const s=job.source,d=job.desired;
-  if(!s||d.version!==v||releasedSurfaceJobs.get(site+slot)!==d.blueprint||d.blueprint+'.nbt'!==s.fileName||
+  const ref=oldTreeInput(site+slot,job);
+  if(!s||d.version!==v||(releasedSurfaceJobs.get(site+slot)!==d.blueprint&&!ref)||d.blueprint+'.nbt'!==s.fileName||
      d.sha256!==s.sha256||d.file!==ereborUploadName(s.fileName,s.sha256)||revision(v)!==s.r)return null;
   const row=db.prepare('SELECT report FROM erebor_surface_parts WHERE v=? AND r=? AND id=?').get(v,s.r,s.part);
   const file=row&&JSON.parse(row.report).files.find(f=>f.fileName===s.fileName&&same(f.origin,d.anchor));
-  if(!file||!same(job.size,[32,32,32]))return null;
+  if(!file||!same(job.size,[32,32,32])||(ref&&(file.sha256===s.sha256||Object.keys(file.materials).some(id=>id.endsWith('_leaves')))))return null;
   const owns=db.prepare('SELECT 1 FROM erebor_surface_dispatch WHERE v=? AND r=? AND file=? AND sha=? AND site=? AND slot=? AND done=0');
   const reserved=sha=>owns.get(v,s.r,s.fileName,sha,site,slot);
   if(!reserved(s.sha256)||!reserved(file.sha256))return null;

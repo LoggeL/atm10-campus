@@ -5,7 +5,20 @@ import {Region} from '../src/region.js';
 import {buildSurfacePart,summitHeight} from '../src/erebor-surface.js';
 import {loadModel} from '../src/structure-edit.js';
 import {storedZipEntry} from '../src/zip.js';
-import {readySurface} from '../src/erebor-landscape-work.js';
+import {readySurface,oldTreeInput,releasedSurface} from '../src/erebor-landscape-work.js';
+import {ereborUploadName} from '../src/erebor-file.js';
+test('only the original surveyed leaf revision is adopted after the physical input is released',()=>{
+ const blueprint='EREBOR_HAUT_R0_0_X32_Y64_Z96',sha256='a'.repeat(64),fileName=blueprint+'.nbt';
+ const desired={owner:'Erebor',version:12,blueprint,sha256,file:ereborUploadName(fileName,sha256),rotation:'none',mirror:'none'};
+ const job={surface:true,loaded:true,phase:'build',size:[32,32,32],source:{fileName,sha256},materials:{'minecraft:oak_leaves':7},desired};
+ const idle={ready:true,state:'STOPPED',status:'idle',empty:true,upload:'',finish:null};
+ assert.ok(oldTreeInput('K01C',job));
+ assert.ok(releasedSurface('K01','C',job,idle));
+ assert.ok(!releasedSurface('K01','C',job,{...idle,upload:'other'}));
+ assert.ok(!releasedSurface('K01','C',{...job,materials:{'minecraft:oak_sapling':1}},idle));
+ assert.ok(!oldTreeInput('K01C',{...job,desired:{...desired,file:'other'}}));
+ assert.ok(!oldTreeInput('K01C',{...job,source:{fileName,sha256:'b'.repeat(64)}}));
+});
 test('only an untouched, matching and fueled additive plan qualifies for priority inspection',()=>{
  const desired={file:'campus_test.nbt',owner:'Erebor',anchor:[32,64,96],options:{replace_mode:0,skip_missing:false,replace_block_entities:false}};
  const job={phase:'build',surface:true,desired,size:[32,32,32],loaded:false};
