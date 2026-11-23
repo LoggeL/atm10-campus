@@ -7,6 +7,11 @@ export function validatePlacementDraft(plan) {
  check(plan?.schemaVersion===1,'schemaVersion');
  check(text(plan.planId)&&text(plan.revision)&&date(plan.generatedAt)&&text(plan.source),'Planherkunft');
  check(Array.isArray(plan.stations)&&plan.stations.length>0,'Stationen fehlen');
+ if(plan.planning!==undefined){
+  check(plan.planning.status==='conditional-not-build-ready','Planungsstatus');
+  check(Array.isArray(plan.planning.notes)&&plan.planning.notes.every(text),'Planungshinweise');
+  for(const s of plan.stations)check(s.readiness==='conditional-not-build-ready'&&Array.isArray(s.blockers)&&s.blockers.length>0&&s.blockers.every(text),'Freigabesperren');
+ }
  const ids=new Set();
  for(const station of plan.stations){
   check(text(station.id)&&!ids.has(station.id),'doppelte/fehlende Stations-ID');ids.add(station.id);

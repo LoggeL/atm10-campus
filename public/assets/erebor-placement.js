@@ -13,6 +13,10 @@ function stationCard(station){
  const card=element('details',undefined,'station panel');
  card.dataset.search=`${station.id} ${station.label}`.toLocaleLowerCase('de');
  card.append(element('summary',`${station.id} · ${station.label}`));
+ if(station.readiness==='conditional-not-build-ready'){
+  card.append(element('p','GESPERRTER PLANUNGSENTWURF · NICHT BAUFREIGEGEBEN','observation'));
+  const blockers=element('ul');for(const reason of station.blockers)blockers.append(element('li',reason));card.append(blockers);
+ }
  card.append(element('p',`Dimension: ${station.dimension}`));
  const coordinates=element('dl',undefined,'placement-coordinates');
  const row=(label,value)=>coordinates.append(element('dt',label),element('dd',value));
@@ -26,7 +30,7 @@ function stationCard(station){
   for(const [flag,label] of stages){
    const key=JSON.stringify([station.id,slot,flag]);
    const wrapper=element('label');const input=element('input');input.type='checkbox';
-   input.setAttribute('aria-label',`${slot} · ${label}`);input.checked=notes[key]===true;input.disabled=!station.cannons[slot];
+   input.setAttribute('aria-label',`${slot} · ${label}`);input.checked=notes[key]===true;input.disabled=!station.cannons[slot]||station.readiness==='conditional-not-build-ready';
    input.addEventListener('change',()=>{notes[key]=input.checked;save();});
    wrapper.append(input,document.createTextNode(label));section.append(wrapper);
   }
@@ -54,6 +58,11 @@ async function load(){
   try{const stored=JSON.parse(localStorage.getItem(storageKey)||'{}');notes=stored&&typeof stored==='object'&&!Array.isArray(stored)?stored:{};}
   catch{$('storage-status').textContent='Lokale Notizen konnten nicht gelesen werden; neue Häkchen sind noch ungespeichert.';}
   $('plan-status').textContent=`${plan.stations.length} Stationen · Revision ${plan.revision} · ${plan.generatedAt} · Quelle: ${plan.source}`;
+  if(plan.planning){
+   $('plan-status').textContent='GESPERRTER PLANUNGSENTWURF · NICHT BAUFREIGEGEBEN · '+$('plan-status').textContent;
+   const scope=element('section',undefined,'panel');scope.append(element('h2','Geltungsbereich · Wiederverwendung zuerst'));
+   for(const note of plan.planning.notes)scope.append(element('p',note));$('placement-stations').before(scope);
+  }
   $('placement-stations').replaceChildren(...plan.stations.map(stationCard));
   $('search').addEventListener('input',()=>{const query=$('search').value.trim().toLocaleLowerCase('de');for(const card of $('placement-stations').children)card.hidden=!card.dataset.search.includes(query);});
  }catch(error){$('plan-status').textContent='Kein nutzbarer Plan geladen.';$('plan-error').hidden=false;$('plan-error').textContent=error.message;$('search').disabled=true;}
