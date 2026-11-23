@@ -2,6 +2,8 @@
 import { now } from './db.js';
 import { HttpError } from './auth.js';
 
+export const CANNON_ME_RESERVE = 500;
+
 const ITEM_ID = /^[a-z0-9_.-]+:[a-z0-9_./-]+$/;
 const KEEP = 50;
 const MAX = Number.MAX_SAFE_INTEGER;

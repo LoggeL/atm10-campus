@@ -27,8 +27,9 @@ const config = {
 };
 const app = await buildServer(config);
 let cookie = '';
-const req = async (method, url, { body, token } = {}) => {
+const req = async (method, url, { body, token, feeder = '1.4.17' } = {}) => {
   const h = {};
+  if (token && url.endsWith('/plan') && feeder) h['x-campus-feeder'] = feeder;
   if (token) h.authorization = 'Bearer ' + token;
   else if (cookie) { h.cookie = cookie; h['x-campus-csrf'] = '1'; }
   const r = await app.inject({ method, url, payload: body && JSON.stringify(body), headers: body ? { ...h, 'content-type': 'application/json' } : h });
@@ -219,6 +220,14 @@ test('agent edits, readable views and viewer data', async t => {
     assert.ok(job1 > p0.assignment, 'assigning starts a new job');
     const p1 = (await req('GET', '/api/cannons/nord-1/plan', { token: st })).json;
     assert.equal(p1.state, 'feeding');
+    assert.equal(p1.options.meReserve, 500);
+    for (const feeder of [null, '1.4.16']) {
+      const old = (await req('GET', '/api/cannons/nord-1/plan', {token:st, feeder})).json;
+      assert.equal(old.options.paused, true);
+      assert.equal(old.options.gunpowder, 0);
+      assert.deepEqual(old.items, []);
+      assert.equal(old.script, p1.script);
+    }
     assert.equal(p1.blueprint.id, '40_Mat');
     assert.deepEqual(Object.fromEntries(p1.items.map(i => [i.item, i.needed])), { 'minecraft:oak_door': 1, 'minecraft:torch': 1, 'minecraft:stone_slab': 2 });
     assert.ok(p1.items.every(i => i.minY === 0 && i.stack === 64));

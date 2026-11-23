@@ -3,7 +3,7 @@
 -- through an Advanced Peripherals ME Bridge. Which blueprint and the options are set in the web app (tab "Kanonen");
 -- this computer only knows URL, a station token and its cannon name (install: wget run <url>/cc/install.lua).
 -- Strings shown on screen use Latin-1 escapes (\228 = ae-umlaut ...), the CC font is ISO-8859-1.
-local VERSION = "1.4.16"
+local VERSION = "1.4.17"
 
 settings.define("campus.url", { description = "Campus-URL", type = "string" })
 settings.define("campus.token", { description = "API-Token mit Scope Station", type = "string" })
@@ -68,7 +68,7 @@ local function moved(r)
 end
 
 local function request(method, path, body)
-  local headers = { ["Authorization"] = "Bearer " .. TOKEN, ["Accept"] = "application/json" }
+  local headers = { ["Authorization"] = "Bearer " .. TOKEN, ["Accept"] = "application/json", ["X-Campus-Feeder"] = VERSION }
   local h, err, fail
   if method == "GET" then
     h, err, fail = http.get(URL .. path, headers)
@@ -177,17 +177,17 @@ local function chestContents()
   return counts, used, chest.size()
 end
 
--- Move items between ME and chest. which: "export" | "import". Returns moved count and an error code.
-local function transfer(which, item, count)
+-- Return chest leftovers to ME through the installed bridge API.
+local function import(item, count)
   local filter = { name = item, count = count }
   local dir = settings.get("campus.direction")
   local useDir = dir and dir ~= ""
   if api == "legacy" then
-    local fn = useDir and bridge[which .. "Item"] or bridge[which == "export" and "exportItemToPeripheral" or "importItemFromPeripheral"]
+    local fn = useDir and bridge.importItem or bridge.importItemFromPeripheral
     local r, e = call(fn, filter, useDir and dir or chestName)
     return moved(r), e
   end
-  local fn = bridge[which .. "Item"]
+  local fn = bridge.importItem
   if api ~= "0.7" then
     local ok, r, e = pcall(fn, useDir and ("@" .. dir) or chestName, filter)
     if ok then api = "0.8"; return moved(r), e end
@@ -198,11 +198,18 @@ local function transfer(which, item, count)
   api = nil
   return 0, tostring(r)
 end
+local stockGuard
 local function export(item, count)
   if not alignmentReady(plan, planReceivedAt, now()) then return 0, "Ausrichtung nicht live bestaetigt" end
-  return transfer("export", item, count)
+  local reserve = plan.options.meReserve
+  if not stockGuard or type(reserve) ~= "number" or reserve < 1 then return 0, "ME-Reserveschutz nicht bereit" end
+  local deadline = plan.alignment and plan.alignment.enabled and (planReceivedAt + plan.alignment.leaseSeconds) or (now() + 10)
+  local dir = settings.get("campus.direction")
+  local to = dir and dir ~= "" and ("@" .. dir) or chestName
+  local ok, n, err, stock = pcall(stockGuard.exportSurplus, bridgeName, to, item, count, reserve, deadline * 1000)
+  if not ok or type(n) ~= "number" then return 0, tostring(err or n or "ME-Entnahme unbestaetigt") end
+  return n, err, stock
 end
-local function import(item, count) return transfer("import", item, count) end
 
 local function meAmount(item)
   local it = call(bridge.getItem, { name = item })
@@ -286,10 +293,14 @@ local function projectOrder(it, s)
 end
 
 local stoneOrderAt = -1e9
-local function shortage(it, missing, have, err)
-  local inME = meAmount(it.item)
+local function shortage(it, missing, have, err, stock)
+  local inME = err == "ME_RESERVE" and stock or meAmount(it.item)
   local s = { item = it.item, missing = missing, inME = inME, craftable = false, crafting = false }
-  if inME >= missing and err then s.error = errText(err) end
+  if err == "ME_RESERVE" then
+    s.reserve, err = plan.options.meReserve, nil
+  elseif err then
+    s.error = errText(err)
+  end
   if inME < missing then
     s.craftable = isCraftable(it.item)
     if s.craftable then
@@ -366,10 +377,12 @@ local function feed()
   local gp = plan.options.gunpowder or 0
   local haveGp = counts[GUNPOWDER] or 0
   if gp > haveGp and (haveGp > 0 or free > 0) then
-    local n = export(GUNPOWDER, gp - haveGp)
+    local n, err, stock = export(GUNPOWDER, gp - haveGp)
     if haveGp == 0 and n > 0 then free = free - 1 end
-    if n < gp - haveGp and haveGp + n == 0 then
-      view.shortages[#view.shortages + 1] = { item = GUNPOWDER, missing = gp, inME = meAmount(GUNPOWDER), craftable = false, crafting = false }
+    if n < gp - haveGp and (haveGp + n == 0 or err) then
+      view.shortages[#view.shortages + 1] = { item = GUNPOWDER, missing = gp - haveGp - n,
+        inME = err == "ME_RESERVE" and stock or meAmount(GUNPOWDER), craftable = false, crafting = false,
+        reserve = err == "ME_RESERVE" and plan.options.meReserve or nil, error = err ~= "ME_RESERVE" and errText(err) or nil }
     end
   end
 
@@ -396,14 +409,14 @@ local function feed()
       local room = roomInSlots + free * it.stack
       if want > room then want = room; view.full = true end
       if want > 0 then
-        local n, err = export(it.item, want)
+        local n, err, stock = export(it.item, want)
         if it.item == "minecraft:stone" and plan.alignment and plan.alignment.probeMode == "shared" then
           -- Some bridges transfer only part of the requested stack batch.
           -- Each export rechecks the lease. Stop as soon as the bridge stalls.
           for attempt = 2, 8 do
             if n <= 0 or n >= want or err then break end
-            local extra, problem = export(it.item, want - n)
-            n, err = n + extra, problem
+            local extra, problem, remaining = export(it.item, want - n)
+            n, err, stock = n + extra, problem, remaining
             if extra == 0 then break end
           end
         end
@@ -412,7 +425,7 @@ local function feed()
           free = free - (math.ceil((have + n) / it.stack) - math.ceil(have / it.stack))
           dirty = true
         end
-        if n < want then shortage(it, want - n, have + n, err) end
+        if n < want then shortage(it, want - n, have + n, err, stock) end
       end
     elseif allowed <= 0 and have == 0 and it.needed > 0 then
       view.shortages[#view.shortages + 1] = { item = it.item, missing = it.needed, inME = meAmount(it.item), error = "Liefergrenze erreicht (zieht jemand Items aus der Kiste?)" }
@@ -504,6 +517,7 @@ local function reportStatus()
     assignment = plan and plan.assignment or 0, state = view.state, script = VERSION, api = api, computerId = os.getComputerID(),
     message = (view.state == "error" and view.error) or view.message or view.craftError,
     chest = view.chest, chestSide = chestName, delivered = state.delivered, shortages = view.shortages,
+    meReserve = stockGuard and plan and plan.options and plan.options.meReserve or nil,
     powderReserve = view.powderReserve, brickReserve = view.brickReserve, grassReserve = view.grassReserve,
     mossReserve = view.mossReserve, podzolReserve = view.podzolReserve, spruceReserve = view.spruceReserve,
   }, plan and plan.intervals and plan.intervals.status or 30)
@@ -559,6 +573,7 @@ local function draw(t)
     line(y, "Fehlt:", colors.orange); y = y + 1
     for _, s in ipairs(view.shortages) do
       local tag = s.crafting and " (craftet)" or (s.craftable and " (craftbar)" or "")
+      if s.reserve then tag = " Reserve " .. s.reserve .. tag end
       line(y, " " .. s.missing .. "x " .. s.item:gsub("^minecraft:", "") .. " ME:" .. s.inME .. tag, colors.lightGray); y = y + 1
       if s.error then line(y, "   " .. s.error, colors.red); y = y + 1 end
     end
@@ -701,6 +716,11 @@ end
 local function eventLoop()
   while true do
     local ev, a, b, c = os.pullEvent()
+    if ev == "campus_stock_guard" and type(a) == "table" and type(a.exportSurplus) == "function" then
+      local first = not stockGuard
+      stockGuard = a
+      if first then wake() end
+    end
     if ev == "char" and a == "q" then return end
     if ev == "char" and a == "r" then planAt, stockAt = -1e9, -1e9; wake() end
     if ev == "ae_crafting" then

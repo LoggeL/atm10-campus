@@ -4,7 +4,7 @@ import {verifyAlignment} from './alignment.js';
 import {itemsFor,stackSize} from './materials.js';
 import {setTimeout as delay} from 'node:timers/promises';
 import {createHash} from 'node:crypto';
-import {latestStock} from './me-stock.js';
+import {CANNON_ME_RESERVE,latestStock} from './me-stock.js';
 import {hasFeederPatch} from './feeder-version.js';
 import {oldTreeInput} from './erebor-landscape-work.js';
 
@@ -187,7 +187,7 @@ export function ereborFeeder(db,request,version,liveReport,savedMissingItems){
       for(const [slot,target] of Object.entries(targets)){
        const key=slot==='A'?site:site+slot,signal=live.stations[key],r=saved.get(key);
        if(r&&signal?.state==='PAUSED'&&r.file===target.file&&r.file===signal.upload&&r.placed===signal.placed&&
-          r.status===signal.status&&stock.items[r.item]?.[0]>0)deliverFirst.add(r.item);
+          r.status===signal.status&&stock.items[r.item]?.[0]>CANNON_ME_RESERVE)deliverFirst.add(r.item);
       }
      }
     }

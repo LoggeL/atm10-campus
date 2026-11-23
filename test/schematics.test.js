@@ -36,7 +36,7 @@ test('bound automatic Schematic preparation, immutable rest plan, settings, safe
   const reg = await app.inject({ method: 'POST', url: '/api/auth/register', payload: { code: 'schematic-bootstrap-test', username: 'admin', password: 'password-test-123' } });
   const cookie = reg.cookies[0].name + '=' + reg.cookies[0].value;
   const request = (method, url, payload, token) => app.inject({ method, url, payload,
-    headers: token ? { authorization: 'Bearer ' + token } : { cookie, 'x-campus-csrf': '1' } });
+    headers: token ? { authorization: 'Bearer ' + token, 'x-campus-feeder':'1.4.17' } : { cookie, 'x-campus-csrf': '1' } });
   const station = (await request('POST', '/api/tokens', { name: 'station', scope: 'station' })).json().token;
   const write = (await request('POST', '/api/tokens', { name: 'writer', scope: 'write' })).json().token;
   const source = structureNbt([2, 1, 1], [{ pos: [0, 0, 0], name: 'minecraft:stone' }]);

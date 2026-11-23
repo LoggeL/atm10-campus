@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { requireActor, HttpError } from './auth.js';
 import { now, logActivity, tx } from './db.js';
-import { normalizeStockItems, saveStock, latestStock } from './me-stock.js';
+import { CANNON_ME_RESERVE, normalizeStockItems, saveStock, latestStock } from './me-stock.js';
 import { cannonRange, cannonTarget, reachableCannons } from './cannon-range.js';
 import { createCannonBlueprints } from './cannon-blueprints.js';
 import { isEreborStation } from './erebor-feeder.js';
@@ -21,7 +21,7 @@ const NAME = /^[A-Za-z0-9_-]{1,40}$/;
 const ONLINE_MS = 3 * 60e3;
 export const INTERVALS = { plan: 60, status: 30, stock: 300 };
 
-export const DEFAULT_OPTIONS = { paused: false, bufferStacks: 2, gunpowder: 16, autoCraft: false, craftBatch: 256, returnLeftovers: true, skipBlocked: true };
+export const DEFAULT_OPTIONS = { paused: false, bufferStacks: 2, gunpowder: 16, autoCraft: false, craftBatch: 256, returnLeftovers: true, skipBlocked: true, meReserve: CANNON_ME_RESERVE };
 const LIMITS = { bufferStacks: [1, 64], gunpowder: [0, 64], craftBatch: [1, 4096] };
 
 export function normalizeOptions(input, base = DEFAULT_OPTIONS) {
@@ -45,15 +45,6 @@ const cannonItems = items => items.filter(i => !/_bucket$/.test(i.item));
 const nextAssignment = prev => Math.max((prev || 0) + 1, Math.floor(Date.now() / 1000));
 
 const currentVersion = /local VERSION = "([^"]+)"/.exec(stationSource())?.[1] ?? '0';
-// Only Erebor stations need shared-chest balancing. Other established
-// stations keep their installed compatible release.
-const scriptVersion = row => {
-  const installed = JSON.parse(row.status_json || '{}').script;
-  // Surface reserves run on the central computer only.
-  if(currentVersion==='1.4.16'&&row.name!=='erebor-K02'&&hasFeederPatch(installed,13))return installed;
-  return !isEreborStation(row.name) && /^1\.4\.(?:[3-9]|10)$/.test(installed)
-    ? installed : currentVersion;
-};
 const clip = (v, n) => (v == null ? null : String(v).slice(0, n));
 const int = v => Math.max(0, Math.floor(Number(v) || 0));
 const asList = v => (Array.isArray(v) ? v : v && typeof v === 'object' ? Object.values(v) : []);
@@ -70,6 +61,7 @@ export function normalizeStatus(b = {}) {
     chestSide: typeof b.chestSide === 'string' && b.chestSide.trim() ? b.chestSide.trim().slice(0,60) : null,
     chest: b.chest && typeof b.chest === 'object' ? { slots: int(b.chest.slots), used: int(b.chest.used), name: clip(b.chest.name, 60) } : null,
     delivered,
+    ...(Number.isSafeInteger(b.meReserve) && b.meReserve > 0 ? {meReserve:b.meReserve} : {}),
     ...(b.powderReserve && typeof b.powderReserve==='object' ? {powderReserve:reserveStatus(b.powderReserve)} : {}),
     ...(b.brickReserve && typeof b.brickReserve==='object' ? {brickReserve:reserveStatus(b.brickReserve)} : {}),
     ...(b.grassReserve && typeof b.grassReserve==='object' ? {grassReserve:reserveStatus(b.grassReserve)} : {}),
@@ -78,6 +70,7 @@ export function normalizeStatus(b = {}) {
     ...(b.spruceReserve && typeof b.spruceReserve==='object' ? {spruceReserve:reserveStatus(b.spruceReserve)} : {}),
     shortages: asList(b.shortages).slice(0, 100).filter(s => s && typeof s === 'object').map(s => ({
       item: clip(s.item, 120), missing: int(s.missing), inME: int(s.inME), craftable: !!s.craftable, crafting: !!s.crafting, error: clip(s.error, 200),
+      ...(s.reserve > 0 ? {reserve:int(s.reserve)} : {}),
     })),
   };
 }
@@ -135,7 +128,7 @@ export function registerStationRoutes(app, campus, mat, alignment, schematics) {
     const range = rangeFor(row);
     const options = normalizeOptions(JSON.parse(row.options_json || '{}'));
     const base = {
-      cannon: row.name, assignment: row.assignment, options, schematic, range, script: scriptVersion(row), intervals: INTERVALS,
+      cannon: row.name, assignment: row.assignment, options, schematic, range, script: currentVersion, intervals: INTERVALS,
       snapshot: snap ? { id: snap.id, capturedAt: snap.capturedAt, worldTime: snap.worldTime } : null,
     };
     const idle = (state, message) => ({ ...base, state, message, blueprint: null, items: [], totals: { needed: 0, kinds: 0, start: 0 }, done: false });
@@ -408,9 +401,18 @@ export function registerStationRoutes(app, campus, mat, alignment, schematics) {
     const actor = requireActor(req, 'station');
     const row = ensureRow(req.params.name);
     seen(row.name);
+    // Old computers fetch this endpoint before updating. Keep their current
+    // assignment ledger and prevent transfers even when auto-update is disabled.
+    if (actor.via === 'token' && !hasFeederPatch(req.headers['x-campus-feeder'], 17)) {
+      const reported = JSON.parse(row.status_json || '{}');
+      return {cannon:row.name, assignment:reported.assignment ?? row.assignment, script:currentVersion,
+        state:'paused', message:'Versorger-Update für die ME-Reserve erforderlich.', blueprint:null,
+        options:{...DEFAULT_OPTIONS, paused:true, returnLeftovers:false, gunpowder:0}, items:[],
+        totals:{start:0,needed:0,kinds:0}, done:false, intervals:{...INTERVALS, plan:5}};
+    }
     if (isEreborStation(row.name)) {
       const options=normalizeOptions(JSON.parse(row.options_json || '{}'));
-      const plan = await campus.ereborFeeder(row,{options,script:scriptVersion(row),intervals:INTERVALS});
+      const plan = await campus.ereborFeeder(row,{options,script:currentVersion,intervals:INTERVALS});
       const reported=JSON.parse(row.status_json || '{}');
       // Erebor's shared AE2 reserve belongs to K02's installed main computer.
       // A transient printer lease gates chest transfers, not crafting into ME storage.
