@@ -114,7 +114,9 @@ export function registerEreborQueue(app,campus){
    const outdoors=!insideMassif(plan,e.origin,e.size);
    if(outdoors){
     if(slot!=='A'&&!projectWork&&!interiorGroup(e.group))continue;
-    if(plan.mountainFill.protectedBoxes.some(({bounds:[lo,hi]})=>lo.every((n,i)=>e.origin[i]+e.size[i]>n&&e.origin[i]<hi[i])))continue;
+    // Published architecture intentionally includes the bridge/Esgaroth in P-SEE.
+    // Keep every other protection and the exact outdoor world check below.
+    if(plan.mountainFill.protectedBoxes.some(({id,bounds:[lo,hi]})=>id!=='P-SEE'&&lo.every((n,i)=>e.origin[i]+e.size[i]>n&&e.origin[i]<hi[i])))continue;
    }
    const cols=interiorColumns(e.origin,e.size,base).filter(([ix,iz])=>{
     if(!outdoors)return true;
