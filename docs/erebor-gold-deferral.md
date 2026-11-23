@@ -106,6 +106,54 @@ remaining activation blocker is the connected guarded native switch/adoption and
 world-proof lifecycle in requirements 2–6 below, including actual queue dependency
 locks. Do not interpret a stored intent or a local passing test as live activation.
 
+## Offline queue-adoption tranche (2026-11-23)
+
+`src/erebor-gold-queue.js` now exercises real main/helper assignment tables in
+isolated SQLite fixtures, beyond the opaque journal:
+
+- Rebuild the partition from retained original NBT and compare both exact emitted
+  files plus the complete manifest. This rejects target/property/count/hash or
+  identity drift instead of trusting declared totals.
+- Require per-target injected world and protection/range checks. Unknown world
+  cells, conflicting targets and technical entities fail closed. New placement
+  is deliberately limited to property-free stone: attachments, gravity,
+  multiblocks and every other unreviewed material remain blocked. All six actual
+  neighbours must be known, with no deferred-gold position, gold or block entity.
+  Existing exact matching targets need no new placement. This conservative gate
+  is NOT general architecture support validation.
+- `reserve` atomically validates the exact existing assignment, claims the journal
+  revision and persists an immutable retained column lock before native work.
+- `adopt` revalidates the original assignment/archive/world checks and requires
+  exact supplied continuation upload/hash/anchor/options readback; its assignment
+  write and adoption marker commit together. Original job/archive and dependency
+  lock remain retained. It neither increments completion nor writes receipts.
+- `interiorFrontier` accepts explicit dependency locks as a fourth parameter, so
+  an omitted original cannot release same-column construction at/above its level.
+  Existing three-argument runtime behavior is unchanged.
+
+**Still offline-only:** the production queue does not construct this adapter or
+pass these locks. Native evidence and world/protection/range readers are injected
+fixture boundaries, not authenticated live proof. No native suspend/switch,
+project-version freshness, native pause/flight/progress guard, lease/supply
+integration, partition closeout or full-original reconciliation is implemented.
+Do not call this constructor against production or adopt a running assignment.
+No runtime activation, controller installation or production mutation occurred.
+
+The requested eventual rollout scope is the **whole eligible gold-blocked fleet
+in one batch**, not a single-cannon pilot. Preserve every per-target guard and
+existing queue/closeout/dependency protection; this offline tranche must not be
+activated merely to meet that scope. Gold resume remains explicit-user-only.
+
+Verification: focused partition/ledger/adoption/interior regressions **13/13 pass**.
+Complete serial discovery: **272 tests, 269 pass, 3 fail**. All three reproduce
+on unchanged `5c4ec8a` using identical dependencies: existing asset generations,
+existing fallback UI `filter` error, and missing optional `playwright` dependency.
+Logs: `erebor-gold-deferral-evidence/queue-tranche-serial.log` and
+`queue-tranche-baseline.log` beside the repository. Fixtures exercise rollback
+between assignment and marker writes, independent connections, disk reopen,
+wrong native input, replay denial, original retention and unrelated-state safety.
+These are transaction/crash-boundary simulations, not process-kill/native tests.
+
 ## Required safe activation and later user-triggered resume
 
 The next implementation must exercise the complete path in fixtures before a

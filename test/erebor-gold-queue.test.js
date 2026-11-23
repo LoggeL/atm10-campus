@@ -1,0 +1,84 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {tileNBT,TILE} from '../src/erebor-tiles.js';
+import {prepareGoldDeferral} from '../src/erebor-gold-deferral.js';
+import {ereborUploadName} from '../src/erebor-file.js';
+import {storedZipEntry,zipStore} from '../src/zip.js';
+import {createHash} from 'node:crypto';
+const sha=b=>createHash('sha256').update(b).digest('hex');
+export function fixture(){
+ const cells=new Uint16Array(TILE**3);cells[0]=1;cells[10]=2;
+ const bytes=tileNBT([{name:'minecraft:structure_void'},{name:'minecraft:stone'},{name:'minecraft:gold_block'}],cells).bytes;
+ const name='EREBOR_E05_TEST',hash=sha(bytes);
+ const job={phase:'build',interior:true,loaded:true,size:[32,32,32],blocks:2,desired:{blueprint:name,file:ereborUploadName(name+'.nbt',hash),sha256:hash,anchor:[0,64,0],options:{replace_mode:0,skip_missing:false,replace_block_entities:false}},source:{name,sha256:hash,stage:'build',origin:[0,64,0],size:[32,32,32]}};
+ return {job,archive:prepareGoldDeferral({bytes,job,version:12,site:'K01',slot:'A'}).zip};
+}
+const world=()=>({name:'minecraft:air',properties:{}});
+import {mkdtempSync,rmSync} from 'node:fs';
+import {tmpdir} from 'node:os';
+import {join} from 'node:path';
+import {DatabaseSync} from 'node:sqlite';
+import {goldLedger} from '../src/erebor-gold-ledger.js';
+import {interiorFrontier} from '../src/erebor-interior.js';
+test('atomic helper adoption preserves original lock and rolls back crashes',async()=>{
+ const {goldQueue}=await import('../src/erebor-gold-queue.js');
+ const db=new DatabaseSync(':memory:');
+ db.exec('CREATE TABLE erebor_helpers(version INTEGER,site TEXT,slot TEXT,name TEXT,job TEXT,completed INTEGER,message TEXT,PRIMARY KEY(version,site,slot))');
+ const f=fixture(),ledger=goldLedger(db),r=ledger.prepare({version:12,site:'K01',slot:'B',originalJob:f.job,archive:prepareGoldDeferral({bytes:(await import('../src/zip.js')).storedZipEntry(f.archive,'original.nbt'),job:f.job,version:12,site:'K01',slot:'B'}).zip});
+ db.prepare('INSERT INTO erebor_helpers VALUES(12,?,?,?, ?,0,NULL)').run('K01','B',f.job.source.name,JSON.stringify(f.job));
+ const queue=goldQueue(db);
+ const input={id:r.id,revision:0,readWorld:world,allowed:()=>true};
+ queue.reserve(input);
+ assert.equal(queue.locks(12).length,1);
+ const upper={name:'upper',group:'E05',stage:'build',origin:[0,96,0],size:[32,32,32]};
+ assert.deepEqual(interiorFrontier([upper],new Set(),false,queue.locks(12)),[]);
+ const native={file:queue.pending(r.id).continuation.upload,sha256:queue.pending(r.id).continuation.sha256,anchor:f.job.desired.anchor,options:f.job.desired.options};
+ assert.throws(()=>queue.adopt({...input,revision:1,native,afterWrite:()=>{throw Error('crash');}}),/crash/);
+ assert.deepEqual(JSON.parse(db.prepare('SELECT job FROM erebor_helpers').get().job),f.job);
+ assert.equal(queue.pending(r.id).state,'reserved');
+ queue.adopt({...input,revision:1,native});
+ const adopted=JSON.parse(db.prepare('SELECT job FROM erebor_helpers').get().job);
+ assert.equal(adopted.desired.file,native.file);assert.equal(adopted.goldDeferral,r.id);
+ assert.equal(queue.locks(12).length,1);
+ assert.throws(()=>queue.adopt({...input,revision:1,native}),/stale/);
+ assert.deepEqual(ledger.get(r.id).originalJob,f.job);
+ db.close();
+});
+test('disk reopen and independent main-slot adopters retain dependency and unrelated state',async()=>{
+ const {goldQueue}=await import('../src/erebor-gold-queue.js');
+ const dir=mkdtempSync(join(tmpdir(),'gold-adoption-'));let db,second;
+ try{
+  const path=join(dir,'queue.sqlite');db=new DatabaseSync(path);
+  db.exec('CREATE TABLE erebor_queue_sites(site TEXT PRIMARY KEY,state TEXT,payload BLOB)');
+  const f=fixture(),state={job:f.job,cursor:7,completed:9};
+  db.prepare('INSERT INTO erebor_queue_sites VALUES(?,?,NULL)').run('K01',JSON.stringify(state));
+  db.prepare('INSERT INTO erebor_queue_sites VALUES(?,?,NULL)').run('K02','{"untouched":true}');
+  const r=goldLedger(db).prepare({version:12,site:'K01',slot:'A',originalJob:f.job,archive:f.archive});
+  const args={id:r.id,revision:0,readWorld:world,allowed:()=>true};
+  goldQueue(db).reserve(args);db.close();db=new DatabaseSync(path);second=new DatabaseSync(path);
+  const q=goldQueue(db),q2=goldQueue(second),p=q.pending(r.id);
+  assert.equal(p.state,'reserved');assert.equal(q.locks(12).length,1);
+  const native={file:p.continuation.upload,sha256:p.continuation.sha256,anchor:f.job.desired.anchor,options:f.job.desired.options};
+  assert.throws(()=>q.adopt({...args,revision:1,native:{...native,file:'foreign'}}),/readback/);
+  q.adopt({...args,revision:1,native});
+  assert.throws(()=>q2.adopt({...args,revision:1,native}),/stale/);
+  const s=JSON.parse(db.prepare("SELECT state FROM erebor_queue_sites WHERE site='K01'").get().state);
+  assert.equal(s.cursor,7);assert.equal(s.completed,9);
+  assert.equal(db.prepare("SELECT state FROM erebor_queue_sites WHERE site='K02'").get().state,'{"untouched":true}');
+  assert.equal(q2.pending(r.id).state,'adopted');assert.equal(q2.locks(12).length,1);
+  assert.throws(()=>db.exec('DELETE FROM erebor_gold_adoptions'),/retained/);
+ }finally{second?.close();db?.close();rmSync(dir,{recursive:true,force:true});}
+});
+test('exact archive validation and conservative world/support gate',async()=>{
+ const {validateGoldArchive}=await import('../src/erebor-gold-queue.js');
+ const f=fixture();
+ const p=validateGoldArchive(f.archive,{job:f.job,version:12,site:'K01',slot:'A',readWorld:world,allowed:()=>true});
+ assert.equal(p.continuation.blocks,1);
+ const corrupt=zipStore(['original.nbt','continuation.nbt','deferred-gold.nbt','gold-deferral.json'].map(name=>({name,data:storedZipEntry(f.archive,name==='continuation.nbt'?'deferred-gold.nbt':name)})));
+ assert.throws(()=>validateGoldArchive(corrupt,{job:f.job,version:12,site:'K01',slot:'A',readWorld:world,allowed:()=>true}),/partition/);
+ assert.throws(()=>validateGoldArchive(f.archive,{job:f.job,version:12,site:'K01',slot:'A',readWorld:pos=>pos[0]===1?{name:'minecraft:gold_block'}:world(),allowed:()=>true}),/dependency/);
+ assert.throws(()=>validateGoldArchive(f.archive,{job:f.job,version:12,site:'K01',slot:'A',readWorld:()=>({name:'minecraft:stone',blockEntity:true}),allowed:()=>true}),/technical/);
+ assert.throws(()=>validateGoldArchive(f.archive,{job:{...f.job,blocks:3},version:12,site:'K01',slot:'A',readWorld:world,allowed:()=>true}),/original/);
+ assert.throws(()=>validateGoldArchive(f.archive,{job:f.job,version:12,site:'K01',slot:'A',readWorld:()=>null,allowed:()=>true}),/Unknown/);
+ assert.throws(()=>validateGoldArchive(f.archive,{job:f.job,version:12,site:'K01',slot:'A',readWorld:world,allowed:()=>false}),/protection/);
+});

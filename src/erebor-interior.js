@@ -8,7 +8,11 @@ export const interiorGroup=id=>/^(?:E(?:0[5-9]|1[0-46-9]|21[AB]|3[0-9])|S[1-4])$
 // Each architecture file occupies one aligned 32³ tile. Excavations on other
 // levels can proceed independently. Build the structure from its lowest open
 // level, after every excavation in that tile has finished.
-export function interiorFrontier(open,taken,allArchitecture=false){
+export function interiorFrontier(open,taken,allArchitecture=false,dependencyLocks=[]){
+ // Explicit lock input is offline-only until guarded runtime lifecycle is wired.
+ // Retain predecessors even if a caller accidentally omits them from open.
+ open=[...open,...dependencyLocks.filter(e=>!open.some(o=>o.name===e.name))];
+ taken=new Set([...taken,...dependencyLocks.map(e=>e.name)]);
  const columns=new Map(),candidates=[];
  for(const entry of open){
   if(!(interiorGroup(entry.group)||allArchitecture&&['build','clear'].includes(entry.stage))||entry.origin?.length!==3||entry.size?.length!==3||
@@ -28,7 +32,7 @@ export function interiorFrontier(open,taken,allArchitecture=false){
    if(first)candidates.push(first);
   }
  }
- return candidates.sort((a,b)=>a.origin[1]-b.origin[1]);
+ return candidates.filter(e=>!dependencyLocks.some(lock=>e.stage==='build'&&e.origin[0]===lock.origin[0]&&e.origin[2]===lock.origin[2]&&e.origin[1]>=lock.origin[1])).sort((a,b)=>a.origin[1]-b.origin[1]);
 }
 export function interiorColumns(origin,size,base){
  const out=[];
