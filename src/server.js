@@ -1,3 +1,4 @@
+import { validatePlacementDraft } from '../public/assets/erebor-placement-model.js';
 import {campusPage} from './campus-page.js';
 import Fastify from 'fastify';
 import cookie from '@fastify/cookie';
@@ -71,6 +72,17 @@ export async function buildServer(config = defaultConfig) {
   workspacePage('/app','app.html','orders');
   workspacePage('/erebor/dashboard','erebor-dashboard.html','dashboard');
   workspacePage('/projects','projects.html','projects');
+  workspacePage('/erebor/aufstellung','erebor-placement.html','placement');
+  app.get('/api/projects/erebor/placement-draft', async (req, reply) => {
+    if (req.actor?.via !== 'session') throw new HttpError(401, 'Anmeldung erforderlich.');
+    reply.header('Cache-Control', 'no-store');
+    if (!config.placementDraftPath) throw new HttpError(503, 'Noch kein geprüfter Aufstellungsplan hinterlegt.');
+    try {
+      return validatePlacementDraft(JSON.parse(readFileSync(config.placementDraftPath, 'utf8')));
+    } catch {
+      throw new HttpError(503, 'Aufstellungsplan nicht verfügbar oder ungültig.');
+    }
+  });
   app.get('/erebor/bauzaehler',async(req,reply)=>reply.redirect(req.actor?.via==='session'?'/erebor/dashboard':'/login'));
   app.get('/docs', async (req, reply) => html(reply, campusPage(page('docs.html'),req.actor)));
   app.get('/viewer', async (req, reply) => (req.actor?.via === 'session' ? html(reply, page('viewer/index.html')) : reply.redirect('/login')));

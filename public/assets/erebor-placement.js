@@ -1,0 +1,61 @@
+import {validatePlacementDraft} from './erebor-placement-model.js?v=20261121-aushub&revision=placement-1';
+
+const $=id=>document.getElementById(id);
+const element=(tag,text,className)=>{const node=document.createElement(tag);if(text!==undefined)node.textContent=text;if(className)node.className=className;return node;};
+const coordinate=pos=>pos?`${pos.x} · ${pos.y} · ${pos.z}`:'Noch nicht festgelegt';
+const stages=[['placed','Platziert'],['commissioned','In Betrieb genommen'],['runningObserved','Lauf beobachtet (manuell)']];
+let notes={},storageKey;
+function save(){
+ try{localStorage.setItem(storageKey,JSON.stringify(notes));}
+ catch{$('storage-status').textContent='Speichern nicht möglich – Häkchen gelten nur bis zum Neuladen.';}
+}
+function stationCard(station){
+ const card=element('details',undefined,'station panel');
+ card.dataset.search=`${station.id} ${station.label}`.toLocaleLowerCase('de');
+ card.append(element('summary',`${station.id} · ${station.label}`));
+ card.append(element('p',`Dimension: ${station.dimension}`));
+ const coordinates=element('dl',undefined,'placement-coordinates');
+ const row=(label,value)=>coordinates.append(element('dt',label),element('dd',value));
+ for(const [key,label] of [['receiver','Wireless Receiver'],['bridge','ME Bridge'],['computer','Computer'],['chest','Truhe']])row(label,coordinate(station.equipment[key]));
+ row('Kabel (jede Blockposition)',station.equipment.cable.length?station.equipment.cable.map(coordinate).join(' / '):'Keine Positionen hinterlegt');
+ card.append(coordinates);
+ const slots=element('div',undefined,'placement-slots');
+ for(const slot of ['A','B','C']){
+  const section=element('section',undefined,'placement-slot');
+  section.append(element('h3',`Kanone ${slot}${slot==='A'?' · zunächst vorgesehen':' · optionale Reserve'}`),element('p',coordinate(station.cannons[slot]),'coordinate'));
+  for(const [flag,label] of stages){
+   const key=JSON.stringify([station.id,slot,flag]);
+   const wrapper=element('label');const input=element('input');input.type='checkbox';
+   input.setAttribute('aria-label',`${slot} · ${label}`);input.checked=notes[key]===true;input.disabled=!station.cannons[slot];
+   input.addEventListener('change',()=>{notes[key]=input.checked;save();});
+   wrapper.append(input,document.createTextNode(label));section.append(wrapper);
+  }
+  slots.append(section);
+ }
+ card.append(slots,element('p','Live-Betrieb: unbekannt. Diese Ansicht besitzt keine laufende Telemetrie.','observation'));
+ const metadata=element('details',undefined,'metadata');metadata.append(element('summary','Bekannte Metadaten · nur lesbar'));
+ if(station.observed){
+  const o=station.observed;
+  metadata.append(element('p',`Momentaufnahme: ${o.at} · Quelle: ${o.source}`),element('p',`Computer-ID: ${o.computerId??'unbekannt'}`));
+  const list=element('ul');
+  for(const block of o.blocks)list.append(element('li',`${coordinate(block.position)} → ${block.blockId}`));
+  metadata.append(list,element('p','Gespeicherte Blockidentitäten bestätigen weder Inbetriebnahme noch aktuellen Lauf.'));
+ }else metadata.append(element('p','Keine unabhängige Beobachtung hinterlegt.'));
+ card.append(metadata);return card;
+}
+async function load(){
+ try{
+  const responses=await Promise.all([fetch('/api/projects/erebor/placement-draft',{cache:'no-store'}),fetch('/api/me',{cache:'no-store'})]);
+  if(responses.some(r=>r.status===401)){location.assign('/login');return;}
+  if(!responses[0].ok){const error=await responses[0].json();throw Error(error.error||'Plan nicht verfügbar.');}
+  if(!responses[1].ok)throw Error('Benutzerzuordnung nicht verfügbar.');
+  const plan=validatePlacementDraft(await responses[0].json());const me=await responses[1].json();
+  storageKey=JSON.stringify(['campus-placement-manual-v1',me.user.id,plan.planId,plan.revision]);
+  try{const stored=JSON.parse(localStorage.getItem(storageKey)||'{}');notes=stored&&typeof stored==='object'&&!Array.isArray(stored)?stored:{};}
+  catch{$('storage-status').textContent='Lokale Notizen konnten nicht gelesen werden; neue Häkchen sind noch ungespeichert.';}
+  $('plan-status').textContent=`${plan.stations.length} Stationen · Revision ${plan.revision} · ${plan.generatedAt} · Quelle: ${plan.source}`;
+  $('placement-stations').replaceChildren(...plan.stations.map(stationCard));
+  $('search').addEventListener('input',()=>{const query=$('search').value.trim().toLocaleLowerCase('de');for(const card of $('placement-stations').children)card.hidden=!card.dataset.search.includes(query);});
+ }catch(error){$('plan-status').textContent='Kein nutzbarer Plan geladen.';$('plan-error').hidden=false;$('plan-error').textContent=error.message;$('search').disabled=true;}
+}
+load();
