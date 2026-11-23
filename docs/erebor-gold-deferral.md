@@ -80,6 +80,32 @@ would leave a mismatched assignment and does not preserve completion semantics.
 Therefore **no runtime deployment or cannon release is safe yet**. This branch
 is isolated source preparation, not a claim that paused gold builds now advance.
 
+## Incremental durable journal (not runtime activation)
+
+`src/erebor-gold-ledger.js::goldLedger(db)` adds an isolated SQLite preparation
+journal. It retains the exact supplied archive bytes and complete JSON job,
+checks the archive digest on readback, refuses duplicate version/site/slot
+reservations, and protects original columns/deletion with SQLite triggers.
+A single-statement revision compare-and-set records a suspension **intent**;
+a pending intent cannot be reclaimed or replayed after restart. Two independent
+SQLite connections and a close/reopen regression exercise these boundaries while
+an unrelated job table remains unchanged.
+
+This journal is intentionally not imported by the queue and its constructor must
+not be called on the production database yet. It accepts opaque preparation
+bytes, not trusted/validated runtime evidence. Its `blockSuccessors` result is a
+required policy flag, **not an installed scheduler dependency lock**. It does not
+stage native uploads, validate freshness/support/protection, switch a cannon,
+confirm continuation completion, or issue any original receipt. Resume and finish
+operations are rejected. There is no administrative reclaim/reset/delete API;
+future reconciliation must attribute an exact native result before advancing.
+The immutable original remains retained even after any future final proof.
+
+The bounded deliverable is therefore persistence/CAS preparation only. The precise
+remaining activation blocker is the connected guarded native switch/adoption and
+world-proof lifecycle in requirements 2–6 below, including actual queue dependency
+locks. Do not interpret a stored intent or a local passing test as live activation.
+
 ## Required safe activation and later user-triggered resume
 
 The next implementation must exercise the complete path in fixtures before a
