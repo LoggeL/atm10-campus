@@ -12,6 +12,7 @@
   var Actionable = Java.loadClass('appeng.api.config.Actionable')
   var FuzzyMode = Java.loadClass('appeng.api.config.FuzzyMode')
   var HashMap = Java.loadClass('java.util.HashMap')
+  var Objects = Java.loadClass('java.util.Objects')
   var Optional = Java.loadClass('java.util.Optional')
   var sides = Side.values()
 
@@ -33,13 +34,13 @@
   function available(entity, item, limit) {
     var service = entity.getGridNode().getGrid().getStorageService()
     var storage = service.getInventory()
-    var plain = ItemKey.of(item)
+    var plain = ItemKey['of(net.minecraft.world.level.ItemLike)'](item)
     var count = Number(storage.extract(plain, limit, Actionable.SIMULATE, entity))
     if (count < limit) {
       var variants = service.getCachedInventory().findFuzzy(plain, FuzzyMode.IGNORE_ALL).iterator()
       while (count < limit && variants.hasNext()) {
         var key = variants.next().getKey()
-        if (key instanceof ItemKey && key.getItem().equals(item) && !key.equals(plain))
+        if (key instanceof ItemKey && String(key.getId()) === String(plain.getId()) && !Objects.equals(key, plain))
           count += Number(storage.extract(key, limit - count, Actionable.SIMULATE, entity))
       }
     }
@@ -90,19 +91,31 @@
     })
   }
 
-  var ticks = 0
+  var ticks = 0, enrolled = {}
   ServerEvents.tick(function (event) {
     if (++ticks % 80 !== 1) return
+    var online = {}
     ServerContext.get(event.server).registry().getComputers().forEach(function (computer) {
       if (!computer.isOn()) return
+      var id = String(computer.getInstanceUUID()), guard = enrolled[id]
+      // Creating a root mount scans the CC disk to measure its quota. Keep the
+      // guarded object for the lifetime of each enrolled computer instance.
+      if (guard) {
+        online[id] = guard
+        computer.queueEvent('campus_stock_guard', [guard])
+        return
+      }
       for (var i = 0; i < sides.length; i++) {
         var device = computer.getPeripheral(sides[i])
         if (device instanceof Bridge || device instanceof Modem) {
-          if (computer.createRootMount().exists('campus.lua'))
-            computer.queueEvent('campus_stock_guard', [guardFor(computer)])
+          if (computer.createRootMount().exists('campus.lua')) {
+            online[id] = guardFor(computer)
+            computer.queueEvent('campus_stock_guard', [online[id]])
+          }
           break
         }
       }
     })
+    enrolled = online
   })
 })()

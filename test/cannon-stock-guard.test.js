@@ -8,11 +8,10 @@ const source = readFileSync(new URL('../controller/kubejs/campus-stock.js', impo
 
 test('two station requests share one live reserve, including components, failed and partial transfers', () => {
   let plain = 560, variant = 60, space = 40, clock = 1000;
-  const item = {equals:other => other === item};
+  const item = {};
   class ItemKey {
-    static of() { return plainKey; }
-    getItem() { return item; }
-    equals(other) { return this === other; }
+    static ['of(net.minecraft.world.level.ItemLike)']() { return plainKey; }
+    getId() { return 'minecraft:stone'; }
   }
   const plainKey = new ItemKey(), variantKey = new ItemKey();
   const service = {
@@ -37,7 +36,7 @@ test('two station requests share one live reserve, including components, failed 
   }
   const bridge = new Bridge();
   const queue = [], guards = [], computers = [1, 2].map(id => ({
-    getID:() => id, isOn:() => true, getPeripheral:() => bridge,
+    getID:() => id, getInstanceUUID:() => String(id), isOn:() => true, getPeripheral:() => bridge,
     createRootMount:() => ({exists:() => true}), queueEvent:(_, [api]) => guards.push(api),
   }));
   const classes = {
@@ -48,7 +47,7 @@ test('two station requests share one live reserve, including components, failed 
     BuiltInRegistries:{ITEM:{containsKey:() => true,get:() => item}},
     ResourceLocation:{tryParse:id => id}, AEItemKey:ItemKey, Actionable:{SIMULATE:'simulate'},
     FuzzyMode:{IGNORE_ALL:0}, HashMap:class extends Map {put(k,v) { this.set(k,v); }},
-    Optional:{of:filter => filter},
+    Objects:{equals:(a,b) => a === b}, Optional:{of:filter => filter},
   };
   runInNewContext(source,{Date:{now:() => clock}, Java:{loadClass:path => classes[path.split('.').at(-1)]},
     ServerEvents:{tick:run => run({server:{}})}});
