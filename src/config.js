@@ -18,6 +18,8 @@ export const config = {
   port: Number(process.env.PORT || 3000),
   host: process.env.HOST || '0.0.0.0',
   dataDir: resolve(process.env.DATA_DIR || './data'),
+  // Private, read-only prepared artifact; no bundled sample or runtime activation.
+  placementDraftPath: process.env.PLACEMENT_DRAFT_PATH ? resolve(process.env.PLACEMENT_DRAFT_PATH) : '',
   worldSources: sources,
   contextOrigin: triple(process.env.CONTEXT_ORIGIN, [-64, 48, -96]),
   contextSize: triple(process.env.CONTEXT_SIZE, [288, 272, 320]),
