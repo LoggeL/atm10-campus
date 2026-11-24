@@ -31,6 +31,15 @@ const base='/api/projects/erebor/planfolge';
 const modes={stone:2,clear:3,build:2};
 const stages={stone:'Steinfüllung',clear:'Aushub',build:'Bau'};
 const readyState=()=>({cursor:0,completed:0,exhausted:false,job:null,status:'Wartet auf Prüfung'});
+export function awaitingNextPrint(row,signal){
+ if(!(row.completed>0)||!signal?.ready||signal.empty!==true||signal.upload||
+    signal.state!=='STOPPED'||signal.status!=='finished')return false;
+ const j=row.job;
+ if(j)return (j.surface===true||j.interior===true)&&j.loaded===false&&!j.started&&!j.tainted&&!j.placed&&
+   !j.selection&&!!j.desired?.file&&j.desired.owner==='Erebor';
+ return row.slot==='A'?row.status==='Abschluss bestätigt, nächster Bauabschnitt folgt':
+   !row.name&&row.message==='Abschnitt fertig';
+}
 export function confirmedFinish(o,job,now=Date.now()/1000){
  return !job.tainted&&job.seen>0&&now-job.seen<90&&o.inputEmpty===true&&o.state==='STOPPED'&&o.status==='finished'&&cannonReset(o)&&
   o.outputItem==='create:empty_schematic'&&Number.isSafeInteger(job.baseline)&&o.outputCount===job.baseline+1&&
@@ -504,7 +513,37 @@ export function registerEreborQueue(app,campus){
  }
  // A full fleet rotation can outlast short excavations. Pick up their actual
  // native finishes between batches and offer the same empty cannon its next job.
- const roomChecks=new Map(),surfaceRepairStatus=new Map();
+ const roomChecks=new Map(),surfaceRepairStatus=new Map(),refillChecks=new Map();
+ let lastRefill=0;
+ // A full fleet pass can take minutes. Revisit one acknowledged, still empty
+ // printer between batches. Assignment and all world checks stay on the normal path.
+ async function refillFinished(p,report){
+  const v=p.current_version,c=cfg(),now=Date.now();
+  if(!c?.enabled||c.version!==v||c.phase!=='stone'||!massif.enabled(v)||!current(v)||
+     report?.version!==v||report.sharedChest!==4||report.ereborProjectWork!==1||!report.stations||
+     report.at>now||now-report.at>=15000||now-lastRefill<15000)return;
+  const {mains,helperJobs}=assignments(v),helpersOn=helpers.isEnabled(v);
+  const candidates=[...mains.map(r=>({...r,slot:'A'})),...helperJobs].filter(r=>{
+   const main=r.slot==='A',key=r.site+(main?'':r.slot),s=report.stations[key];
+   if(!awaitingNextPrint(r,s))return false;
+   if(main?(!production.mode(v,r.site).enabled||choices.next(v,r.site)):!helpersOn)return false;
+   return now-(refillChecks.get(r.site+r.slot)??0)>=120000;
+  });
+  candidates.sort((a,b)=>(refillChecks.get(a.site+a.slot)??0)-(refillChecks.get(b.site+b.slot)??0)||
+   Number(b.slot==='A')-Number(a.slot==='A'));
+  if(!candidates.length)return;
+  const {site,slot}=candidates[0];
+  lastRefill=now;refillChecks.set(site+slot,now);
+  if(slot!=='A'){
+   try{await helpers.refill(p,site,slot,report,()=>helpers.isEnabled(v),read(site),()=>current(v));}
+   catch(e){app.log.warn({station:site+slot,err:e.message},'Erneute Prüfung des Folgeplans vertagt');}
+   return;
+  }
+  const state=read(site);
+  try{await station(site,state,c,p,null,report);}
+  catch(e){state.status=e.message;state.inserted=false;}
+  if(current(v)){state.checked=new Date().toISOString();persist(site,state);}
+ }
  function treeSource(p,site,slot,job){
   if(job.surface)return landscape.idleRevision(p.current_version,site,slot,job);
   if(!oldTreeInput(site+slot,job))return null;
@@ -597,7 +636,10 @@ export function registerEreborQueue(app,campus){
      choices.mark(job.selection,'finished');
      state.cursor=job.next;state.completed++;state.job=null;state.inserted=false;state.status='Abschluss bestätigt, nächster Bauabschnitt folgt';persist(site,state);
     });
-    if(slot!=='A'&&active())await helpers.refill(p,site,slot,report,active,read(site),()=>current(v));
+    if(slot!=='A'&&active()){
+     refillChecks.set(key,Date.now());
+     await helpers.refill(p,site,slot,report,active,read(site),()=>current(v));
+    }
    }catch(e){
     if(released)surfaceRepairStatus.set(site+slot,{file:job.desired.blueprint,at:Date.now(),message:e.message});
     app.log.warn({station:key,err:e.message},'Baufolge wartet auf bestätigten Planwechsel');
@@ -619,6 +661,7 @@ export function registerEreborQueue(app,campus){
    await startPreparedMain(c.version,report);
    await reconcileUrns(p,report);
    await finishRooms(p,report);
+   await refillFinished(p,report);
    for(const site of new Set([...active,...(c.enabled&&c.phase!=='finished'?sites:[])])){
     if(!current(c.version))return;
     if(report&&Date.now()-report.at>=15000){
@@ -626,6 +669,7 @@ export function registerEreborQueue(app,campus){
      await startPreparedMain(c.version,report);
      if(report?.surfaceModeTracker===1)await helpers.startFueledExtras(p,report,()=>c.phase==='stone'&&helpers.isEnabled(c.version),read,()=>current(c.version));
      await finishRooms(p,report);
+     await refillFinished(p,report);
     }
     // V4 emits an empty row when the station chunk is asleep or the cannon is absent.
     // A missing row is inconclusive. Keep the native check in that case.
@@ -648,6 +692,7 @@ export function registerEreborQueue(app,campus){
      await startPreparedMain(c.version,fresh);
      await reconcileUrns(p,fresh);
      await finishRooms(p,fresh);
+     await refillFinished(p,fresh);
      return fresh;
     });
    }

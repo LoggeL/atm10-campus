@@ -5,7 +5,20 @@ import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {writeWorld} from './helpers.js';
 import {buildServer} from '../src/server.js';
-import {confirmedFinish,recordedFinish} from '../src/erebor-queue.js';
+import {awaitingNextPrint,confirmedFinish,recordedFinish} from '../src/erebor-queue.js';
+
+test('follow-up dispatch only revisits empty finished printers with an acknowledged or uninserted project plan',()=>{
+ const signal={ready:true,empty:true,upload:'',state:'STOPPED',status:'finished'};
+ const main={slot:'A',completed:175,status:'Abschluss bestätigt, nächster Bauabschnitt folgt'};
+ const helper={slot:'H',completed:117,message:'Abschnitt fertig'};
+ const job={surface:true,loaded:false,desired:{file:'pending.nbt',owner:'Erebor'}};
+ for(const row of [main,helper,{...helper,job}])assert.ok(awaitingNextPrint(row,signal));
+ for(const change of [{empty:false},{upload:'other.nbt'},{state:'PAUSED'},{status:'idle'},{ready:false}])
+  assert.equal(awaitingNextPrint(main,{...signal,...change}),false);
+ for(const row of [{...main,status:'Manuell pausiert'},{...helper,completed:0},{...helper,name:'other'},
+   ...[{started:true},{loaded:true},{tainted:true},{placed:1},{selection:1},{surface:false}].map(x=>({...helper,job:{...job,...x}}))])
+  assert.equal(awaitingNextPrint(row,signal),false);
+});
 
 const layout=JSON.parse(readFileSync(new URL('../src/erebor-fleet/stations.json',import.meta.url)));
 const options={replace_mode:0,skip_missing:false,replace_block_entities:false};
