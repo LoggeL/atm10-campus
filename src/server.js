@@ -19,6 +19,7 @@ import { registerMaterialRoutes } from './api-materials.js';
 import { registerAlignment } from './alignment.js';
 import { createSchematics } from './schematics.js';
 import { registerStationRoutes, endCannonJobs } from './api-stations.js';
+import { readAtmStarPlan } from './atm-star.js';
 import { sceneJson, blueprintsBinary } from './viewer-data.js';
 import { registerPreviewRoutes } from './preview/service.js';
 import { registerRealtime } from './realtime.js';
@@ -73,6 +74,12 @@ export async function buildServer(config = defaultConfig) {
   workspacePage('/erebor/dashboard','erebor-dashboard.html','dashboard');
   workspacePage('/projects','projects.html','projects');
   workspacePage('/erebor/aufstellung','erebor-placement.html','placement');
+  workspacePage('/atm-star', 'atm-star.html', 'atm-star');
+  app.get('/api/atm-star', async (req, reply) => {
+    if (req.actor?.via !== 'session') throw new HttpError(401, 'Anmeldung erforderlich.');
+    reply.header('Cache-Control', 'private, no-store');
+    return readAtmStarPlan(db);
+  });
   app.get('/api/projects/erebor/placement-draft', async (req, reply) => {
     if (req.actor?.via !== 'session') throw new HttpError(401, 'Anmeldung erforderlich.');
     reply.header('Cache-Control', 'no-store');

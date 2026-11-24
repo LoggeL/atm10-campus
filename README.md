@@ -18,6 +18,8 @@ Nach der Anmeldung öffnet sich das [Dashboard](https://campus.logge.top/erebor/
 
 Unter [Stationstechnik](https://campus.logge.top/app#cannons) liegen Flottensteuerung, Materialversorgung, Einzelgeräte und Aufstellkoordinaten. [Bauprojekte](https://campus.logge.top/projects) enthält die Projektpläne, Karten und das Archiv. Weltaufnahmen, Materialliste, 3D-Viewer und Zugänge sind im Menü **Werkzeuge** erreichbar.
 
+Die [ATM-Star-Checkliste](https://campus.logge.top/atm-star) unter **Werkzeuge** rechnet die Zutaten für die ersten 18 ATM Stars in ATM10 8.6 auf zwei Ebenen. Der ME-Bestand stammt aus den Stationsmeldungen ab Versorger 1.4.19. Die Seite zeigt den Zeitpunkt der Meldung und berücksichtigt gelagerte Stars, ATM Star Blocks und fertige Bauteile.
+
 ## Viewer-Assets
 
 Die Materialtexturen und das Titelbild sind mit Codex (imagegen) erzeugt; Quellen und Prompts liegen in `assets-src/` (`PROMPTS.md`).

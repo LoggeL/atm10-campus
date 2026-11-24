@@ -8,6 +8,7 @@ import { dirname, join } from 'node:path';
 import { requireActor, HttpError } from './auth.js';
 import { now, logActivity, tx } from './db.js';
 import { CANNON_ME_RESERVE, normalizeStockItems, saveStock, latestStock } from './me-stock.js';
+import { atmStarStockRequest, saveAtmStarStock } from './atm-star.js';
 import { cannonRange, cannonTarget, reachableCannons } from './cannon-range.js';
 import { createCannonBlueprints } from './cannon-blueprints.js';
 import { isEreborStation } from './erebor-feeder.js';
@@ -482,7 +483,7 @@ export function registerStationRoutes(app, campus, mat, alignment, schematics) {
       }
       wantedCache = { key, items: items.sort() };
     }
-    return { snapshot: snap.id, items: wantedCache.items };
+    return { snapshot: snap.id, items: wantedCache.items, atmStar: atmStarStockRequest };
   });
 
   app.post('/api/me/stock', async req => {
@@ -491,6 +492,7 @@ export function registerStationRoutes(app, campus, mat, alignment, schematics) {
     const source = clip(b.source || a.tokenName || a.user.username, 60);
     const items = normalizeStockItems(b.items);
     const s = saveStock(db, a, source, items);
+    saveAtmStarStock(db, source, b.atmStar);
     return { ok: true, at: s.at, kinds: s.kinds, total: s.total };
   });
 

@@ -150,6 +150,13 @@ CREATE TABLE IF NOT EXISTS me_stock (
   total INTEGER NOT NULL,
   items_json TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS atm_star_stock (
+  id INTEGER PRIMARY KEY CHECK (id = 1),
+  at TEXT NOT NULL,
+  source TEXT NOT NULL,
+  revision TEXT NOT NULL,
+  counts_json TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS cannons (
   name TEXT PRIMARY KEY COLLATE NOCASE,
   blueprint_id TEXT REFERENCES blueprints(id),

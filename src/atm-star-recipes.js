@@ -1,0 +1,154 @@
+// ATM10 8.6: Runic Star Altar, att_items.js and atm_alloys.js.
+const item = (id, label, filter = {}) => ({ key: id, id, label, ...filter });
+const amount = (count, ...options) => ({ count, options });
+const use = (id, label, count = 1, filter) => amount(count, item(id, label, filter));
+const part = (id, label, count, ingredients, filter) => ({ ...use(id, label, count, filter), ingredients });
+const blood = (id, amount) => ({ 'cyclopscore:fluid_content': { id, amount } });
+const awakenedName = 'Awakened Unobtainium-Vibranium Alloy Block';
+
+export const ATM_STAR_GOAL = 18;
+export const atmStar = item('allthetweaks:atm_star', 'ATM Star');
+export const atmStarBlock = item('allthetweaks:atm_star_block', 'ATM Star Block');
+export const netherStarStock = [
+  ['minecraft:nether_star', 'Netherstern', 1],
+  ['allthetweaks:nether_star_block', 'Nethersternblock', 9],
+  ['allthecompressed:nether_star_block_1x', 'Nethersternblock 1x', 81],
+  ['allthecompressed:nether_star_block_2x', 'Nethersternblock 2x', 729],
+  ['allthecompressed:nether_star_block_3x', 'Nethersternblock 3x', 6561],
+].map(([id, label, units]) => ({ ...item(id, label), units }));
+
+export const atmStarParts = [
+  part('allthecompressed:nether_star_block_3x', 'Nethersternblock 3x', 15, [
+    use('allthecompressed:nether_star_block_2x', 'Nethersternblock 2x', 9),
+  ]),
+  part('allthemodium:unobtainium_allthemodium_alloy_block', 'Unobtainium-Allthemodium Alloy Block', 28, [
+    use('allthemodium:piglich_heart_block', 'Piglich Heart Block', 2),
+    use('kubejs:air_essence_block', 'Air Essence Block'),
+    use('allthemodium:allthemodium_block', 'Allthemodium Block'),
+    use('kubejs:earth_essence_block', 'Earth Essence Block'),
+    use('kubejs:fire_essence_block', 'Fire Essence Block'),
+    use('allthemodium:unobtainium_block', 'Unobtainium Block'),
+    use('kubejs:water_essence_block', 'Water Essence Block'),
+    use('ars_nouveau:source_gem_block', 'Source Gem Block'),
+  ]),
+  part('allthemodium:unobtainium_vibranium_alloy_block', awakenedName, 2, [
+    use('allthemodium:unobtainium_vibranium_alloy_block', 'Unobtainium-Vibranium Alloy Block', 1, { excludedName: awakenedName }),
+    use('mysticalagriculture:awakened_supremium_essence', 'Awakened Supremium Essence', 4),
+    use('minecraft:enchanted_book', 'Verzaubertes Buch (Unbreaking I)', 4, {
+      key: 'unbreaking-book', components: { 'minecraft:stored_enchantments': { levels: { 'minecraft:unbreaking': 1 } } },
+    }),
+    use('mysticalagriculture:awakened_supremium_gemstone', 'Awakened Supremium Gemstone', 4),
+  ], { key: 'awakened-alloy-block', displayName: awakenedName, components: { 'minecraft:enchantments': { levels: { 'minecraft:unbreaking': 1 } } } }),
+  part('allthetweaks:oblivion_shard', 'Oblivion Shard', 1, [
+    use('forbidden_arcanus:eternal_stella', 'Eternal Stella'),
+    use('evilcraft:mace_of_destruction', 'Mace of Destruction (4.000 mB Blood)', 1, { components: blood('evilcraft:blood', 4000) }),
+    use('evilcraft:piercing_vengeance_focus', 'Piercing Vengeance Focus', 2),
+    use('stevescarts:module_galgadorian_drill', 'Galgadorian Drill', 2),
+    use('cataclysm:meat_shredder', 'Meat Shredder'),
+    use('twilightforest:snow_queen_trophy', 'Snow Queen Trophy'),
+    use('cataclysm:void_forge', 'Void Forge'),
+  ]),
+  part('mysticalagradditions:creative_essence', 'Creative Essence', 1, [
+    use('mysticalagradditions:insanium_block', 'Insanium Block', 4),
+    use('mysticalagradditions:insanium_gemstone_block', 'Insanium Gemstone Block', 4),
+    use('mysticalagriculture:master_infusion_crystal', 'Master Infusion Crystal'),
+  ]),
+  part('allthetweaks:nexium_emitter', 'Nexium Emitter', 1, [
+    use('powah:player_transmitter_nitro', 'Player Transmitter (Nitro)'),
+    use('ae2wtlib:wireless_universal_terminal', 'Wireless Universal Terminal (4 Terminalmodule, voll geladen)', 1, {
+      components: { 'ae2wtlib:has_ex_pattern_access_terminal': {}, 'ae2wtlib:has_pattern_encoding_terminal': {},
+        'ae2wtlib:has_crafting_terminal': {}, 'ae2wtlib:has_pattern_access_terminal': {}, 'ae2:stored_energy': 6400000 },
+    }),
+    use('mekanism:module_gravitational_modulating_unit', 'Gravitational Modulating Unit'),
+    amount(1, item('modern_industrialization:large_advanced_motor', 'Large Advanced Motor'), item('create:mechanical_arm', 'Mechanical Arm')),
+    use('immersiveengineering:tesla_coil', 'Tesla Coil'),
+    use('advanced_ae:quantum_multi_threader', 'Quantum Multi-Threader'),
+    use('aeinfinitybooster:infinity_card', 'Infinity Card'),
+  ]),
+  part('allthetweaks:withers_compass', 'Wither’s Compass', 1, [
+    use('productivebees:configurable_comb', 'Withered Comb', 1, { components: { 'productivebees:bee_type': 'productivebees:withered' } }),
+    use('industrialforegoing:wither_builder', 'Wither Builder'),
+    use('deeperdarker:heart_of_the_deep', 'Heart of the Deep'),
+    use('generatorgalore:netherstar_generator_64x', 'Nether Star Generator 64x'),
+    use('irons_spellbooks:scroll', 'Wither Skull Scroll (Level 10)', 1, { components: {
+      'irons_spellbooks:spell_container': { data: [{ id: 'irons_spellbooks:wither_skull', index: 0, level: 10, locked: true }], maxSpells: 1, mustEquip: false, spellWheel: false },
+    } }),
+    use('mysticalagriculture:witherproof_bricks', 'Witherproof Bricks'),
+    use('minecraft:tipped_arrow', 'Pfeil (Long Wither)', 1, { components: { 'minecraft:potion_contents': { potion: 'apothic_attributes:long_wither' } } }),
+    use('ars_nouveau:glyph_wither', 'Glyph of Wither'),
+    use('mysticalagradditions:nether_star_crux', 'Nether Star Crux'),
+  ]),
+  part('allthetweaks:improbable_probability_device', 'Improbable Probability Device', 1, [
+    use('mekanism:pellet_antimatter', 'Antimatter Pellet', 2),
+    use('ae2:singularity', 'Singularity'),
+    amount(2, item('megacells:portable_item_cell_256m', 'Portable 256M Item Cell'), item('modern_industrialization:blastproof_casing', 'Blastproof Casing')),
+    use('pneumaticcraft:aerial_interface', 'Aerial Interface'),
+    use('ironfurnaces:million_furnace', 'Million Furnace', 2),
+    use('irons_spellbooks:lightning_upgrade_orb', 'Lightning Upgrade Orb'),
+  ]),
+  part('allthetweaks:dragon_soul', 'Dragon Soul', 1, [
+    use('apothic_enchanting:infused_breath', 'Infused Dragon’s Breath'),
+    use('occultism:soul_gem', 'Soul Gem'),
+    amount(1, item('justdirethings:creaturecatcher', 'Creature Catcher mit Dragon Familiar', { components: { 'justdirethings:entitytype': 'occultism:dragon_familiar' } }),
+      item('occultism:spawn_egg/familiar_dragon', 'Dragon Familiar Spawn Egg')),
+    use('productivetrees:socotra_dragon_sapling', 'Socotra Dragon Sapling'),
+    use('hostilenetworks:data_model', 'Ender Dragon Data Model (1254 oder 1255 Daten)', 1, { components: {
+      'hostilenetworks:data_model': 'hostilenetworks:ender_dragon', 'hostilenetworks:data': { oneOf: [1254, 1255] },
+    } }),
+    use('allthemodium:piglich_heart_block', 'Piglich Heart Block'),
+    use('productivebees:spawn_egg_configurable_bee', 'Soul Lava Bee Spawn Egg', 1, { components: {
+      'minecraft:entity_data': { id: 'productivebees:configurable_bee', type: 'productivebees:soul_lava' },
+    } }),
+    use('cataclysm:abyssal_sacrifice', 'Abyssal Sacrifice'),
+    use('eternal_starlight:chain_of_souls', 'Chain of Souls'),
+  ]),
+  part('allthetweaks:philosophers_fuel', 'Philosopher’s Fuel', 1, [
+    use('generatorgalore:ender_generator', 'Ender Generator'),
+    use('ironfurnaces:rainbow_coal', 'Rainbow Coal'),
+    use('bigreactors:insanite_block', 'Insanite Block'),
+    amount(1, item('modern_industrialization:uranium_fuel_rod_quad', 'Quad Uranium Fuel Rod'), item('create:blaze_burner', 'Blaze Burner')),
+    use('mysticalagradditions:insanium_coal_block', 'Insanium Coal Block'),
+    use('forbidden_arcanus:smelter_prism', 'Smelter Prism'),
+    use('mysticalagriculture:awakened_supremium_ingot_block', 'Awakened Supremium Ingot Block'),
+    use('generatorgalore:magmatic_generator_64x', 'Magmatic Generator 64x'),
+    use('evilcraft:dark_tank', 'Dark Tank (16.000 mB Refined T4 Fluid)', 1, { components: blood('justdirethings:refined_t4_fluid_source', 16000) }),
+  ]),
+  part('allthetweaks:pulsating_black_hole', 'Pulsating Black Hole', 1, [
+    use('oritech:nuke', 'Nuke'),
+    use('ae2:quantum_ring', 'Quantum Ring'),
+    use('pneumaticcraft:micromissiles', 'Micromissiles'),
+    use('justdirethings:paradoxmachine', 'Paradox Machine'),
+    use('pocketstorage:psu_4', 'Pocket Storage Unit Tier 4'),
+    use('occultism:stable_wormhole', 'Stable Wormhole'),
+    use('rootsclassic:crystal_staff', 'Crystal Staff'),
+    use('industrialforegoing:mycelial_explosive', 'Mycelial Explosive Generator'),
+    use('evilcraft:lightning_bomb', 'Lightning Bomb'),
+  ]),
+  part('allthetweaks:dimensional_seed', 'Dimensional Seed', 1, [
+    use('allthecompressed:netherrack_6x', 'Netherrack 6x'),
+    use('neovitae:teleposer', 'Teleposer'),
+    use('allthecompressed:obsidian_5x', 'Obsidian 5x'),
+    use('allthetweaks:mini_exit', 'Miniature Exit Portal'),
+    use('allthetweaks:mini_nether', 'Miniature Nether Portal'),
+    use('allthetweaks:mini_end', 'Miniature End Portal'),
+    use('allthecompressed:end_stone_5x', 'End Stone 5x'),
+    use('allthecompressed:emerald_block_4x', 'Smaragdblock 4x'),
+    use('allthecompressed:diamond_block_4x', 'Diamantblock 4x'),
+  ]),
+  part('allthetweaks:patrick_star', 'Patrick Star', 1, [
+    use('minecraft:magenta_concrete', 'Magenta Beton', 13),
+    use('minecraft:pink_concrete', 'Rosa Beton', 11),
+    use('minecraft:green_concrete', 'Grüner Beton', 8),
+    use('minecraft:green_concrete_powder', 'Grüner Trockenbeton', 8),
+    use('minecraft:magenta_concrete_powder', 'Magenta Trockenbeton', 8),
+    use('minecraft:pink_concrete_powder', 'Rosa Trockenbeton', 5),
+    use('minecraft:lime_concrete', 'Hellgrüner Beton', 2),
+  ]),
+];
+
+export const atmStarStockRules = [...new Map([
+  atmStar, atmStarBlock, ...netherStarStock,
+  ...atmStarParts.flatMap(({ options, ingredients }) => [...options, ...ingredients.flatMap(i => i.options)]),
+].map(rule => [rule.key, rule])).values()].map(({ key, id, components, displayName, excludedName }) => ({
+  key, id, components, displayName, excludedName,
+}));

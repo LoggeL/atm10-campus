@@ -3,7 +3,7 @@
 -- through an Advanced Peripherals ME Bridge. Which blueprint and the options are set in the web app (tab "Kanonen");
 -- this computer only knows URL, a station token and its cannon name (install: wget run <url>/cc/install.lua).
 -- Strings shown on screen use Latin-1 escapes (\228 = ae-umlaut ...), the CC font is ISO-8859-1.
-local VERSION = "1.4.18"
+local VERSION = "1.4.19"
 
 settings.define("campus.url", { description = "Campus-URL", type = "string" })
 settings.define("campus.token", { description = "API-Token mit Scope Station", type = "string" })
@@ -439,13 +439,57 @@ local function feed()
 end
 
 -- ---------- reporting ----------
-local wanted, wantedAt = nil, -1e9
+local wanted, wantedAt, atmStarRequest = nil, -1e9, nil
+
+-- atm-star-stock-start
+local function matchesComponents(value, expected)
+  if type(expected) == "boolean" and type(value) == "number" then
+    return value == (expected and 1 or 0)
+  end
+  if type(expected) ~= "table" then return value == expected end
+  if expected.oneOf then
+    for _, option in ipairs(expected.oneOf) do
+      if value == option then return true end
+    end
+    return false
+  end
+  if type(value) ~= "table" then return false end
+  for key, wantedValue in pairs(expected) do
+    if not matchesComponents(value[key], wantedValue) then return false end
+  end
+  return true
+end
+
+local function readAtmStarCounts(plan, items)
+  local counts, rulesById = {}, {}
+  for _, rule in ipairs(plan.rules) do
+    counts[rule.key] = 0
+    local rules = rulesById[rule.id] or {}
+    rules[#rules + 1] = rule
+    rulesById[rule.id] = rules
+  end
+  for _, item in ipairs(items) do
+    local rules = rulesById[item.name]
+    if rules then
+      for _, rule in ipairs(rules) do
+        if (not rule.displayName or item.displayName == rule.displayName)
+            and (not rule.excludedName or item.displayName ~= rule.excludedName)
+            and (not rule.components or matchesComponents(item.components, rule.components)) then
+          counts[rule.key] = math.min(9007199254740991, counts[rule.key] + (tonumber(item.count or item.amount) or 0))
+        end
+      end
+    end
+  end
+  return { revision = plan.revision, counts = counts }
+end
+-- atm-star-stock-end
 
 local function reportStock()
   if not wanted or now() - wantedAt > 600 then
     local w, err = request("GET", "/api/me/wanted")
     if not w then return false, err end
     wanted, wantedAt = {}, now()
+    atmStarRequest = w.atmStar
     for _, name in ipairs(w.items or {}) do wanted[name] = true end
   end
   local list, err = call(bridge.getItems or bridge.listItems)
@@ -473,7 +517,9 @@ local function reportStock()
       end
     end
   end
-  return request("POST", "/api/me/stock", { source = NAME, items = items })
+  local report = { source = NAME, items = items }
+  if atmStarRequest and bridge.getItems then report.atmStar = readAtmStarCounts(atmStarRequest, list) end
+  return request("POST", "/api/me/stock", report)
 end
 
 -- status-reporting-start
