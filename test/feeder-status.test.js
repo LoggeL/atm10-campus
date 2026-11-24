@@ -2,6 +2,14 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { normalizeStatus } from '../src/api-stations.js';
 import { reachableCannons } from '../src/cannon-range.js';
+import { hasFeederPatch } from '../src/feeder-version.js';
+import { stationSource } from '../src/erebor-me-order.js';
+
+test('the feeder served to computers passes the protected-stock version gate', () => {
+  const [, version] = stationSource().match(/local VERSION = "([^"]+)"/);
+  assert.ok(hasFeederPatch(version, 17));
+  assert.equal(hasFeederPatch('1.4.999', 17), false);
+});
 
 test('computer identity is an explicit bounded integer, never inferred from missing or coercible input', () => {
   for (const computerId of [0, 11, 2147483647]) {
