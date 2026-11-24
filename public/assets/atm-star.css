@@ -155,10 +155,12 @@
 .star-name { min-width: 0; display: flex; align-items: center; gap: 11px; }
 .star-title { display: block; color: #f1f5ed; font-weight: 670; overflow-wrap: anywhere; }
 .star-note { display: block; margin-top: 3px; color: var(--muted); font-size: .78rem; overflow-wrap: anywhere; }
+.star-icons { display: flex; flex: none; gap: 4px; }
 .star-icon {
   --icon-size: 42px;
   position: relative;
   flex: 0 0 var(--icon-size);
+  width: var(--icon-size);
   height: var(--icon-size);
   border: 1px solid #395346;
   border-radius: 8px;
@@ -168,9 +170,9 @@
   position: absolute;
   inset: 0;
   border-radius: inherit;
-  background-image: url('/assets/atm-star-item-icons.webp?v=20261114-status-1&revision=icons-1');
+  background-image: url('/assets/atm-star-pack-icons.webp?v=20261114-status-1&revision=pack-icons-1');
   background-repeat: no-repeat;
-  background-size: 500% 400%;
+  background-size: var(--star-atlas-size);
 }
 .star-check { position: absolute; inset: auto -3px -3px auto; width: 14px; height: 14px; border: 1px solid #172820; border-radius: 50%; background: var(--star-accent); }
 .star-check::after {

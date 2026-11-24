@@ -20,6 +20,8 @@ Unter [Stationstechnik](https://campus.logge.top/app#cannons) liegen Flottensteu
 
 Die [ATM-Star-Checkliste](https://campus.logge.top/atm-star) unter **Werkzeuge** rechnet die Zutaten für die ersten 18 ATM Stars in ATM10 8.6 auf zwei Ebenen. Der ME-Bestand stammt aus den Stationsmeldungen ab Versorger 1.4.19. Die Seite zeigt den Zeitpunkt der Meldung und berücksichtigt gelagerte Stars, ATM Star Blocks und fertige Bauteile.
 
+Die Item-Icons der Checkliste stammen aus den Texturen und Modellen der installierten ATM10-8.6-Clientdateien, einschließlich KubeJS. Der WebP-Atlas enthält statische Vorschauen. Bei dynamischen Items können Inventar-Animation, Flüssigkeitsfüllung und eingeblendete Kreaturen abweichen. Jeder Eintrag einer Rezeptalternative hat einen eigenen Atlasplatz.
+
 ## Viewer-Assets
 
 Die Materialtexturen und das Titelbild sind mit Codex (imagegen) erzeugt; Quellen und Prompts liegen in `assets-src/` (`PROMPTS.md`).

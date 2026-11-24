@@ -13,6 +13,10 @@ test('the two-level startup recipe lists 18 Stars and the unobserved stock stays
   const plan = buildAtmStarPlan(null);
   assert.equal(plan.goal, 18);
   assert.equal(plan.groups.length, 13);
+  const renderedRows = plan.groups.flatMap(row => [row, ...row.ingredients]);
+  const icons = renderedRows.flatMap(row => row.alternatives.map(option => option.icon));
+  assert.ok(icons.every(index => Number.isInteger(index) && index >= 0 && index < plan.iconGrid.columns * plan.iconGrid.rows));
+  assert.ok(renderedRows.filter(row => row.alternatives.length > 1).every(row => new Set(row.alternatives.map(option => option.icon)).size === row.alternatives.length));
   assert.equal(plan.stock, null);
   assert.equal(plan.stars, null);
   const compressed = group(plan, 'allthecompressed:nether_star_block_3x');

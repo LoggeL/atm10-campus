@@ -1,9 +1,11 @@
 import { createHash } from 'node:crypto';
 import { now } from './db.js';
 import { ATM_STAR_GOAL, atmStar, atmStarBlock, atmStarParts, atmStarStockRules, netherStarStock } from './atm-star-recipes.js';
+import iconAtlas from './atm-star-icons.json' with { type: 'json' };
 
 const revision = createHash('sha256').update(JSON.stringify(atmStarStockRules)).digest('hex').slice(0, 16);
 export const atmStarStockRequest = { revision, rules: atmStarStockRules };
+const iconIndex = new Map(iconAtlas.keys.map((key, index) => [key, index]));
 
 export function saveAtmStarStock(db, source, report) {
   if (report?.revision !== revision || !report.counts || typeof report.counts !== 'object') return;
@@ -34,7 +36,7 @@ export function buildAtmStarPlan(stock) {
       const allocated = Math.min(missing, available[key] ?? 0);
       available[key] = (available[key] ?? 0) - allocated;
       missing -= allocated;
-      return { id, label, inMe, allocated };
+      return { id, label, icon: iconIndex.get(key) ?? null, inMe, allocated };
     });
     return { perRecipe: count, needed, missing, alternatives };
   }
@@ -52,6 +54,7 @@ export function buildAtmStarPlan(stock) {
   const netherStars = netherStarStock.map(({ key, label, units }) => ({ label, units, inMe: stock?.counts[key] ?? null }));
   return {
     goal: ATM_STAR_GOAL, stars, blocks, remainingStars, groups, netherStars,
+    iconGrid: { columns: iconAtlas.columns, rows: iconAtlas.rows },
     stock: stock && { at: stock.at, source: stock.source },
   };
 }

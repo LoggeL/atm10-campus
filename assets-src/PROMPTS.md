@@ -294,9 +294,9 @@ Composition: wide landscape crop. Keep the complete star prominent in the right-
 Constraints: no lettering, no logos, no watermark, no people, no UI, no screenshot or existing game sprite.
 ```
 
-## `public/assets/atm-star-item-icons.webp`
+## Früherer Icon-Entwurf für die ATM-Star-Checkliste
 
-Icon-Atlas mit 20 Motiven für die ATM-Star-Checkliste. Erzeugt mit dem eingebauten `image_gen`-Tool, ohne Referenzbild. Für Campus als WebP mit 800 × 640 Pixeln gespeichert.
+Icon-Atlas mit 20 Motiven, erzeugt mit dem eingebauten `image_gen`-Tool ohne Referenzbild. In Campus zeigen die Item-Zeilen inzwischen Vorschauen aus den Originaldateien von ATM10 8.6.
 
 ```text
 Use case: stylized-concept
