@@ -2,7 +2,7 @@
 -- survives both a change of cannon schematic and a computer restart.
 local function reserveKeeper(key, field, item, initialBatch, maxBatch)
 local job, nextCheck, batch = nil, 0, initialBatch
-return function(policy)
+return function(policy, reserve)
   local stamp = now()
   if stamp < nextCheck then return end
   nextCheck = stamp + 5
@@ -47,7 +47,9 @@ return function(policy)
   for _, it in pairs(items) do
     if it.name == item then stock=stock+assert(tonumber(it.count or it.amount),"ME-Menge fehlt") end
   end
-  if stock >= policy.target or (not record.refilling and stock >= policy.low) then
+  local target = policy.target + (reserve or 0)
+  local low = policy.low + (reserve or 0)
+  if stock >= target or (not record.refilling and stock >= low) then
     if record.refilling then record.refilling=false; saveState() end
     nextCheck = stamp + 15
     report("stocked")
@@ -68,7 +70,7 @@ return function(policy)
   end
   if not free then report("waiting_cpu","Keine freie ME-Crafting-CPU"); return end
   if record.pending and stamp - record.submitted < 300 then report("reconciling"); return end
-  local n = math.min(batch, policy.target - stock)
+  local n = math.min(batch, target - stock)
   record.pending, record.submitted, record.started, record.refilling = n, stamp, false, true
   saveState()
   local receipt, rejection = bridge.craftItem({name=item,count=n})

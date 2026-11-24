@@ -3,7 +3,7 @@
 -- through an Advanced Peripherals ME Bridge. Which blueprint and the options are set in the web app (tab "Kanonen");
 -- this computer only knows URL, a station token and its cannon name (install: wget run <url>/cc/install.lua).
 -- Strings shown on screen use Latin-1 escapes (\228 = ae-umlaut ...), the CC font is ISO-8859-1.
-local VERSION = "1.4.17"
+local VERSION = "1.4.18"
 
 settings.define("campus.url", { description = "Campus-URL", type = "string" })
 settings.define("campus.token", { description = "API-Token mit Scope Station", type = "string" })
@@ -247,7 +247,7 @@ end
 -- Each output has one elected requester across the Erebor stations. AP 0.8
 -- returns a job handle before checking its ingredients or actually starting.
 local projectJobs, projectRetry, projectBatch, projectReason = {}, {}, {}, {}
-local function projectOrder(it, s)
+local function projectOrder(it, s, deficit)
   local item, stamp = it.item, now()
   local job = projectJobs[item]
   if job then
@@ -282,7 +282,7 @@ local function projectOrder(it, s)
   end
   if not free then s.error = "Keine freie ME-Crafting-CPU"; projectRetry[item] = stamp + 5; return end
   if not alignmentReady(plan, planReceivedAt, now()) then return end
-  local n = math.min(it.orderBatch, projectBatch[item] or 1024, math.max(0, it.needed - s.inME))
+  local n = math.min(it.orderBatch, projectBatch[item] or 1024, deficit)
   if n <= 0 then return end
   local result, err = call(bridge.craftItem, {name=item, count=n})
   projectRetry[item] = stamp + 8
@@ -301,11 +301,14 @@ local function shortage(it, missing, have, err, stock)
   elseif err then
     s.error = errText(err)
   end
-  if inME < missing then
+  -- An order must cover both the protected ME stock and the outstanding chest demand.
+  local reserve = plan.options.meReserve or 0
+  if missing > math.max(0, inME - reserve) then
+    local deficit = math.max(0, it.needed - have + reserve - inME)
     s.craftable = isCraftable(it.item)
     if s.craftable then
       if plan.options.projectSupply then
-        projectOrder(it, s)
+        projectOrder(it, s, deficit)
         view.shortages[#view.shortages + 1] = s
         return
       end
@@ -315,7 +318,7 @@ local function shortage(it, missing, have, err, stock)
           and plan.alignment and plan.alignment.probeMode == "shared" and type(it.confirmedPlaced) == "number"
       local canOrder = stoneOrder and now() - stoneOrderAt > 20 or plan.options.autoCraft and now() - last > 60
       if not s.crafting and canOrder and alignmentReady(plan, planReceivedAt, now()) then
-        local amount = math.max(1, math.min(stoneOrder and 16384 or plan.options.craftBatch, it.needed - have - inME))
+        local amount = math.min(stoneOrder and 16384 or plan.options.craftBatch, deficit)
         local ok, cerr = call(bridge.craftItem, { name = it.item, count = amount })
         if stoneOrder then stoneOrderAt = now() end
         state.craftAt[it.item] = now()
@@ -664,19 +667,19 @@ local function tick()
 
   if NAME == "erebor-K02" and ok and plan and plan.powderReserve and now() - planReceivedAt < 120
       and os.getComputerID() == plan.powderReserve.computerId then
-    local success, why = pcall(maintainPowder, plan.powderReserve)
+    local success, why = pcall(maintainPowder, plan.powderReserve, plan.options.meReserve)
     if not success then view.powderReserve = {stage="retrying",message=tostring(why)} end
   else view.powderReserve = nil end
   if NAME == "erebor-K02" and ok and plan and plan.brickReserve and now() - planReceivedAt < 120
       and os.getComputerID() == plan.brickReserve.computerId then
-    local success, why = pcall(maintainBricks, plan.brickReserve)
+    local success, why = pcall(maintainBricks, plan.brickReserve, plan.options.meReserve)
     if not success then view.brickReserve = {stage="retrying",message=tostring(why)} end
   else view.brickReserve = nil end
   for field, maintain in pairs(surfaceReserves) do
     local policy = plan and plan[field]
     if NAME == "erebor-K02" and ok and policy and now() - planReceivedAt < 120
         and os.getComputerID() == policy.computerId then
-      local success, why = pcall(maintain, policy)
+      local success, why = pcall(maintain, policy, plan.options.meReserve)
       if not success then view[field] = {stage="retrying",message=tostring(why)} end
     else view[field] = nil end
   end

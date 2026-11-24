@@ -4,6 +4,32 @@ import unittest
 from lupa import LuaRuntime
 
 class FeederTests(unittest.TestCase):
+    def test_project_order_refills_birch_reserve_once_and_counts_chest_stock(self):
+        code=(Path(__file__).resolve().parents[1]/'public/cc/campus.lua').read_text()
+        helper=code[code.index("local projectJobs"):code.index("local function feed()")]
+        for stock, expected in [(6, 498), (500, 4), (502, 2), (504, 0)]:
+            with self.subTest(stock=stock):
+                lua=LuaRuntime()
+                lua.globals().stock=stock
+                amount=lua.execute("""
+                  local plan={options={meReserve=500,projectSupply=true}}
+                  local view={shortages={}}; local ordered=0
+                  local function now() return 1000 end
+                  local function isCraftable() return true end
+                  local function alignmentReady() return true end
+                  local function call(f,...) return f(...) end
+                  local bridge={getCraftingCPUs=function() return {{isBusy=false}} end,
+                    craftItem=function(f) ordered=ordered+f.count; return { isDone=function() return false end,
+                      isCanceled=function() return false end, hasErrorOccurred=function() return false end,
+                      isCalculationNotSuccessful=function() return false end, isCraftingStarted=function() return true end } end}
+                """+helper+"""
+                  local it={item="minecraft:birch_sapling",needed=7,orderBatch=507}
+                  shortage(it,4,3,"ME_RESERVE",stock)
+                  shortage(it,4,3,"ME_RESERVE",stock)
+                  return ordered
+                """)
+                self.assertEqual(amount,expected)
+
     def test_mixed_job_returns_surplus_stone_and_leaves_room_for_each_required_item(self):
         code=(Path(__file__).resolve().parents[1]/'public/cc/campus.lua').read_text()
         feed=code[code.index("local function feed()"):code.index("-- ---------- reporting")]

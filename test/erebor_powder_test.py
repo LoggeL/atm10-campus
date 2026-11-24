@@ -6,6 +6,23 @@ from lupa import LuaRuntime
 
 
 class PowderReserve(unittest.TestCase):
+    def test_spruce_reserve_counts_only_exportable_stock(self):
+        code = (Path(__file__).resolve().parents[1] / "public/cc/erebor-powder.lua").read_text(encoding="utf-8")
+        for stock, expected in [(38, 8), (500, 8), (503, 5), (508, 0)]:
+            with self.subTest(stock=stock):
+                lua = LuaRuntime()
+                lua.globals().stock = stock
+                amount = lua.execute("""
+                  state={}; view={}; ordered=0; function now() return 1000 end; function saveState() end
+                  bridge={getItems=function() return {{name="minecraft:spruce_sapling",count=stock}} end,
+                    getCraftingCPUs=function() return {{isBusy=false}} end,
+                    craftItem=function(f) ordered=f.count; return {} end}
+                """ + code + """
+                  surfaceReserves.spruceReserve({low=8,target=8},500)
+                  return ordered
+                """)
+                self.assertEqual(amount, expected)
+
     def test_moss_and_podzol_orders_are_independent_and_demand_limited(self):
         code = (Path(__file__).resolve().parents[1] / "public/cc/erebor-powder.lua").read_text(encoding="utf-8")
         lua = LuaRuntime()

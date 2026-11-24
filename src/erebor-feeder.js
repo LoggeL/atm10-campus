@@ -239,11 +239,12 @@ export function ereborFeeder(db,request,version,liveReport,savedMissingItems){
      }
      for(const it of items){
       if(managed.has(it.item))continue;
-      const shortage=reported.assignment===assignment&&reported.shortages?.find(s=>s.item===it.item&&s.craftable&&s.missing>s.inME);
+      const reserve=base.options.meReserve??CANNON_ME_RESERVE;
+      const shortage=reported.assignment===assignment&&reported.shortages?.find(s=>s.item===it.item&&s.craftable&&s.missing>Math.max(0,s.inME-reserve));
       const owner=craftOwners.get(it.item);
       if(shortage&&(!owner||owner.until<=Date.now()||owner.name===row.name)){
        craftOwners.set(it.item,{name:row.name,until:Date.now()+30000});
-       it.orderBatch=Math.min(2048,it.needed);
+       it.orderBatch=Math.min(2048,it.needed+Math.max(0,reserve-shortage.inME));
       }
      }
     }
