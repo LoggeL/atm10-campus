@@ -529,7 +529,9 @@ export function registerEreborQueue(app,campus){
    if(main?(!production.mode(v,r.site).enabled||choices.next(v,r.site)):!helpersOn)return false;
    return now-(refillChecks.get(r.site+r.slot)??0)>=120000;
   });
-  candidates.sort((a,b)=>(refillChecks.get(a.site+a.slot)??0)-(refillChecks.get(b.site+b.slot)??0)||
+  // Put a reserved plan back into its printer before scanning for unassigned work.
+  candidates.sort((a,b)=>Number(!!b.job)-Number(!!a.job)||
+   (refillChecks.get(a.site+a.slot)??0)-(refillChecks.get(b.site+b.slot)??0)||
    Number(b.slot==='A')-Number(a.slot==='A'));
   if(!candidates.length)return;
   const {site,slot}=candidates[0];
@@ -658,18 +660,18 @@ export function registerEreborQueue(app,campus){
   try{
    const archive=c.archive?JSON.parse(c.archive):null;
    let report=await liveReport(c.version);
+   await refillFinished(p,report);
    await startPreparedMain(c.version,report);
    await reconcileUrns(p,report);
    await finishRooms(p,report);
-   await refillFinished(p,report);
    for(const site of new Set([...active,...(c.enabled&&c.phase!=='finished'?sites:[])])){
     if(!current(c.version))return;
     if(report&&Date.now()-report.at>=15000){
      report=await liveReport(c.version);
+     await refillFinished(p,report);
      await startPreparedMain(c.version,report);
      if(report?.surfaceModeTracker===1)await helpers.startFueledExtras(p,report,()=>c.phase==='stone'&&helpers.isEnabled(c.version),read,()=>current(c.version));
      await finishRooms(p,report);
-     await refillFinished(p,report);
     }
     // V4 emits an empty row when the station chunk is asleep or the cannon is absent.
     // A missing row is inconclusive. Keep the native check in that case.
@@ -689,10 +691,10 @@ export function registerEreborQueue(app,campus){
     const report=await liveReport(c.version);
     await helpers.tick(p,report,()=>c.phase==='stone'&&helpers.isEnabled(c.version),read,renew,async()=>{
      const fresh=await liveReport(c.version);
+     await refillFinished(p,fresh);
      await startPreparedMain(c.version,fresh);
      await reconcileUrns(p,fresh);
      await finishRooms(p,fresh);
-     await refillFinished(p,fresh);
      return fresh;
     });
    }
