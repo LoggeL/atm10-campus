@@ -5,27 +5,50 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>ATM-Star-Checkliste | ATM10 Campus</title>
   <link rel="stylesheet" href="/assets/erebor-dashboard.css?v=20261121-aushub">
-  <link rel="stylesheet" href="/assets/atm-star.css?v=20261114-status-1">
+  <link rel="stylesheet" href="/assets/atm-star.css?v=20261114-status-1&amp;revision=design-1">
 </head>
 <body>
   <a href="#main" class="skip">Zum Inhalt</a>
   <!-- campus-navigation -->
   <main class="shell star-page" id="main">
-    <h1>ATM-Star-Checkliste</h1>
-    <p>Ziel für ATM10 8.6 sind zwei ATM Star Blocks aus insgesamt 18 ATM Stars. Ein Block wandelt die Patrick Bee um. Der zweite dient der Starry Bee als Futter.</p>
+    <header class="star-hero">
+      <img src="/assets/atm-star-altar.webp" alt="" width="1440" height="720" fetchpriority="high">
+      <div class="star-hero-copy">
+        <p class="star-game-version">ATM10 <span>8.6</span></p>
+        <h1>ATM-Star-Checkliste</h1>
+        <p>18 ATM Stars für zwei ATM Star Blocks. Einer wandelt die Patrick Bee um, der andere dient der Starry Bee als Futter.</p>
+      </div>
+    </header>
     <div class="star-sync">
       <p id="stock-status" role="status">ME-Bestand wird geladen …</p>
       <button type="button" id="refresh">ME-Meldung neu laden</button>
     </div>
     <p id="stock-error" role="alert" hidden></p>
     <dl class="star-metrics" id="metrics" hidden></dl>
-    <section aria-labelledby="parts-title">
-      <h2 id="parts-title">Zutaten für die ersten 18 ATM Stars</h2>
-      <p>Klapp ein Bauteil auf, um seine direkten Zutaten zu sehen. Fertige Teile im ME reduzieren den Bedarf. Geteilte Zutaten werden nur einmal zugeordnet. Häkchen folgen dem gemeldeten Bestand.</p>
-      <div id="parts"></div>
+    <section class="star-materials" aria-labelledby="parts-title">
+      <div class="star-list-heading">
+        <div>
+          <h2 id="parts-title">Materialliste</h2>
+          <p>Bauteile aufklappen, um ihre direkten Zutaten zu sehen.</p>
+        </div>
+        <div class="star-tools" id="list-tools" hidden>
+          <label class="star-search">
+            <span class="star-sr-only">Bauteil oder Zutat suchen</span>
+            <input type="search" id="search" placeholder="Bauteil oder Zutat suchen">
+          </label>
+          <label class="star-filter"><input type="checkbox" id="open-only"> Nur offene Bauteile</label>
+        </div>
+      </div>
+      <div class="star-ledger" id="ledger" hidden>
+        <div class="star-columns" aria-hidden="true">
+          <span>Bauteil</span><span>Bedarf</span><span>Im ME</span><span>Fehlt</span>
+        </div>
+        <div id="parts"></div>
+        <p id="empty" class="star-empty" role="status" hidden></p>
+      </div>
     </section>
-    <section class="star-automation" aria-labelledby="automation-title">
-      <h2 id="automation-title">Produktion mit der Starry Bee</h2>
+    <details class="star-automation">
+      <summary>Produktion mit der Starry Bee</summary>
       <ol>
         <li>Patrick Bee im Warm Ocean angeln. Einen ATM Star Block für die Umwandlung verwenden und den zweiten vor dem Advanced Beehive auf den Feeding Slab setzen.</li>
         <li>Starry Combs in der Powered Centrifuge verarbeiten und die ATM Star Shards zurück ins ME leiten.</li>
@@ -33,8 +56,8 @@
         <li>Automatic Hephaestus Forge, Runic Crucible, Runic Enchanter und Atomic Reconstructor für die Vorprodukte anbinden. Processing Patterns an die Item Input Hatch anschließen und das Ergebnis per ME Import Bus zurückführen.</li>
       </ol>
       <p><a href="https://github.com/AllTheMods/ATM-10/blob/8.6/kubejs/server_scripts/modpack/runic_multis/recipes/star_altar.js">Altar-Rezepte in ATM10 8.6</a> · <a href="https://github.com/AllTheMods/ATM-10/blob/8.6/config/ftbquests/quests/lang/en_us/chapters/achapter_2r_6the_atm_star.snbt">Creative-Questreihe</a></p>
-    </section>
+    </details>
   </main>
-  <script type="module" src="/assets/atm-star.js?v=20261114-status-1"></script>
+  <script type="module" src="/assets/atm-star.js?v=20261114-status-1&amp;revision=design-1"></script>
 </body>
 </html>

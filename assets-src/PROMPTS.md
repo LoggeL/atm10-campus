@@ -279,3 +279,17 @@ Constraints: no text, no lettering, no logos, no watermark, no branding, no reco
 ## Nachbearbeitung (erledigt)
 
 Die oben genannten technischen Abweichungen (Größe, Raster, Graustufen, Kanten, Schwarz bei Laub/Pflanzen) behebt `tools/build-textures.py` beim Erzeugen der Viewer-Assets: Verkleinern auf 64×64, Umwandeln in Graustufen, Überblenden der Kanten zu kachelbaren Texturen, Alpha-Schnitt für `leaves`/`plant`. Die Helligkeit normalisiert `public/viewer/atlas.js` im Browser. Die Originale hier bleiben unverändert.
+
+## `public/assets/atm-star-altar.webp`
+
+Titelmotiv der ATM-Star-Checkliste. Erzeugt mit dem eingebauten `image_gen`-Tool, ohne Referenzbild. Für Campus als WebP mit 1440 × 720 Pixeln gespeichert.
+
+```text
+Use case: stylized-concept
+Asset type: landscape banner artwork for the existing ATM10 Campus crafting checklist
+Scene: a dim slate-green workshop alcove, giving way to a nearly black left edge.
+Subject: an original suspended pale mint crystal star made of stepped, cubic prismatic segments, above a low obsidian pedestal in a block-built workshop.
+Style: cinematic 3D voxel render with tactile stone and crystal, soft teal bounce light and a trace of amber from the workshop. Aim for a refined in-world detail, with a strong recognizable silhouette.
+Composition: wide landscape crop. Keep the complete star prominent in the right-center with breathing room above and below. Put the pedestal in the lower-right. Keep the left third dark, quiet, and free of bright elements for blending into a page header. Simple depth and restrained particles.
+Constraints: no lettering, no logos, no watermark, no people, no UI, no screenshot or existing game sprite.
+```
