@@ -152,12 +152,28 @@
 .star-part:last-child:not([open]) > summary { border-radius: 0 0 12px 12px; }
 .star-part[open] > summary { background: #203028; }
 .star-part > summary:focus-visible { position: relative; z-index: 1; outline-offset: -2px; }
-.star-name { min-width: 0; display: flex; align-items: start; gap: 9px; }
+.star-name { min-width: 0; display: flex; align-items: center; gap: 11px; }
 .star-title { display: block; color: #f1f5ed; font-weight: 670; overflow-wrap: anywhere; }
 .star-note { display: block; margin-top: 3px; color: var(--muted); font-size: .78rem; overflow-wrap: anywhere; }
-.star-check { flex: 0 0 13px; height: 13px; margin-top: 4px; border: 1px solid #779288; border-radius: 4px; }
-.star-check[data-complete="true"] { position: relative; background: var(--star-accent); border-color: var(--star-accent); }
-.star-check[data-complete="true"]::after {
+.star-icon {
+  --icon-size: 42px;
+  position: relative;
+  flex: 0 0 var(--icon-size);
+  height: var(--icon-size);
+  border: 1px solid #395346;
+  border-radius: 8px;
+  background: #172820;
+}
+.star-sprite {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background-image: url('/assets/atm-star-item-icons.webp?v=20261114-status-1&revision=icons-1');
+  background-repeat: no-repeat;
+  background-size: 500% 400%;
+}
+.star-check { position: absolute; inset: auto -3px -3px auto; width: 14px; height: 14px; border: 1px solid #172820; border-radius: 50%; background: var(--star-accent); }
+.star-check::after {
   position: absolute;
   inset: 1px auto auto 3px;
   width: 3px;
@@ -180,6 +196,7 @@
 .star-ingredients:last-child { border-radius: 0 0 12px 12px; }
 .star-ingredients li + li:not([hidden]) { border-top: 1px solid #2a3932; }
 .star-ingredients .star-name { padding-left: 22px; }
+.star-ingredients .star-icon { --icon-size: 34px; border-radius: 6px; }
 .star-ingredients .star-title { font-size: .9rem; font-weight: 560; }
 .star-ingredients .star-value { font-size: .88rem; }
 .star-empty { margin: 0; padding: 20px; color: var(--muted); }
@@ -208,6 +225,8 @@
   .star-columns { display: none; }
   .star-row { grid-template-columns: repeat(3, minmax(0, 1fr)) 13px; padding: 11px 13px; gap: 4px 9px; }
   .star-name { grid-column: 1 / 4; }
+  .star-icon { --icon-size: 36px; }
+  .star-ingredients .star-icon { --icon-size: 30px; }
   .star-chevron { grid-column: 4; grid-row: 1; }
   .star-value { grid-row: 2; text-align: left; line-height: 1.3; }
   .star-value-label { position: static; display: block; width: auto; height: auto; margin: 0; clip-path: none; color: var(--muted); font-size: .72rem; }

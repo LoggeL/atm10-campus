@@ -28,11 +28,46 @@ function valueCell(label, text, className) {
   return cell;
 }
 
+// Positions in atm-star-item-icons.webp, five columns by four rows.
+const partIcons = new Map([
+  ['allthecompressed:nether_star_block_3x', 0],
+  ['allthemodium:unobtainium_allthemodium_alloy_block', 1],
+  ['allthemodium:unobtainium_vibranium_alloy_block', 2],
+  ['allthetweaks:oblivion_shard', 3],
+  ['mysticalagradditions:creative_essence', 4],
+  ['allthetweaks:nexium_emitter', 5],
+  ['allthetweaks:withers_compass', 6],
+  ['allthetweaks:improbable_probability_device', 7],
+  ['allthetweaks:dragon_soul', 8],
+  ['allthetweaks:philosophers_fuel', 9],
+  ['allthetweaks:pulsating_black_hole', 10],
+  ['allthetweaks:dimensional_seed', 11],
+  ['allthetweaks:patrick_star', 12],
+]);
+const ingredientIcons = [
+  [/nether_star_block/, 0], [/alloy|(?:allthemodium|unobtainium)_block/, 1],
+  [/fuel|coal|blaze_burner/, 9], [/singularity|antimatter|quantum_ring/, 10],
+  [/book|glyph|scroll/, 15], [/sapling|crystal_staff|comb/, 16],
+  [/mini_|portal|wormhole|teleposer/, 17], [/essence/, 4],
+  [/gem|crystal|diamond|emerald|stella|heart/, 19],
+  [/stone|brick|concrete|obsidian|netherrack/, 18],
+  [/terminal|generator|unit|motor|mechanical|furnace|machine|interface|builder|drill|casing|tank|cell|transmitter|coil|card/, 14],
+];
+
+function itemIcon(id, complete) {
+  const index = partIcons.get(id) ?? ingredientIcons.find(([pattern]) => pattern.test(id))?.[1] ?? 13;
+  const icon = element('span', undefined, 'star-icon');
+  icon.setAttribute('aria-hidden', 'true');
+  const sprite = element('span', undefined, 'star-sprite');
+  sprite.style.backgroundPosition = `${(index % 5) * 25}% ${Math.floor(index / 5) * 100 / 3}%`;
+  icon.append(sprite);
+  if (complete) icon.append(element('span', undefined, 'star-check'));
+  return icon;
+}
+
 function fillRow(container, row, ingredient, hasStock, goal) {
   const name = element('span', undefined, 'star-name');
-  const check = element('span', undefined, 'star-check');
-  check.setAttribute('aria-hidden', 'true');
-  check.dataset.complete = hasStock && row.missing === 0;
+  const icon = itemIcon(row.alternatives[0].id, hasStock && row.missing === 0);
   const copy = element('span');
   const title = element('span', row.alternatives.map(option => option.label).join(' oder '), 'star-title');
   title.title = row.alternatives.map(option => option.id).join(' | ');
@@ -44,7 +79,7 @@ function fillRow(container, row, ingredient, hasStock, goal) {
   }
   if (hasStock && ingredient && row.missing > 0 && allocated < inMe) facts.push(`${format(allocated)} hier eingeplant`);
   copy.append(title, element('span', facts.join(' · '), 'star-note'));
-  name.append(check, copy);
+  name.append(icon, copy);
   const missing = !hasStock ? null : row.missing === 0 ? 'Gedeckt' : format(row.missing);
   container.append(name, valueCell('Bedarf', format(row.needed)), valueCell('Im ME', hasStock ? format(inMe) : null),
     valueCell('Fehlt', missing, row.missing === 0 ? 'star-ready' : 'star-needed'));

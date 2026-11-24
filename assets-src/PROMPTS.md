@@ -293,3 +293,19 @@ Style: cinematic 3D voxel render with tactile stone and crystal, soft teal bounc
 Composition: wide landscape crop. Keep the complete star prominent in the right-center with breathing room above and below. Put the pedestal in the lower-right. Keep the left third dark, quiet, and free of bright elements for blending into a page header. Simple depth and restrained particles.
 Constraints: no lettering, no logos, no watermark, no people, no UI, no screenshot or existing game sprite.
 ```
+
+## `public/assets/atm-star-item-icons.webp`
+
+Icon-Atlas mit 20 Motiven für die ATM-Star-Checkliste. Erzeugt mit dem eingebauten `image_gen`-Tool, ohne Referenzbild. Für Campus als WebP mit 800 × 640 Pixeln gespeichert.
+
+```text
+Use case: stylized-concept
+Asset type: production sprite atlas of 20 original item icons for a dark voxel crafting checklist. Export a landscape canvas, exactly FIVE equal columns by FOUR equal rows, all 20 cells filled. Every cell is square, no margins or gutters between cells, invisible grid. Align all centers to the uniform grid. Make each icon occupy only the central 64 percent of its cell, with generous untouched padding. The atlas will be cut up mechanically into equal cells.
+Style: cohesive rich handcrafted pixel art, sharp voxel edges, restrained shading and consistent top-left light. Single centered isolated symbol per cell. Bright readable silhouette on the same completely flat opaque deep green-charcoal #172820 everywhere. Strong silhouettes that read down to 28 pixels. No cast shadows outside the objects, no circles or borders around cells.
+Exact contents in reading order, left to right:
+Row 1: dark green stone cube with a tiny light star inset; stacked mint-and-steel alloy ingots; amethyst and teal glowing metal block; jagged slate-violet crystal shard; luminous lime essence droplet.
+Row 2: bronze and teal emitter module; round compass with a ruby needle; brass mechanical probability die; small emerald dragon-shaped wisp with a luminous eye; red-orange burning fuel crystal.
+Row 3: black orb encircled by a violet accretion ring; luminous blue-green seed with a thin orbit; bold salmon five-point starfish crystal; rough silvery metal fragment; copper cogwheel.
+Row 4: open indigo enchanted book; small green leaf sprig; glowing blue rectangular stone portal; dark slate stone cube; faceted pale cyan gemstone.
+Constraints: five columns and four rows, exact reading order, all 20 icons should remain separate. Original design, no existing game sprites, no lettering, no numbers, no labels, no gridlines, no watermark.
+```
