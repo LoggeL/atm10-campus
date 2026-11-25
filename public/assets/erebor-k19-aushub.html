@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="de"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Eingangshalle · K19 Aushub</title><link rel="stylesheet" href="/assets/app.css">
+<main><h1>Eingangshalle · Aushub bei K19</h1>
+<p>Die fünf Teilpläne sparen die Station, ihren Sockel und die Technik aus. Die freie Kanone übernimmt ihren Abschnitt nach der Welt- und Reichweitenprüfung.</p>
+<button id="check">Welt und Teilpläne prüfen</button> <button id="save" disabled>Teilpläne veröffentlichen und fünf Kanonen beauftragen</button>
+<pre id="result" role="status"></pre><a href="/erebor/dashboard">Baufortschritt ansehen</a></main>
+<script type="module">
+import {api} from '/assets/campus-client.js';
+const check=document.querySelector('#check'),save=document.querySelector('#save'),result=document.querySelector('#result');
+let receipt;
+async function submit(dryRun){
+ check.disabled=save.disabled=true;
+ result.textContent=dryRun?'Prüfung der vier Originaldateien und der gespeicherten Welt läuft …':'Teilpläne werden veröffentlicht …';
+ try{
+  const r=await api('/api/projects/erebor/architecture/prepare',{method:'POST',body:{package:'E05_902',baseVersion:12,dryRun,...(!dryRun&&{preview:receipt})}});
+  const p=r.report??r.package;
+  receipt=r.preview;
+  result.textContent=[r.saved||r.unchanged?'Aufteilung veröffentlicht. Die Campus-Baufolge übernimmt die Zuweisung.':'Vorschau geprüft.',...p.files.map(f=>'K19'+f.slot+' · '+f.blocks+' Steinblöcke · '+f.origin.join(' / ')),p.protectedCells+' ausgesparte Zielzellen'].join('\n');
+  save.disabled=!receipt;
+ }catch(e){receipt=null;result.textContent=e.message;}
+ finally{check.disabled=false;}
+}
+check.onclick=()=>submit(true);save.onclick=()=>submit(false);
+</script></html>

@@ -1,6 +1,7 @@
 import {isDeepStrictEqual} from 'node:util';
 import {DESIGN_REVISION} from './erebor-design.js';
 import {tx} from './db.js';
+import {hallPackage,hallParents} from './erebor-hall-split.js';
 
 const phaseOrder = {stone: 0, clear: 1, build: 2};
 
@@ -27,13 +28,16 @@ export function productionStore(db) {
     if(architectureIndex?.version===version && Date.now()-architectureIndex.at<10000)return architectureIndex;
     const bySite=new Map();
     const rows=db.prepare("SELECT package_id,report_json FROM project_architecture_packages WHERE project_id='erebor' AND base_version=? AND revision=? ORDER BY package_id");
+    let split=false;
     for(const pkg of rows.iterate(version,DESIGN_REVISION)){
       const report=JSON.parse(pkg.report_json);
+      if(pkg.package_id===hallPackage)split=true;
       for(const f of report.files){
         if(!bySite.has(f.cannon))bySite.set(f.cannon,[]);
-        bySite.get(f.cannon).push({name:f.fileName.slice(0,-4),sha256:f.sha256,stage:f.kind,group:f.group,finishing:!!report.finishing,origin:f.origin,size:f.size,protectedCells:f.protectedCells,unknownCells:f.unknownCells,clearOmitted:f.clearOmitted,blocks:f.blocks,y:f.origin[1],sourceVersion:version,revision:DESIGN_REVISION,part:pkg.package_id});
+        bySite.get(f.cannon).push({name:f.fileName.slice(0,-4),sha256:f.sha256,stage:f.kind,group:f.group,finishing:!!report.finishing,origin:f.origin,size:f.size,protectedCells:f.protectedCells,unknownCells:f.unknownCells,clearOmitted:f.clearOmitted,blocks:f.blocks,y:f.origin[1],sourceVersion:version,revision:DESIGN_REVISION,part:pkg.package_id,...(pkg.package_id===hallPackage&&{slot:f.slot,parent:f.parent})});
       }
     }
+    if(split)bySite.set('K19',bySite.get('K19').filter(f=>!hallParents.includes(f.name)));
     for(const files of bySite.values())files.sort((a,b)=>phaseOrder[a.stage]-phaseOrder[b.stage] || a.y-b.y || a.name.localeCompare(b.name));
     architectureIndex={version,at:Date.now(),bySite};
     return architectureIndex;
@@ -115,6 +119,7 @@ export function productionStore(db) {
   migrate();
   return {
     catalog, finished, architecture:v=>architectureBySite(v).bySite,
+    invalidate(){architectureIndex=null;cache.clear();},
     ordered,
     done:(v,site,name)=>!!db.prepare('SELECT 1 FROM erebor_finished_plans WHERE version=? AND site=? AND name=?').get(v,site,name),
     finish(v,site,name,at){if(name)finish.run(v,site,name,at);db.prepare('DELETE FROM erebor_priority WHERE version=? AND site=? AND name=?').run(v,site,name??'');},

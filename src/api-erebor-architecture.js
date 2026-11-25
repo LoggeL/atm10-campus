@@ -8,6 +8,7 @@ import {sameArchitectureOutput} from './erebor-export.js';
 import {DESIGN_REVISION} from './erebor-design.js';
 import {ereborViewTarget} from './erebor-view-target.js';
 import {sendPackagePreview} from './preview/service.js';
+import {hallPackage,hallParents} from './erebor-hall-split.js';
 
 export function registerEreborArchitectureRoutes(app,campus,blueprintPreviews){const db=campus.db,previews=new Map(),manifests=new Map();let busy=false;
  db.exec(`CREATE TABLE IF NOT EXISTS project_architecture_packages(project_id TEXT NOT NULL REFERENCES build_projects(id),base_version INTEGER NOT NULL,revision INTEGER NOT NULL,package_id TEXT NOT NULL,sha256 TEXT NOT NULL,zip BLOB NOT NULL,report_json TEXT NOT NULL,saved_at TEXT NOT NULL,user_id INTEGER REFERENCES users(id),PRIMARY KEY(project_id,base_version,revision,package_id))`);
@@ -20,12 +21,26 @@ export function registerEreborArchitectureRoutes(app,campus,blueprintPreviews){c
  app.get('/api/projects/:id/architecture/preview',async(req,reply)=>{const p=project(req);if(!ereborViewTarget(p.plan,req.query.zone))throw new HttpError(400,'Gültiger Bauteil erforderlich');return reply.header('Cache-Control','private, no-store').send({baseVersion:p.version,...await run({project:p,preview:req.query.zone,cut:req.query.cut==='1',navigation:req.query.navigation==='1'})});});
  app.get('/api/projects/:id/architecture',async(req,reply)=>{const p=project(req),rows=db.prepare('SELECT report_json,saved_at,sha256 FROM project_architecture_packages WHERE project_id=? AND base_version=? AND revision=? ORDER BY package_id').all(p.id,p.version,DESIGN_REVISION);return reply.header('Cache-Control','no-store').send({project:p.id,baseVersion:p.version,revision:DESIGN_REVISION,packages:rows.map(summary)});});
  app.post('/api/projects/:id/architecture/prepare',async req=>{const actor=requireActor(req,'write'),p=project(req),b=req.body;if(!b||b.baseVersion!==p.version)throw new HttpError(409,'Aktuelle baseVersion verwenden.');if(typeof b.dryRun!=='boolean'||!/^([ES]\d{1,2}[AB]?)_\d{3}$/.test(b.package||''))throw new HttpError(400,'dryRun und gültige Paketkennung erforderlich.');const exists=row(p,b.package);
+  const split=b.package===hallPackage;
+  const guard=()=>{if(split){requireActor(req,'admin');if(p.version!==12||DESIGN_REVISION!==5)throw new HttpError(409,'Standort oder Entwurf geändert.');}};
+  guard();
+  const prepare=()=>{
+   if(!split)return run({project:p,package:b.package,worldDir:campus.config.worldSources.live});
+   campus.checkHallSplit(p.version);
+   const hallSources=hallParents.map(id=>{
+    const pkg=row(p,id.includes('_Y64_')?'E05_001':'E05_003');
+    const f=pkg&&JSON.parse(pkg.report_json).files.find(f=>f.id===id);
+    if(!f)throw new HttpError(409,'Originalplan fehlt: '+id);
+    return {f,bytes:storedZipEntry(pkg.zip,f.fileName)};
+   });
+   return run({project:p,hallSources,worldDir:campus.config.worldSources.live});
+  };
   const convert=b.treeMode==='saplings'&&b.package==='E01_901';
   if(b.treeMode!==undefined&&!convert)throw new HttpError(400,'Baummodus ist nur für die Hanggruppen verfügbar.');
   if(convert&&(!exists||b.previousSha!==exists.sha256))throw new HttpError(409,'Aktuellen Stand der Hanggruppen abrufen.');
   if(exists&&(!convert||JSON.parse(exists.report_json).materials['minecraft:spruce_sapling']))return{unchanged:true,package:summary(exists),worldPlacement:false};
   for(const [k,v]of previews)if(v.expires<Date.now())previews.delete(k);
-  if(b.dryRun){if(!campus.config.worldSources.live)throw new HttpError(503,'Gespeicherte Welt fehlt');const out=await run({project:p,package:b.package,worldDir:campus.config.worldSources.live});if(project(req).version!==p.version)throw new HttpError(409,'Projekt während Prüfung geändert');const bytes=Buffer.from(out.bytes),sha256=createHash('sha256').update(bytes).digest('hex'),preview=randomUUID();previews.clear();previews.set(preview,{project:p.id,version:p.version,package:b.package,user:actor.user.id,previousSha:exists?.sha256,bytes,sha256,report:out.report,expires:Date.now()+300000});return{dryRun:true,preview,sha256,report:out.report,worldPlacement:false};}
+  if(b.dryRun){if(!campus.config.worldSources.live)throw new HttpError(503,'Gespeicherte Welt fehlt');const out=await prepare();if(project(req).version!==p.version)throw new HttpError(409,'Projekt während Prüfung geändert');const bytes=Buffer.from(out.bytes),sha256=createHash('sha256').update(bytes).digest('hex'),preview=randomUUID();previews.clear();previews.set(preview,{project:p.id,version:p.version,package:b.package,user:actor.user.id,previousSha:exists?.sha256,bytes,sha256,report:out.report,expires:Date.now()+300000});return{dryRun:true,preview,sha256,report:out.report,worldPlacement:false};}
   const v=previews.get(b.preview);if(!v||v.project!==p.id||v.version!==p.version||v.package!==b.package||v.user!==actor.user.id)throw new HttpError(409,'Erst dryRun durchführen.');const worldDir=campus.config.worldSources.live;
   const refresh=v.report.sourceRegions.some(r=>{
    const stamp=regionMtime(worldDir,...r.region);
@@ -34,15 +49,16 @@ export function registerEreborArchitectureRoutes(app,campus,blueprintPreviews){c
   if(refresh){
    // Repeat protection, terrain and chunk-coverage checks from fresh region
    // buffers. Never publish a preview if any resulting NBT differs.
-   const current=await run({project:p,package:b.package,worldDir});
+   const current=await prepare();
    if(!sameArchitectureOutput(v.report,current.report))throw new HttpError(409,'Bauzellen oder Schutzbereich seit dryRun geändert; erneut prüfen.');
   }
   return tx(db,()=>{if(project(req).version!==p.version||row(p,b.package)?.sha256!==v.previousSha)throw new HttpError(409,'Projekt oder Paket inzwischen geändert');const at=new Date().toISOString();
+   if(split)campus.checkHallSplit(p.version);
    if(convert){
     if(v.previousSha!==b.previousSha||v.report.clearBlocks||v.report.unknownCells||v.report.protectedCells)throw new HttpError(409,'Stand oder Bauzellen der Hanggruppen prüfen.');
     db.prepare('UPDATE project_architecture_packages SET sha256=?,zip=?,report_json=?,saved_at=?,user_id=? WHERE project_id=? AND base_version=? AND revision=? AND package_id=? AND sha256=?').run(v.sha256,v.bytes,JSON.stringify(v.report),at,actor.user.id,p.id,p.version,DESIGN_REVISION,b.package,b.previousSha);
    }else db.prepare('INSERT INTO project_architecture_packages VALUES(?,?,?,?,?,?,?,?,?)').run(p.id,p.version,DESIGN_REVISION,b.package,v.sha256,v.bytes,JSON.stringify(v.report),at,actor.user.id);
-   logActivity(db,actor,'project.architecture.prepare',p.id,{baseVersion:p.version,revision:DESIGN_REVISION,package:b.package,files:v.report.files.length,blocks:v.report.blocks});previews.delete(b.preview);return{saved:true,package:summary(row(p,b.package)),worldPlacement:false};});
+   logActivity(db,actor,'project.architecture.prepare',p.id,{baseVersion:p.version,revision:DESIGN_REVISION,package:b.package,files:v.report.files.length,blocks:v.report.blocks});previews.delete(b.preview);if(split)campus.hallSplitPublished();return{saved:true,package:summary(row(p,b.package)),worldPlacement:false};});
  });
  const downloadRow=req=>{const p=project(req),revision=Number(req.query.revision),version=Number(req.query.version);if(!Number.isSafeInteger(revision)||!Number.isSafeInteger(version))throw new HttpError(400,'version und revision fehlen');const r=row(p,req.params.package,revision,version);if(!r)throw new HttpError(404,'Architekturpaket nicht veröffentlicht');return r;};
  app.get('/api/projects/:id/architecture/:package/:file/preview.png',async(req,reply)=>{

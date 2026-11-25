@@ -8,7 +8,7 @@ export const interiorGroup=id=>/^(?:E(?:0[5-9]|1[0-46-9]|21[AB]|3[0-9])|S[1-4])$
 // Each architecture file occupies one aligned 32³ tile. Excavations on other
 // levels can proceed independently. Build the structure from its lowest open
 // level, after every excavation in that tile has finished.
-export function interiorFrontier(open,taken,allArchitecture=false){
+export function interiorFrontier(open,taken,allArchitecture=false,slot='A'){
  const columns=new Map(),candidates=[];
  for(const entry of open){
   if(!(interiorGroup(entry.group)||allArchitecture&&['build','clear'].includes(entry.stage))||entry.origin?.length!==3||entry.size?.length!==3||
@@ -22,13 +22,21 @@ export function interiorFrontier(open,taken,allArchitecture=false){
  for(const levels of columns.values()){
   const lowest=Math.min(...levels.keys());
   for(const [y,entries] of levels){
+   const split=entries.filter(e=>e.parent&&e.slot&&e.stage==='clear');
+   if(split.length){
+    if(!entries.some(e=>taken.has(e.name)&&!split.includes(e))){
+     const part=split.find(e=>e.slot===slot&&!taken.has(e.name));
+     if(part)candidates.unshift(part);
+    }
+    continue;
+   }
    if(entries.some(e=>taken.has(e.name)))continue;
    const base=entries.filter(e=>!e.finishing),phase=base.length?base:entries;
    const first=phase.find(e=>e.stage==='clear')??(y===lowest&&phase.find(e=>e.stage==='build'));
    if(first)candidates.push(first);
   }
  }
- return candidates.sort((a,b)=>a.origin[1]-b.origin[1]);
+ return candidates.sort((a,b)=>Number(!!b.slot)-Number(!!a.slot)||a.origin[1]-b.origin[1]);
 }
 export function interiorColumns(origin,size,base){
  const out=[];
