@@ -1,17 +1,17 @@
-import {setupAccountTools} from './campus-account.js?v=20261114-status-1';
-import {fleetEquipment} from './fleet-equipment.js?v=20261114-status-1';
-import {api} from './campus-client.js?v=20261114-status-1';
-import {setupEreborQueue} from './erebor-queue.js?v=20261114-status-1&revision=massif-remaining-1';
-import { createProjectBlueprints } from './project-blueprints.js?v=20261121-landschaft';
-import { createCannonSites } from './cannon-sites.js?v=20261114-status-1&fleet=20261110';
-import { esc, fmt } from './format.js?v=20261114-status-1';
-import { updateCannonPicker } from './cannon-picker.js?v=20261114-status-1';
-import { createCannonPickerDialog } from './cannon-picker-dialog.js?v=20261114-status-1';
-import { renderCannon, cannonSettingsPayload, cannonStartState, updateCannonLive } from './cannon-ui.js?v=20261114-status-1';
-import {renderFleetIssues} from './connection-status.js?v=20261114-status-1';
-import { coordinateFields, placementCard, placementValues, coordinateListText } from './placement.js?v=20261114-status-1';
-import { blueprintPreview, installPreviewFallbacks } from './blueprint-preview.js?v=20261114-status-1';
-import { connectPolling, createRefreshQueue } from './live-updates.js?v=20261114-status-1';
+import {setupAccountTools} from './campus-account.js?v=20261125-overhaul-1';
+import {fleetEquipment} from './fleet-equipment.js?v=20261125-overhaul-1';
+import {api} from './campus-client.js?v=20261125-overhaul-1';
+import {setupEreborQueue} from './erebor-queue.js?v=20261125-overhaul-1';
+import { createProjectBlueprints } from './project-blueprints.js?v=20261125-overhaul-1';
+import { createCannonSites } from './cannon-sites.js?v=20261125-overhaul-1';
+import { esc, fmt } from './format.js?v=20261125-overhaul-1';
+import { updateCannonPicker } from './cannon-picker.js?v=20261125-overhaul-1';
+import { createCannonPickerDialog } from './cannon-picker-dialog.js?v=20261125-overhaul-1';
+import { renderCannon, cannonSettingsPayload, cannonStartState, updateCannonLive } from './cannon-ui.js?v=20261125-overhaul-1';
+import {renderFleetIssues} from './connection-status.js?v=20261125-overhaul-1';
+import { coordinateFields, placementCard, placementValues, coordinateListText } from './placement.js?v=20261125-overhaul-1';
+import { blueprintPreview, installPreviewFallbacks } from './blueprint-preview.js?v=20261125-overhaul-1';
+import { connectPolling, createRefreshQueue } from './live-updates.js?v=20261125-overhaul-1';
 installPreviewFallbacks();
 const $ = id => document.getElementById(id);
 const when = t => t ? new Date(t).toLocaleString('de-DE', { dateStyle: 'short', timeStyle: 'short' }) : '–';
@@ -39,13 +39,93 @@ let blueprintProject=new URL(location.href).searchParams.get('project')==='campu
 const ereborQueue=setupEreborQueue({api,admin:()=>me?.user?.role==='admin',active:()=>blueprintProject==='erebor'&&['overview','coordinates'].includes(activeTab),notify:toast,onStatus:()=>ereborBlueprints.refreshQueue(),onSite:()=>ereborBlueprints.changeSite()});
 const ereborBlueprints=createProjectBlueprints({api,isSelected:()=>blueprintProject==='erebor',closeDrawer,getSite:()=>ereborQueue.site(),getQueue:ereborQueue.queue,getView:ereborQueue.view,getStation:ereborQueue.station,promote:ereborQueue.promote,admin:()=>me?.user?.role==='admin',loadPlan:(b,v)=>ereborQueue.loadPlan(b,v),notify:toast,loadedStatus:(f,h)=>ereborQueue.loadedStatus(f,h)});
 const cannonSites=createCannonSites({api,element:$('cannonSites'),getProject:()=>blueprintProject,isActive:()=>activeTab==='cannon-coordinates',notify:toast});
+const WORKSPACE_META = {
+  overview: {
+    group: 'orders',
+    title: 'Bauaufträge',
+    docTitle: 'Bauaufträge',
+    sub: project => project === 'erebor'
+      ? 'Baufolge, Schematics und Sonderpakete der Erebor-Stationen.'
+      : 'Baupläne, Fortschritt und Konfliktprüfung gegen den Live-Bestand.',
+  },
+  coordinates: {
+    group: 'orders',
+    title: 'Bauaufträge',
+    docTitle: 'Koordinaten',
+    sub: () => 'Bauplan-Anker in der Welt · Drehung 0°, keine Spiegelung.',
+  },
+  cannons: {
+    group: 'tech',
+    title: 'Stationstechnik',
+    docTitle: 'Stationstechnik',
+    sub: project => project === 'erebor'
+      ? 'Flottenbetrieb, Materialversorgung und einzelne Stationscomputer.'
+      : 'Verbundene Schematicannons, Materialversorgung und Live-Diagnose.',
+  },
+  'cannon-coordinates': {
+    group: 'tech',
+    title: 'Stationstechnik',
+    docTitle: 'Aufstellkoordinaten',
+    sub: () => 'Geplante Kanonenplätze, Fundamenthöhen und gemeinsamer Aufbaustatus.',
+  },
+  snapshots: {
+    group: 'data',
+    title: 'Daten & Protokolle',
+    docTitle: 'Weltaufnahmen',
+    sub: () => 'Automatisch erfasste Weltstände aus gespeicherten Region-Dateien.',
+  },
+  activity: {
+    group: 'data',
+    title: 'Daten & Protokolle',
+    docTitle: 'Aktivität',
+    sub: () => 'Änderungen an Bauplänen, Aufträgen und Zugängen.',
+  },
+  agent: {
+    group: 'system',
+    title: 'System & Verwaltung',
+    docTitle: 'Agent-Zugang',
+    sub: () => 'Tokens für Agents, Skripte und CC:Tweaked-Stationscomputer.',
+  },
+  admin: {
+    group: 'system',
+    title: 'System & Verwaltung',
+    docTitle: 'Verwaltung',
+    sub: () => 'Campus-Import, Einladungen und Benutzerkonten verwalten.',
+  },
+};
+
+function updateWorkspaceChrome(tab) {
+  const meta = WORKSPACE_META[tab] || WORKSPACE_META.overview;
+  const projectGroup = meta.group === 'orders' || meta.group === 'tech';
+  const eyebrow = projectGroup
+    ? (blueprintProject === 'erebor' ? 'Bauprojekt Erebor' : campusArchived ? 'Campus (Archiv)' : 'Bauprojekt Campus')
+    : meta.group === 'data'
+      ? 'Campus-Betrieb'
+      : 'Zugang & Administration';
+  if ($('workspaceEyebrow')) $('workspaceEyebrow').textContent = eyebrow;
+  if ($('workspaceTitle')) $('workspaceTitle').textContent = meta.title;
+  if ($('workspaceSub')) $('workspaceSub').textContent = meta.sub(blueprintProject);
+  document.title = `${meta.docTitle} · ATM10 Campus`;
+  $('blueprintProjectBar').classList.toggle('hide', !projectGroup);
+  const admin = me?.user?.role === 'admin';
+  document.querySelectorAll('#workspaceSubnav a[data-subtab]').forEach(link => {
+    const visible = link.dataset.group === meta.group && (!link.hasAttribute('data-admin-only') || admin);
+    link.hidden = !visible;
+    const active = link.dataset.subtab === tab;
+    link.classList.toggle('is-active', active);
+    if (active) link.setAttribute('aria-current', 'page');
+    else link.removeAttribute('aria-current');
+  });
+}
+
 function configureBlueprintProject(){document.getElementById('ereborMode')?.classList.toggle('hide',blueprintProject!=='erebor');
   const erebor=blueprintProject==='erebor';
   $('blueprintProject').value=blueprintProject;
   $('blueprintProjectLink').href='/projects?id='+blueprintProject;
-  $('viewerLink').href=erebor?'/viewer?project=erebor':'/viewer';
+  if($('viewerLink'))$('viewerLink').href=erebor?'/viewer?project=erebor':'/viewer';
   for(const id of ['filter','blueprintDownloads','overlapPanel','newBp'])$(id).classList.toggle('hide',erebor);
   for(const id of ['stoneBlueprintCount','ereborQueue','esgarothCatalog'])$(id).classList.toggle('hide',!erebor);
+  updateWorkspaceChrome(activeTab);
 }
 $('blueprintProject').addEventListener('change',guard(async()=>{
   if($('blueprintProject').value==='campus'&&campusArchived){location.assign('/projects?id=campus');return;}
@@ -64,17 +144,14 @@ configureBlueprintProject();
 function showTab(tab) {
   if (tab === 'admin' && me?.user?.role !== 'admin') tab = 'overview';
   activeTab = tab;
-  const coordinates=$('orderCoordinates');
-  coordinates.hidden=!['overview','coordinates'].includes(tab);
-  coordinates.href=tab==='coordinates'?'#overview':'#coordinates';
-  coordinates.textContent=tab==='coordinates'?'Zur Baufolge':'Bauplan-Koordinaten';
-  $('blueprintProjectBar').classList.toggle('hide',!['overview','coordinates','cannons','cannon-coordinates'].includes(tab));
+  updateWorkspaceChrome(tab);
   document.querySelectorAll('.campus-nav a').forEach(link=>{
     const parent={coordinates:'overview','cannon-coordinates':'cannons'};
     if(link.dataset.tab===(parent[tab]||tab))link.setAttribute('aria-current','page');
     else link.removeAttribute('aria-current');
   });
-  document.querySelector('.campus-more').open=false;
+  const more = document.querySelector('.campus-more');
+  if (more && !document.querySelector('.campus-head.is-open')) more.open = false;
   document.querySelectorAll('[data-pane]').forEach(p => p.classList.toggle('hide', p.dataset.pane !== tab));
   document.querySelectorAll('.menu[open]').forEach(d => d.open = false);
   polling?.refreshNow('navigation');
@@ -588,12 +665,14 @@ async function refreshVisible() {
 }
 function renderPollingState({phase,remainingSeconds,progress,lastUpdatedAt,error}) {
   const loading=phase==='refreshing';
-  $('refreshLabel').textContent=loading?'Wird aktualisiert …':phase==='paused'?'Aktualisierung pausiert':phase==='deferred'?`Bearbeitung offen · Aktualisierung in ${remainingSeconds} s`:phase==='error'?`Fehlgeschlagen · neuer Versuch in ${remainingSeconds} s`:`Aktualisierung in ${remainingSeconds} s`;
+  $('refreshLabel').textContent=loading?'Wird aktualisiert …':phase==='paused'?'Aktualisierung pausiert':phase==='deferred'?`Bearbeitung offen · ${remainingSeconds} s`:phase==='error'?`Fehler · neuer Versuch in ${remainingSeconds} s`:`Live · ${remainingSeconds} s`;
   const last=lastUpdatedAt?`Zuletzt ${new Date(lastUpdatedAt).toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit',second:'2-digit'})}`:'Noch nicht aktualisiert';
   const detail=error?`${error} · ${last}`:last;
   if($('refreshLast').textContent!==detail)$('refreshLast').textContent=detail;
-  $('refreshStatus').classList.toggle('error',phase==='error');
-  $('refreshStatus').setAttribute('aria-busy',String(loading));
+  const pill=$('refreshStatus');
+  pill.dataset.state=loading?'loading':phase==='error'?'error':phase==='paused'||phase==='deferred'?'stale':lastUpdatedAt?'current':'idle';
+  pill.classList.toggle('error',phase==='error');
+  pill.setAttribute('aria-busy',String(loading));
   $('refreshNow').disabled=loading;
   if(loading)$('refreshProgress').removeAttribute('value');else $('refreshProgress').value=progress;
 }
@@ -622,6 +701,6 @@ window.addEventListener('hashchange', () => { if (me) routeFromHash(); });
     configureAccount();
     polling=connectPolling({refresh:refreshVisible,onState:renderPollingState,immediate:false});
     routeFromHash();
-    if (!['#overview','#coordinates'].includes(location.hash)) $('liveLine').textContent='Gespeicherter Weltbestand im Reiter Live-Bestand.';
+    if (!['#overview','#coordinates'].includes(location.hash)) $('liveLine').textContent='Gespeicherter Weltbestand unter Weltaufnahmen.';
   } catch (e) { toast(e.message, true); }
 })();

@@ -1,8 +1,53 @@
-<!doctype html><html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Minecraft-Blockvorschau · Erebor</title>
-<link rel="stylesheet" href="/assets/app.css?v=20261114-status-1">
-<style>html,body{height:100%;overflow:hidden}body{display:flex;flex-direction:column}header{display:flex;align-items:center;gap:16px;flex-wrap:wrap;padding:12px 18px;background:#16212c;border-bottom:1px solid #334450}header strong{font-size:17px}header .actions{margin-left:auto;display:flex;gap:7px;flex-wrap:wrap}#stage{flex:1;min-height:0;position:relative;background:#9bc0dc}canvas{display:block;width:100%;height:100%}#status{position:absolute;top:15px;left:20px;background:#0e1722dc;padding:12px 16px;border-radius:8px;max-width:500px}footer{padding:9px 18px;background:#16212c;font-size:12px;display:flex;gap:14px;justify-content:space-between;flex-wrap:wrap;color:#bfccd4}#detail{color:#93b9cd}button{font-size:12px}@media(max-width:800px){header .actions{margin-left:0}header{gap:8px}header strong{font-size:14px}footer{font-size:10px}}</style>
-<script type="importmap">{"imports":{"three":"/vendor/three/build/three.module.js","three/addons/":"/vendor/three/examples/jsm/"}}</script></head>
-<body><header><a id="back" href="/projects?id=erebor">← Erebor</a><strong>Minecraft-Blockvorschau</strong><div class="actions"><button id="front">Frontal</button><button id="overview">Schrägansicht</button><button id="logge">LoggeL</button><button id="jonny">KGZJonny</button><button id="save">Bild speichern</button></div></header>
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#0c1311">
+<title>Minecraft-Blockvorschau · ATM10 Campus</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><rect width='16' height='16' rx='4' fill='%230c1311'/><rect x='2.5' y='2.5' width='11' height='11' rx='2.5' fill='%237ee0a8'/><rect x='5.5' y='5.5' width='5' height='5' rx='1' fill='%23091d14'/></svg>">
+<link rel="stylesheet" href="/assets/campus-tokens.css?v=20261125-overhaul-1">
+<link rel="stylesheet" href="/assets/app.css?v=20261125-overhaul-1">
+<style>
+html,body{height:100%;overflow:hidden}
+body{display:flex;flex-direction:column;background:var(--bg);color:var(--text)}
+header{display:flex;align-items:center;gap:12px;flex-wrap:wrap;min-height:var(--header-h);padding:10px 18px;background:var(--header-bg);border-bottom:1px solid var(--border)}
+.brand{display:inline-flex;align-items:center;gap:9px;color:var(--text);font-weight:720;font-size:15px;text-decoration:none}
+.brand:hover{color:var(--accent-strong);text-decoration:none}
+header strong{font-size:15px;color:var(--gold)}
+header .nav-back{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+header .actions{margin-left:auto;display:flex;gap:6px;flex-wrap:wrap}
+#stage{flex:1;min-height:0;position:relative;background:var(--surface-2)}
+canvas{display:block;width:100%;height:100%}
+#status{position:absolute;top:15px;left:20px;background:var(--header-bg);border:1px solid var(--border-strong);color:var(--text);padding:12px 16px;border-radius:var(--radius-sm);max-width:500px;box-shadow:var(--shadow)}
+footer{padding:9px 18px;background:var(--surface-1);border-top:1px solid var(--border);font-size:var(--text-xs);display:flex;gap:14px;justify-content:space-between;flex-wrap:wrap;color:var(--muted)}
+#detail{color:var(--accent)}
+@media(max-width:860px){header .actions{margin-left:0}header{gap:8px}header strong{font-size:14px}footer{font-size:11px}}
+</style>
+<script type="importmap">{"imports":{"three":"/vendor/three/build/three.module.js","three/addons/":"/vendor/three/examples/jsm/"}}</script>
+</head>
+<body>
+<header>
+  <a class="brand" href="/erebor/dashboard">
+    <svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true"><rect width="20" height="20" rx="5" fill="#182a22" stroke="#4c745f" stroke-width="1.2"/><rect x="4" y="4" width="12" height="12" rx="2.5" fill="#7ee0a8"/><rect x="7.5" y="7.5" width="5" height="5" rx="1" fill="#091d14"/></svg>
+    <span>ATM10 Campus</span>
+  </a>
+  <div class="nav-back">
+    <a class="c-btn c-btn--sm c-btn--ghost" href="/erebor/dashboard">Dashboard</a>
+    <a class="c-btn c-btn--sm c-btn--ghost" href="/app#overview">Bauaufträge</a>
+    <a id="back" class="c-btn c-btn--sm" href="/projects?id=erebor">← Erebor</a>
+  </div>
+  <strong>Minecraft-Blockvorschau</strong>
+  <div class="actions">
+    <button id="front" class="c-btn c-btn--sm" type="button">Frontal</button>
+    <button id="overview" class="c-btn c-btn--sm" type="button">Schrägansicht</button>
+    <button id="logge" class="c-btn c-btn--sm" type="button">LoggeL</button>
+    <button id="jonny" class="c-btn c-btn--sm" type="button">KGZJonny</button>
+    <button id="save" class="c-btn c-btn--primary c-btn--sm" type="button">Bild speichern</button>
+  </div>
+</header>
 <div id="stage"><div id="status" role="status">Blockmodell wird aus der Campus-API geladen …</div></div>
 <footer><span>Jeder Würfel = 1 Minecraft-Block · Originaltexturen · Browser-Rendering, kein Ingame-Screenshot</span><span id="detail">Ziehen: drehen · Mausrad: zoomen · Rechtsziehen: verschieben</span></footer>
-<script type="module" src="/assets/project-model.js?v=20261114-status-1"></script></body></html>
+<script type="module" src="/assets/project-model.js?v=20261125-overhaul-1"></script>
+</body>
+</html>

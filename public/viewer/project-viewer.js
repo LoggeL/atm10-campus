@@ -1,7 +1,7 @@
 import * as THREE from 'three';
-import { ProjectGeometry } from './project-geometry.js?v=20261114-status-1';
-import { installViewerControls } from './controls.js?v=20261114-status-1';
-import { connectPolling } from '/assets/live-updates.js?v=20261114-status-1';
+import { ProjectGeometry } from './project-geometry.js?v=20261125-overhaul-1';
+import { installViewerControls } from './controls.js?v=20261125-overhaul-1';
+import { connectPolling } from '/assets/live-updates.js?v=20261125-overhaul-1';
 
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -38,6 +38,11 @@ export async function startProjectViewer({view,nav,scene,hash,api,loading,toast}
   else nav.lookAt(home.pos,home.target);
 
   document.body.classList.add('planning-viewer');
+  const modeBadge = $('#viewer-mode');
+  if (modeBadge) {
+    modeBadge.textContent = 'Masterplan';
+    modeBadge.title = 'Planungsansicht ohne Live-Baufortschritt';
+  }
   $('.snap').classList.add('hidden');
   $('#edition').innerHTML=`<span class="pill">Masterplan <b>v${data.version}</b></span><span class="pill">${data.placed?'Weltkoordinaten':'Lokale Koordinaten'}</span>`;
   $('#project-note').textContent='Planungsvolumen und gespeicherte Geländestichproben. Kein Live-Baufortschritt.';

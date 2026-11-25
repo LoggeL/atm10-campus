@@ -1,15 +1,61 @@
 <!doctype html>
-<html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Erebor · ME-Auftrag</title><link rel="stylesheet" href="/assets/app.css">
-<style>main{max-width:56rem;margin:3rem auto;padding:0 1.25rem}h1{margin:1.5rem 0 .75rem}
-table{width:100%;margin:1.5rem 0}td,th{text-align:left;padding:.6rem}output{display:block;margin:.8rem 0}</style></head>
-<body><main><a href="/app?project=erebor#overview">← Erebor-Baupläne</a>
-<h1>Connecting-Blöcke für Erebor</h1><p>K02 bestellt alle vier Varianten in Teilmengen. Fehlen Zutaten, versucht K02 kleinere Mengen bis zu einem Block und prüft anschließend jede Minute auf Nachschub. Vorhandene Blöcke zählen mit. Der Auftrag endet, sobald der Gesamtbedarf gedeckt ist.</p>
-<button id="start" class="primary" disabled>Vier Blöcke im ME anfordern</button>
-<output id="status" role="status">Campus wird abgefragt …</output><p id="error" role="alert"></p>
-<a id="login" href="/login" hidden>Beim Campus anmelden</a>
-<div class="table-wrap"><table><thead><tr><th>Connecting-Variante</th><th>Gesamtbedarf</th><th>Gedeckt</th><th>Rückmeldung von K02</th></tr></thead><tbody></tbody></table></div>
-</main><script type="module">
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#0c1311">
+<title>Erebor · ME-Auftrag · ATM10 Campus</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><rect width='16' height='16' rx='4' fill='%230c1311'/><rect x='2.5' y='2.5' width='11' height='11' rx='2.5' fill='%237ee0a8'/><rect x='5.5' y='5.5' width='5' height='5' rx='1' fill='%23091d14'/></svg>">
+<link rel="stylesheet" href="/assets/campus-tokens.css?v=20261125-overhaul-1">
+<link rel="stylesheet" href="/assets/app.css?v=20261125-overhaul-1">
+<style>
+.static-bar{position:sticky;top:0;z-index:30;background:var(--header-bg);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border-bottom:1px solid var(--border)}
+.static-bar-inner{width:min(var(--shell-max),calc(100% - var(--gutter)*2));margin:0 auto;min-height:56px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;padding:6px 0}
+.static-brand{display:inline-flex;align-items:center;gap:10px;color:var(--text);font-weight:720;font-size:15px;text-decoration:none}
+.static-brand:hover{color:var(--accent-strong);text-decoration:none}
+.static-links{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+output{display:block;margin:12px 0;color:var(--text-2)}
+#error{color:var(--danger);margin:8px 0}
+#error:empty{display:none}
+</style>
+</head>
+<body>
+<a class="skip-link" href="#main">Zum Inhalt</a>
+<header class="static-bar">
+  <div class="static-bar-inner">
+    <a class="static-brand" href="/erebor/dashboard">
+      <svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true"><rect width="20" height="20" rx="5" fill="#182a22" stroke="#4c745f" stroke-width="1.2"/><rect x="4" y="4" width="12" height="12" rx="2.5" fill="#7ee0a8"/><rect x="7.5" y="7.5" width="5" height="5" rx="1" fill="#091d14"/></svg>
+      <span>ATM10 Campus</span>
+    </a>
+    <nav class="static-links" aria-label="Zurück zum Campus">
+      <a class="c-btn c-btn--sm c-btn--ghost" href="/erebor/dashboard">Dashboard</a>
+      <a class="c-btn c-btn--sm" href="/app?project=erebor#overview">← Bauaufträge</a>
+      <a class="c-btn c-btn--sm c-btn--ghost" href="/app#cannons">Stationstechnik</a>
+    </nav>
+  </div>
+</header>
+<main id="main" class="c-shell c-shell--narrow">
+  <div class="c-page-head">
+    <div class="c-page-head-main">
+      <p class="c-eyebrow">Bauprojekt Erebor · ME-Bridge K02</p>
+      <h1>Connecting-Blöcke für Erebor</h1>
+      <p class="c-page-sub">K02 bestellt alle vier Varianten in Teilmengen. Fehlen Zutaten, versucht K02 kleinere Mengen bis zu einem Block und prüft anschließend jede Minute auf Nachschub. Vorhandene Blöcke zählen mit. Der Auftrag endet, sobald der Gesamtbedarf gedeckt ist.</p>
+    </div>
+  </div>
+  <div class="c-card" style="margin-bottom:20px">
+    <button id="start" class="c-btn c-btn--primary primary" disabled>Vier Blöcke im ME anfordern</button>
+    <output id="status" role="status">Campus wird abgefragt …</output>
+    <p id="error" role="alert"></p>
+    <a id="login" class="c-btn c-btn--sm" href="/login" hidden>Beim Campus anmelden</a>
+  </div>
+  <div class="c-table-wrap table-wrap">
+    <table>
+      <thead><tr><th>Connecting-Variante</th><th class="num">Gesamtbedarf</th><th class="num">Gedeckt</th><th>Rückmeldung von K02</th></tr></thead>
+      <tbody></tbody>
+    </table>
+  </div>
+</main>
+<script type="module">
 const url='/api/projects/erebor/connecting-auftrag', status=document.querySelector('#status'),
   error=document.querySelector('#error'), button=document.querySelector('#start'), list=document.querySelector('tbody');
 const labels={'rechiseled:blackstone_tiles_connecting':'Blackstone Tiles','rechiseledcreate:veridium_cut_polished_connecting':'Polished Cut Veridium',
@@ -42,7 +88,12 @@ async function refresh(){
     const row=list.insertRow();
     const itemStatus=d.detail[item];
     const covered=itemStatus?.covered ?? (itemStatus?.stage==='credited'?itemStatus.quantity:null);
-    for(const value of [labels[item]||item,qty(n),covered==null?'–':qty(covered),progress(itemStatus)])row.insertCell().textContent=value;
+    const values=[labels[item]||item,qty(n),covered==null?'–':qty(covered),progress(itemStatus)];
+    values.forEach((value,idx)=>{
+      const cell=row.insertCell();
+      cell.textContent=value;
+      if(idx===1||idx===2)cell.className='num';
+    });
   }
 }
 async function update(){try{await refresh()}catch(e){button.disabled=true;error.textContent=e.message}}
@@ -56,4 +107,6 @@ button.onclick=async()=>{
 };
 await update();
 setInterval(()=>{if(!busy && !document.hidden)void update()},8000);
-</script></body></html>
+</script>
+</body>
+</html>

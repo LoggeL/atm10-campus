@@ -105,6 +105,16 @@ export function openapi(baseUrl) {
       '/api/projects/{id}/stone/count': { get: { summary: 'Exakter Stein-Restbedarf je gespeicherter MCA-Region (maximal 512×512): Luft/Wasser, Bestand, Schutz und unbekannte Zellen getrennt. Keine Weltänderung. Nur stable=true auswerten; mehrere Regionen bilden keine atomare Gesamtaufnahme.', parameters:[id,{name:'version',in:'query',required:true,schema:{type:'integer'}},{name:'region',in:'query',required:true,schema:{type:'string',pattern:'^-?\\d+,-?\\d+$'},description:'MCA-Region rx,rz innerhalb der Berggrenzen; Weltblock x=rx*512,z=rz*512.'}], responses:ok } },
       '/api/projects/{id}/stone/{tile}.nbt': { get: { summary: 'Create-NBT für einen Bergabschnitt. Nur gespeicherte Luft/Wasser, keine festen Bestandsblöcke; Schutzräume bleiben frei. Keine Kanonenaktion. Header nennen Weltanker, Stein-/Wasseranzahl und SHA256.', parameters: [id,{name:'tile',in:'path',required:true,schema:{type:'string'}},{name:'version',in:'query',required:true,schema:{type:'integer'}}], responses:{...ok,409:{description:'Veraltete Version, unbekannte Chunks, währenddessen gespeicherte Welt oder Abschnitt bereits vollständig'}} } },
       '/api/me': { get: { summary: 'Wer bin ich (User, Token-Scope)', responses: ok } },
+      '/api/atm-star': {
+        get: {
+          summary: 'ATM-Star-Fortschritt (18-Star-Ziel / Starry Bee) aus dem zuletzt gemeldeten ME-Bestand',
+          description: 'Erfordert eine aktive Browser-Sitzung (Cookie; keine Bearer-Tokens, Cache-Control: private, no-store). Liefert Meilensteine (1 / 9 / 18 Stars), overallReadinessPct, Netherstern-Kompressions-Rollup (netherStarSummary), alle 13 Altar-Bauteile (parts/groups) inkl. craftableNow, Alternativen und Sonder-NBT-Anforderungen, craftableParts, closestPart, bottlenecks, shoppingList, sharedPools, Verlaufsdeltas/ETA (history) sowie starryBeeRoadmap. Ohne ME-Meldung ist stock null.',
+          responses: {
+            200: { description: 'ATM-Star-Plan als JSON' },
+            401: { description: 'Browser-Sitzung erforderlich' },
+          },
+        },
+      },
       '/api/status': { get: { summary: 'Gesamtstatus: Live-Snapshot, Edition, Fortschritt und Konflikte je Bauplan, Überlappungen', responses: ok } },
       '/api/events': { get: { summary: 'Authentifizierter SSE-Statuskanal', description: 'sync bei jeder Verbindung: vollständigen aktuellen Stand per REST laden. change: topics (blueprints, snapshots, cannons, stock, activity), optional cannons mit betroffenen Stationsnamen; ohne Namen alle Kanonen aktualisieren. heartbeat alle 15 Sekunden. auth beendet eine abgelaufene oder widerrufene Sitzung. Keine Ereigniswiederholung: Reconnect lädt den aktuellen Stand.', responses: { 200: { description: 'Offener Event-Stream', content: { 'text/event-stream': { schema: { type: 'string' } } } }, 401: { description: 'Anmeldung erforderlich' }, 429: { description: 'Zu viele offene Verbindungen' } } } },
       '/api/blueprints': {

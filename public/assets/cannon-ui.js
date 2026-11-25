@@ -1,9 +1,9 @@
-import { esc, fmt } from './format.js?v=20261114-status-1';
-import {renderConnectionIssues} from './connection-status.js?v=20261114-status-1';
-import { renderPickerButton, renderNativeProgress, nativeProgressLabel } from './cannon-picker.js?v=20261114-status-1';
-import { cannonRangeCard, distanceText } from './cannon-range.js?v=20261114-status-1';
-import { coordinateFields, placementValues } from './placement.js?v=20261114-status-1';
-import { blueprintPreview } from './blueprint-preview.js?v=20261114-status-1';
+import { esc, fmt } from './format.js?v=20261125-overhaul-1';
+import {renderConnectionIssues} from './connection-status.js?v=20261125-overhaul-1';
+import { renderPickerButton, renderNativeProgress, nativeProgressLabel } from './cannon-picker.js?v=20261125-overhaul-1';
+import { cannonRangeCard, distanceText } from './cannon-range.js?v=20261125-overhaul-1';
+import { coordinateFields, placementValues } from './placement.js?v=20261125-overhaul-1';
+import { blueprintPreview } from './blueprint-preview.js?v=20261125-overhaul-1';
 
 const checked = value => value ? ' checked' : '';
 const states = { outofrange:'Außer Reichweite', alignment:'Material gesperrt', offline:'Computer offline', nocomputer:'Kein Computer', feeding:'Aktiv', preparing:'Wartet auf Schematic', waiting:'Wartet auf Material', full:'Kiste voll', done:'Fertig', paused:'Pausiert', unassigned:'Kein Bauplan', missing:'Bauplan fehlt', nosnapshot:'Kein Live-Bestand', error:'Fehler', start:'Startet', unknown:'Status ausstehend' };

@@ -1,5 +1,5 @@
 // Combinable layers: each layer maps to face categories from the mesher and gets a draw mode.
-import { MODE } from './renderer.js';
+import { MODE } from './renderer.js?v=20261125-overhaul-1';
 
 const { OFF, TEXTURE: TEX, COLOR, GHOST, DIM } = MODE;
 

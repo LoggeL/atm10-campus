@@ -1,83 +1,226 @@
 <!doctype html>
-<html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>ATM10 Campus</title><link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><rect x='2' y='2' width='12' height='12' rx='3' fill='%2373d8e5'/></svg>"><link rel="stylesheet" href="/assets/app.css?v=20261114-status-1&amp;revision=site-status"><link rel="stylesheet" href="/assets/blueprint-preview.css?v=20261114-status-1"><link rel="stylesheet" href="/assets/erebor-console.css?v=20261114-status-1&amp;revision=compact-abc-1"></head>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Bauaufträge · ATM10 Campus</title>
+  <link rel="stylesheet" href="/assets/app.css?v=20261125-overhaul-1">
+  <link rel="stylesheet" href="/assets/blueprint-preview.css?v=20261125-overhaul-1">
+  <link rel="stylesheet" href="/assets/erebor-console.css?v=20261125-overhaul-1">
+</head>
 <body>
 <a class="skip-link" href="#main">Zum Inhalt</a>
 <!-- campus-navigation -->
 <main id="main">
-  <div class="refresh-status" id="refreshStatus" aria-busy="false">
-    <div class="refresh-timing"><span id="refreshLabel">Aktualisierung alle 30 s</span><progress id="refreshProgress" max="1" value="0" aria-label="Zeit bis zur nächsten Aktualisierung"></progress></div>
-    <span class="refresh-last" id="refreshLast" role="status">Noch nicht aktualisiert</span>
-    <button class="small" id="refreshNow">Jetzt aktualisieren</button>
-  </div>
-  <div class="toolbar" id="blueprintProjectBar"><label class="row">Bauprojekt <select id="blueprintProject" aria-label="Bauprojekt wählen"><option value="erebor">Erebor</option><option value="campus">Campus (Archiv)</option></select></label><a id="blueprintProjectLink" href="/projects?id=erebor">Projekt öffnen</a> <a id="orderCoordinates" href="#coordinates">Bauplan-Koordinaten</a></div>
-  <section data-pane="overview">
-    <div class="page-heading"><h1>Bauaufträge</h1><button class="primary" id="newBp">Neuer Bauplan</button></div>
-    <div class="summary-line" id="cards" aria-label="Campus-Status"></div>
-    <div id="esgarothCatalog" class="hide">
-      <details id="ereborSpawnPlans" hidden><summary>Spawnschutz · versteckte Mega Torches</summary><p id="spawnPlanCounts"></p><p><a href="/api/projects/erebor/mobschutz/Erebor-Mobschutz.zip" download>Sammelpläne und Koordinaten (ZIP)</a> · <a href="/api/projects/erebor/mobschutz/Baufolge.csv" download>Baufolge mit Kanonen und Ankern</a> · <a href="/api/projects/erebor/mobschutz/EREBOR_MEGATORCH_EINZEL.nbt" download>Wiederverwendbare Einblockvorlage</a> · <a href="/api/projects/erebor/mobschutz/Einzelpositionen.csv" download>Einzelpositionen</a></p><p>In Create „Replace Solid with Any“ wählen, Block-Entities schützen und den Anker aus der Baufolge übernehmen.</p></details>
-      <details id="surfaceCatalog" hidden><summary>Bergspitze und Außenhaut · Erde, Wald und Schnee</summary><p>Pakete nach Höhe von unten nach oben bauen, sobald das Massiv darunter fertig ist. In Create „Don't Replace Solid Blocks“ wählen und das Ersetzen von Block-Entities ausschalten. Die Baufolge im ZIP enthält die Anker jeder NBT.</p><div id="surfaceDownloads"></div></details>
-      <details id="ereborGroves" hidden><summary>Berghänge · Schlussbegrünung</summary><p id="groveDownloads"></p></details>
-      <p><a href="/assets/erebor-ausbau-final.html">Zusatzkanonen · Standorte, Koordinaten und Homebox-Installer</a> · <a href="/assets/erebor-innenausbau.py" download>Homebox-Modul für Innenpläne an Zusatzkanonen</a></p>
-      <details id="hallFinishes" hidden>
-        <summary>Schatzhalle, Thronsaal, Schmiede und Königsgalerie · Innenausbau</summary>
-        <p>Diese Pakete nach dem regulären Raumbau einsetzen. Die ZIP enthält Anker, Materialliste und Einbauanleitung.</p>
-        <ul id="hallFinishLinks"></ul>
-      </details>
-      <details id="esgarothPackages" hidden>
-        <summary>Wasserstadt und Brücke · Baupläne</summary>
-        <div class="toolbar"><label>Paket <select id="esgarothPackage"></select></label><a class="btn small" id="esgarothZip" download>Paket als ZIP</a></div>
-        <div class="table-wrap"><table><caption class="muted" id="esgarothCount"></caption><thead><tr><th>Bauplan</th><th>Kanonenplatz</th><th>Anker X / Y / Z</th><th>Download</th></tr></thead><tbody id="esgarothFiles"></tbody></table></div>
-      </details>
+  <header class="c-page-head app-workspace-head">
+    <div class="c-page-head-main">
+      <p class="c-eyebrow" id="workspaceEyebrow">Bauprojekt Erebor</p>
+      <h1 id="workspaceTitle">Bauaufträge</h1>
+      <p class="c-page-sub" id="workspaceSub">Baufolge, Schematics und Sonderpakete der Erebor-Stationen.</p>
     </div>
+    <div class="c-page-actions">
+      <div class="c-status-pill app-refresh-pill" id="refreshStatus" data-state="idle" aria-busy="false">
+        <span class="c-status-dot" aria-hidden="true"></span>
+        <span class="app-refresh-copy">
+          <span id="refreshLabel">Live · 30 s</span>
+          <span class="app-refresh-sep" aria-hidden="true">·</span>
+          <span class="refresh-last" id="refreshLast" role="status">Noch nicht aktualisiert</span>
+        </span>
+        <button type="button" class="small" id="refreshNow">Aktualisieren</button>
+        <progress class="c-status-progress" id="refreshProgress" max="1" value="0" aria-label="Zeit bis zur nächsten Aktualisierung"></progress>
+      </div>
+    </div>
+  </header>
+
+  <div class="app-context-bar c-no-print">
+    <nav class="c-seg app-subnav" id="workspaceSubnav" aria-label="Unterbereiche">
+      <a href="#overview" data-subtab="overview" data-group="orders" class="is-active" aria-current="page">Übersicht</a>
+      <a href="#coordinates" data-subtab="coordinates" data-group="orders">Koordinaten</a>
+      <a href="#cannons" data-subtab="cannons" data-group="tech" hidden>Kanonen &amp; Flotte</a>
+      <a href="#cannon-coordinates" data-subtab="cannon-coordinates" data-group="tech" hidden>Aufstellkoordinaten</a>
+      <a href="#snapshots" data-subtab="snapshots" data-group="data" hidden>Weltaufnahmen</a>
+      <a href="#activity" data-subtab="activity" data-group="data" hidden>Aktivität</a>
+      <a href="#agent" data-subtab="agent" data-group="system" hidden>Agent-Zugang</a>
+      <a href="#admin" data-subtab="admin" data-group="system" data-admin-only hidden>Verwaltung</a>
+    </nav>
+    <div class="app-project-controls" id="blueprintProjectBar">
+      <label class="app-project-field">
+        <span>Bauprojekt</span>
+        <select id="blueprintProject" aria-label="Bauprojekt wählen">
+          <option value="erebor">Erebor</option>
+          <option value="campus">Campus (Archiv)</option>
+        </select>
+      </label>
+      <a class="btn small" id="blueprintProjectLink" href="/projects?id=erebor">Projekt öffnen</a>
+    </div>
+  </div>
+
+  <section data-pane="overview">
+    <div class="pane-bar pane-bar--actions-only">
+      <button class="primary" id="newBp">Neuer Bauplan</button>
+    </div>
+    <div class="summary-line" id="cards" aria-label="Campus-Status"></div>
+
     <section id="ereborQueue" class="hide" aria-labelledby="ereborQueueTitle">
-      <div class="fleet-headed"><label class="row">Station <select data-station-picker aria-label="Station für Bauaufträge"></select></label>
-        <a data-progress-link href="/erebor/dashboard">Baufortschritt ansehen</a></div>
-      <div class="fleet-job"><h2 id="ereborQueueTitle">Baufolge</h2><p><span data-native></span> · <strong data-job>Wird geprüft …</strong></p>
-        <p data-waiting hidden></p><p class="muted"><span data-fuel></span> · Zielchunk A <span data-target></span></p>
-        <div class="fleet-actions"><button type="button" data-auto aria-pressed="false" disabled>Automatik starten</button><button type="button" data-start disabled>Einmal starten</button></div>
+      <div class="fleet-headed">
+        <label class="row">Station <select data-station-picker aria-label="Station für Bauaufträge"></select></label>
+        <a class="btn small" data-progress-link href="/erebor/dashboard">Baufortschritt ansehen</a>
+      </div>
+      <div class="fleet-job">
+        <div class="fleet-job-top">
+          <h2 id="ereborQueueTitle">Baufolge</h2>
+          <span data-native class="fleet-pill offline"></span>
+        </div>
+        <p class="fleet-job-headline"><strong data-job>Wird geprüft …</strong></p>
+        <p data-waiting hidden></p>
+        <p class="fleet-job-meta"><span data-fuel></span><span aria-hidden="true">·</span><span>Zielchunk A <span data-target></span></span></p>
+        <div class="fleet-actions">
+          <button type="button" data-auto aria-pressed="false" disabled>Automatik starten</button>
+          <button type="button" class="primary" data-start disabled>Einmal starten</button>
+        </div>
         <p class="muted" data-hint role="status"></p>
       </div>
-      <h3 data-catalog-heading>Abschnitte</h3><div class="fleet-lists" aria-label="Baufolge filtern">
-        <button type="button" data-list="open" aria-pressed="true">Offene Baupläne</button><button type="button" data-list="done" aria-pressed="false">Abgeschlossene Baupläne</button>
+      <div class="fleet-catalog-bar">
+        <h3 data-catalog-heading>Abschnitte</h3>
+        <div class="fleet-lists c-seg" aria-label="Baufolge filtern">
+          <button type="button" data-list="open" aria-pressed="true">Offene Baupläne</button>
+          <button type="button" data-list="done" aria-pressed="false">Abgeschlossene Baupläne</button>
+        </div>
       </div>
     </section>
+
+    <details id="esgarothCatalog" class="app-catalog-card hide">
+      <summary class="app-catalog-summary">
+        <span class="app-catalog-summary-main">
+          <strong>Sonderpakete &amp; Zusatz-Downloads</strong>
+          <span class="muted">Spawnschutz, Außenhaut, Innenausbau, Zusatzkanonen &amp; Wasserstadt</span>
+        </span>
+      </summary>
+      <div class="app-catalog-body">
+        <div class="app-catalog-links">
+          <a class="btn small" href="/assets/erebor-ausbau-final.html">Zusatzkanonen · Standorte &amp; Homebox-Installer</a>
+          <a class="btn small" href="/assets/erebor-innenausbau.py" download>Homebox-Modul für Innenpläne (.py)</a>
+        </div>
+        <details id="ereborSpawnPlans" hidden>
+          <summary>Spawnschutz · versteckte Mega Torches</summary>
+          <p id="spawnPlanCounts"></p>
+          <p class="row">
+            <a class="btn small" href="/api/projects/erebor/mobschutz/Erebor-Mobschutz.zip" download>Sammelpläne (ZIP)</a>
+            <a class="btn small" href="/api/projects/erebor/mobschutz/Baufolge.csv" download>Baufolge (CSV)</a>
+            <a class="btn small" href="/api/projects/erebor/mobschutz/EREBOR_MEGATORCH_EINZEL.nbt" download>Einblockvorlage (NBT)</a>
+            <a class="btn small" href="/api/projects/erebor/mobschutz/Einzelpositionen.csv" download>Einzelpositionen (CSV)</a>
+          </p>
+          <p class="muted">In Create „Replace Solid with Any“ wählen, Block-Entities schützen und den Anker aus der Baufolge übernehmen.</p>
+        </details>
+        <details id="surfaceCatalog" hidden>
+          <summary>Bergspitze und Außenhaut · Erde, Wald und Schnee</summary>
+          <p class="muted">Pakete nach Höhe von unten nach oben bauen, sobald das Massiv darunter fertig ist. In Create „Don't Replace Solid Blocks“ wählen und das Ersetzen von Block-Entities ausschalten. Die Baufolge im ZIP enthält die Anker jeder NBT.</p>
+          <div id="surfaceDownloads"></div>
+        </details>
+        <details id="ereborGroves" hidden>
+          <summary>Berghänge · Schlussbegrünung</summary>
+          <p id="groveDownloads"></p>
+        </details>
+        <details id="hallFinishes" hidden>
+          <summary>Schatzhalle, Thronsaal, Schmiede und Königsgalerie · Innenausbau</summary>
+          <p class="muted">Diese Pakete nach dem regulären Raumbau einsetzen. Die ZIP enthält Anker, Materialliste und Einbauanleitung.</p>
+          <ul id="hallFinishLinks"></ul>
+        </details>
+        <details id="esgarothPackages" hidden>
+          <summary>Wasserstadt und Brücke · Baupläne</summary>
+          <div class="toolbar">
+            <label class="row">Paket <select id="esgarothPackage"></select></label>
+            <a class="btn small" id="esgarothZip" download>Paket als ZIP</a>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <caption class="muted" id="esgarothCount"></caption>
+              <thead><tr><th>Bauplan</th><th>Kanonenplatz</th><th>Anker X / Y / Z</th><th>Download</th></tr></thead>
+              <tbody id="esgarothFiles"></tbody>
+            </table>
+          </div>
+        </details>
+      </div>
+    </details>
+
     <div class="toolbar">
       <input class="search" id="search" type="search" placeholder="Bauplan suchen …" aria-label="Bauplan suchen">
-      <select id="filter" aria-label="Status filtern"><option value="">Alle Status</option><option value="conflict">Konflikt</option><option value="warning">Geändert seit Planung</option><option value="ok">Offen</option><option value="built">Gebaut</option></select>
+      <select id="filter" aria-label="Status filtern">
+        <option value="">Alle Status</option>
+        <option value="conflict">Konflikt</option>
+        <option value="warning">Geändert seit Planung</option>
+        <option value="ok">Offen</option>
+        <option value="built">Gebaut</option>
+      </select>
       <select id="stonePacket" class="hide" aria-label="Erebor-Paket filtern"><option value="">Alle Pakete</option></select>
-      <details class="menu toolbar-end" id="blueprintDownloads"><summary>Downloads</summary><div class="menu-content"><a href="/api/remaining.zip" download>Rest-Baupläne (.zip)</a><a href="/api/blueprints.zip" download>Alle Baupläne (.zip)</a></div></details>
+      <details class="menu toolbar-end" id="blueprintDownloads">
+        <summary>Downloads</summary>
+        <div class="menu-content">
+          <a href="/api/remaining.zip" download>Rest-Baupläne (.zip)</a>
+          <a href="/api/blueprints.zip" download>Alle Baupläne (.zip)</a>
+        </div>
+      </details>
     </div>
     <p id="stoneBlueprintCount" class="muted hide"></p>
-    <div class="table-wrap" role="region" aria-label="Baupläne" tabindex="0"><table class="blueprint-table stack-table">
-      <thead><tr><th>Bauplan</th><th>Status</th><th>Version</th><th>Fortschritt</th><th>Aktion</th></tr></thead><tbody id="bpRows"></tbody>
-    </table></div>
-    <details id="overlapPanel"><summary id="overlapSummary">Überlappungen und Konflikte</summary><div id="overlaps" class="table-scroll muted"></div></details>
+    <div class="table-wrap" role="region" aria-label="Baupläne" tabindex="0">
+      <table class="blueprint-table stack-table">
+        <thead><tr><th>Bauplan</th><th>Status</th><th>Version</th><th>Fortschritt</th><th>Aktion</th></tr></thead>
+        <tbody id="bpRows"></tbody>
+      </table>
+    </div>
+    <details id="overlapPanel">
+      <summary id="overlapSummary">Überlappungen und Konflikte</summary>
+      <div id="overlaps" class="table-scroll muted"></div>
+    </details>
   </section>
 
   <section data-pane="coordinates" class="hide">
-    <div class="page-heading"><h1>Koordinaten</h1><button id="coordinateDownload">Liste herunterladen</button></div>
-    <p class="intro">Bauplan-Anker in der Welt. Drehung 0°, keine Spiegelung.</p>
-    <div class="toolbar"><input class="search" id="coordinateSearch" type="search" placeholder="Bauplan suchen …" aria-label="Koordinaten suchen"><span class="muted" id="coordinateCount"></span></div>
-    <div class="table-wrap" role="region" aria-label="Einsetzkoordinaten" tabindex="0"><table class="coordinate-table stack-table"><thead><tr><th>Bauplan</th><th>Version</th><th>Zielkoordinaten</th><th>Aktion</th></tr></thead><tbody id="coordinateRows"></tbody></table></div>
-    <details><summary>Koordinaten im Spiel verwenden</summary><p>Trage X, Y und Z im Positionsmenü der Schematic ein. Y ist der unterste Bauplan-Anker, nicht deine Standhöhe. Die Kanone kann woanders stehen.</p><p class="muted">Hier stehen die aktuellen Versionen. Ältere zugewiesene Versionen haben unter „Kanonen“ ihre eigenen Koordinaten. Für eine neue Version auch eine neue Schematic im Spiel drucken.</p></details>
+    <div class="pane-bar">
+      <p class="intro">Bauplan-Anker in der Welt. Drehung 0°, keine Spiegelung.</p>
+      <button id="coordinateDownload">Liste herunterladen</button>
+    </div>
+    <div class="toolbar">
+      <input class="search" id="coordinateSearch" type="search" placeholder="Bauplan suchen …" aria-label="Koordinaten suchen">
+      <span class="muted" id="coordinateCount"></span>
+    </div>
+    <div class="table-wrap" role="region" aria-label="Einsetzkoordinaten" tabindex="0">
+      <table class="coordinate-table stack-table">
+        <thead><tr><th>Bauplan</th><th>Version</th><th>Zielkoordinaten</th><th>Aktion</th></tr></thead>
+        <tbody id="coordinateRows"></tbody>
+      </table>
+    </div>
+    <details>
+      <summary>Koordinaten im Spiel verwenden</summary>
+      <p>Trage X, Y und Z im Positionsmenü der Schematic ein. Y ist der unterste Bauplan-Anker, nicht deine Standhöhe. Die Kanone kann woanders stehen.</p>
+      <p class="muted">Hier stehen die aktuellen Versionen. Ältere zugewiesene Versionen haben unter „Stationstechnik“ ihre eigenen Koordinaten. Für eine neue Version auch eine neue Schematic im Spiel drucken.</p>
+    </details>
   </section>
 
   <section data-pane="snapshots" class="hide">
-    <div class="page-heading"><h1>Live-Bestand</h1></div>
-    <p class="intro">Wird nach dem Speichern der Welt automatisch aktualisiert.</p>
-    <div class="toolbar"><select id="snapSource" aria-label="Weltquelle"></select><input id="snapLabel" aria-label="Bezeichnung der Weltaufnahme" placeholder="Bezeichnung (optional)"><button id="snapNow">Jetzt erfassen</button></div>
-    <div class="table-wrap" role="region" aria-label="Weltaufnahmen" tabindex="0"><table><thead><tr><th>Aufnahme</th><th>Quelle</th><th>Erfasst</th><th>Welt gespeichert</th><th class="num">Flächen</th><th class="num">Block-Entities</th><th>Aktion</th></tr></thead><tbody id="snapRows"></tbody></table></div>
-    <details><summary>Wie aktuell ist der Bestand?</summary><p>Die App liest alle paar Minuten die gespeicherten Region-Dateien der Welt. Eine neue Aufnahme entsteht nur, wenn sich der gespeicherte Stand geändert hat. Die Welt wird dabei nicht verändert.</p></details>
+    <div class="toolbar">
+      <select id="snapSource" aria-label="Weltquelle"></select>
+      <input id="snapLabel" aria-label="Bezeichnung der Weltaufnahme" placeholder="Bezeichnung (optional)">
+      <button class="primary" id="snapNow">Jetzt erfassen</button>
+    </div>
+    <div class="table-wrap" role="region" aria-label="Weltaufnahmen" tabindex="0">
+      <table>
+        <thead><tr><th>Aufnahme</th><th>Quelle</th><th>Erfasst</th><th>Welt gespeichert</th><th class="num">Flächen</th><th class="num">Block-Entities</th><th>Aktion</th></tr></thead>
+        <tbody id="snapRows"></tbody>
+      </table>
+    </div>
+    <details>
+      <summary>Wie aktuell ist der Bestand?</summary>
+      <p>Die App liest alle paar Minuten die gespeicherten Region-Dateien der Welt. Eine neue Aufnahme entsteht nur, wenn sich der gespeicherte Stand geändert hat. Die Welt wird dabei nicht verändert.</p>
+    </details>
   </section>
 
   <section data-pane="cannons" class="hide">
-    <div class="page-heading"><h1>Stationstechnik</h1></div>
-    <nav class="cannon-subnav" aria-label="Kanonenbereiche"><a href="#cannons" aria-current="page">Geräte &amp; Versorgung</a><a href="#cannon-coordinates">Aufstellkoordinaten</a></nav>
     <div id="fleetEquipment"></div>
-    <p class="intro" id="meLine">ME-Bestand wird geladen …</p>
-    <details id="individualEquipment"><summary>Stationscomputer einzeln konfigurieren</summary>
-      <details id="ccSetup"><summary>Kanone verbinden</summary>
+    <p class="me-status-bar" id="meLine">ME-Bestand wird geladen …</p>
+    <details id="individualEquipment" class="form-section">
+      <summary>Stationscomputer einzeln konfigurieren</summary>
+      <details id="ccSetup">
+        <summary>Kanone verbinden</summary>
         <ol class="steps">
           <li>Unter <a href="#agent">Agent-Zugang</a> einen Token mit Scope <b>Station (ME-Computer)</b> anlegen. Der darf nur lesen und Bestand/Status melden, keine Baupläne ändern.</li>
           <li>Aufbau: <span class="mono">ME-Kabel → ME Bridge → Computer → Kiste → Schematicannon</span>. ME Bridge und Kiste hängen beide direkt am Computer oder beide am selben Wired-Modem-Netz. Eine einfache Kiste oder ein Fass nehmen, keine Doppelkiste. Die Kiste berührt die Kanone an einer beliebigen Seite, die Kanone zieht Blöcke und Schießpulver daraus. Die ME Bridge braucht einen ME-Kanal.</li>
@@ -86,48 +229,90 @@
           <li>Die automatische Vorbereitung übernimmt auch die gespeicherten Einstellungen. Sobald der Bauplan eingesetzt und die Kanone live bestätigt ist, als Admin <b>Kanone starten</b> wählen. Eine pausierte Kanone lässt sich mit <b>Fortsetzen</b> weiterbauen. Stoppen und Zurücksetzen erfolgt im Spiel. Fehlt Material, wartet die Kanone bei ausgeschaltetem „Fehlende Materialien überspringen“ auf Nachschub.</li>
         </ol>
       </details>
-    <div id="cannonList"></div></details>
+      <div id="cannonList"></div>
+    </details>
     <p class="footnote">Admins starten oder setzen Kanonen hier fort. Stoppen und Zurücksetzen erfolgt im Spiel. Der Baustand stammt aus dem zuletzt gespeicherten Weltstand.</p>
   </section>
 
   <section data-pane="cannon-coordinates" class="hide">
-    <div class="page-heading"><h1>Stationsaufstellung</h1></div>
-    <nav class="cannon-subnav" aria-label="Kanonenbereiche"><a href="#cannons">Geräte &amp; Versorgung</a><a href="#cannon-coordinates" aria-current="page">Aufstellkoordinaten</a></nav>
-    <div id="cannonSites"><p>Aufstellkoordinaten werden geladen …</p></div>
+    <div id="cannonSites"><p class="muted">Aufstellkoordinaten werden geladen …</p></div>
   </section>
 
   <section data-pane="agent" class="hide">
-    <div class="page-heading"><h1>Agent-Zugang</h1></div>
-    <p class="intro">Tokens geben einem Agent oder ME-Computer Zugriff in deinem Namen.</p>
-    <details class="form-section"><summary>Token anlegen</summary>
-      <div class="form-row"><label>Name<input id="tokName" placeholder="z. B. ME-Computer"></label><label>Zugriff<select id="tokScope"><option value="write">Lesen + Schreiben</option><option value="read">Nur lesen</option><option value="station">Station (ME-Computer)</option></select></label><button class="primary" id="tokCreate">Token erzeugen</button></div>
+    <details class="form-section">
+      <summary>Token anlegen</summary>
+      <div class="form-row">
+        <label>Name<input id="tokName" placeholder="z. B. ME-Computer"></label>
+        <label>Zugriff<select id="tokScope"><option value="write">Lesen + Schreiben</option><option value="read">Nur lesen</option><option value="station">Station (ME-Computer)</option></select></label>
+        <button class="primary" id="tokCreate">Token erzeugen</button>
+      </div>
       <div id="tokNew" class="hide" role="status"></div>
     </details>
-    <div class="table-wrap" role="region" aria-label="API-Tokens" tabindex="0"><table><thead><tr><th>Name</th><th>Zugriff</th><th>Präfix</th><th>Erstellt</th><th>Zuletzt benutzt</th><th>Aktion</th></tr></thead><tbody id="tokRows"></tbody></table></div>
-    <details><summary>Anleitung für Agents</summary><p class="muted">Tokens werden nur einmal angezeigt. „Station“ erlaubt Status- und Bestandsmeldungen, aber keine Änderungen an Bauplänen. Accounts und Tokens verwaltest du hier im Browser.</p><p><a href="/docs">API-Dokumentation</a> · <a href="/api/openapi.json">OpenAPI</a></p><pre id="agentSnippet"></pre></details>
+    <div class="table-wrap" role="region" aria-label="API-Tokens" tabindex="0">
+      <table>
+        <thead><tr><th>Name</th><th>Zugriff</th><th>Präfix</th><th>Erstellt</th><th>Zuletzt benutzt</th><th>Aktion</th></tr></thead>
+        <tbody id="tokRows"></tbody>
+      </table>
+    </div>
+    <details>
+      <summary>Anleitung für Agents</summary>
+      <p class="muted">Tokens werden nur einmal angezeigt. „Station“ erlaubt Status- und Bestandsmeldungen, aber keine Änderungen an Bauplänen. Accounts und Tokens verwaltest du hier im Browser.</p>
+      <p><a href="/docs">API-Dokumentation</a> · <a href="/api/openapi.json">OpenAPI</a></p>
+      <pre id="agentSnippet"></pre>
+    </details>
   </section>
 
   <section data-pane="activity" class="hide">
-    <div class="page-heading"><h1>Aktivität</h1></div><p class="intro">Änderungen an Bauplänen, Aufträgen und Zugängen.</p>
-    <div class="table-wrap" role="region" aria-label="Aktivität" tabindex="0"><table><thead><tr><th>Zeit</th><th>Wer</th><th>Über</th><th>Aktion</th><th>Ziel</th><th>Details</th></tr></thead><tbody id="actRows"></tbody></table></div>
+    <div class="table-wrap" role="region" aria-label="Aktivität" tabindex="0">
+      <table>
+        <thead><tr><th>Zeit</th><th>Wer</th><th>Über</th><th>Aktion</th><th>Ziel</th><th>Details</th></tr></thead>
+        <tbody id="actRows"></tbody>
+      </table>
+    </div>
   </section>
 
   <section data-pane="admin" class="hide">
-    <div class="page-heading"><h1>Verwaltung</h1></div>
-    <details class="form-section"><summary>Campus importieren</summary>
+    <details class="form-section">
+      <summary>Campus importieren</summary>
       <p class="muted">Jonnys Export (z. B. <span class="mono">ATM10-Campus-zum-Teilen.html</span>). Geänderte Baupläne werden neue Versionen, der 3D-Viewer wird aktualisiert. Baupläne, die seit dem letzten Import hier in der App geändert wurden, werden nicht überschrieben und als Konflikt gemeldet.</p>
-      <div class="row"><input aria-label="Campus-HTML" type="file" id="impFile" accept=".html,text/html"><label class="row"><input type="checkbox" id="impForce"> trotzdem überschreiben</label><select id="impBase" aria-label="Planungsstand"></select><button class="primary" id="impGo">Importieren</button></div>
+      <div class="row">
+        <input aria-label="Campus-HTML" type="file" id="impFile" accept=".html,text/html">
+        <label class="row"><input type="checkbox" id="impForce"> trotzdem überschreiben</label>
+        <select id="impBase" aria-label="Planungsstand"></select>
+        <button class="primary" id="impGo">Importieren</button>
+      </div>
       <pre id="impOut" class="hide"></pre>
     </details>
     <section class="content-section">
       <h2>Einladungen</h2>
-      <details class="form-section"><summary>Einladung erstellen</summary>
-      <div class="row"><input aria-label="Für wen ist die Einladung?" id="invNote" placeholder="Für wen? (z. B. Jonny)"><select aria-label="Rolle" id="invRole"><option value="member">Mitglied</option><option value="admin">Admin</option></select><select aria-label="Gültigkeit" id="invDays"><option value="7">7 Tage gültig</option><option value="30">30 Tage</option><option value="1">1 Tag</option></select><button class="primary" id="invCreate">Einladung erzeugen</button></div>
-      <div id="invNew" class="hide" role="status"></div></details>
-      <div class="table-wrap" role="region" aria-label="Einladungen" tabindex="0"><table><thead><tr><th>Für</th><th>Rolle</th><th>Erstellt</th><th>Gültig bis</th><th>Benutzt von</th><th></th></tr></thead><tbody id="invRows"></tbody></table></div>
+      <details class="form-section">
+        <summary>Einladung erstellen</summary>
+        <div class="row">
+          <input aria-label="Für wen ist die Einladung?" id="invNote" placeholder="Für wen? (z. B. Jonny)">
+          <select aria-label="Rolle" id="invRole"><option value="member">Mitglied</option><option value="admin">Admin</option></select>
+          <select aria-label="Gültigkeit" id="invDays"><option value="7">7 Tage gültig</option><option value="30">30 Tage</option><option value="1">1 Tag</option></select>
+          <button class="primary" id="invCreate">Einladung erzeugen</button>
+        </div>
+        <div id="invNew" class="hide" role="status"></div>
+      </details>
+      <div class="table-wrap" role="region" aria-label="Einladungen" tabindex="0">
+        <table>
+          <thead><tr><th>Für</th><th>Rolle</th><th>Erstellt</th><th>Gültig bis</th><th>Benutzt von</th><th></th></tr></thead>
+          <tbody id="invRows"></tbody>
+        </table>
+      </div>
     </section>
-    <section class="content-section"><h2>Accounts</h2><div class="table-wrap" role="region" aria-label="Accounts" tabindex="0"><table><thead><tr><th>Name</th><th>Rolle</th><th>Seit</th><th>Status</th><th></th></tr></thead><tbody id="userRows"></tbody></table></div></section>
+    <section class="content-section">
+      <h2>Accounts</h2>
+      <div class="table-wrap" role="region" aria-label="Accounts" tabindex="0">
+        <table>
+          <thead><tr><th>Name</th><th>Rolle</th><th>Seit</th><th>Status</th><th></th></tr></thead>
+          <tbody id="userRows"></tbody>
+        </table>
+      </div>
+    </section>
   </section>
+
   <footer class="app-footer"><span id="liveLine">Live-Bestand wird geladen …</span></footer>
 </main>
 
@@ -135,5 +320,6 @@
 <dialog class="form-dialog" id="editDialog" aria-labelledby="editTitle"></dialog>
 <dialog class="picker-dialog" id="cannonPickerDialog" aria-labelledby="pickerTitle"></dialog>
 <input type="file" id="hiddenFile" accept=".nbt" class="hide">
-<script type="module" src="/assets/app.js?v=20261114-status-1&amp;revision=erebor-finish-2"></script>
-</body></html>
+<script type="module" src="/assets/app.js?v=20261125-overhaul-1"></script>
+</body>
+</html>

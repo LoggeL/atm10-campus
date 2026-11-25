@@ -1,8 +1,29 @@
 <!doctype html>
-<html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Bauprojekte · ATM10 Campus</title>
-<link rel="stylesheet" href="/assets/app.css?v=20261114-status-1"><link rel="stylesheet" href="/assets/projects.css?v=20261114-status-1&amp;revision=projektarchiv-1"></head>
-<body><a class="skip-link" href="#main">Zum Inhalt</a>
-<!-- campus-navigation -->
-<main id="main" class="projects-main"><div class="project-toolbar"><a href="/projects">Alle Bauprojekte</a><div class="row"><button id="reload">Aktualisieren</button><button id="download" hidden>Plan als JSON</button><button id="print" hidden>Drucken / PDF</button></div></div>
-<p id="error" class="err" role="alert"></p><div id="content" aria-live="polite">Bauprojekte werden geladen …</div></main>
-<script type="module" src="/assets/projects.js?v=20261114-status-1&amp;revision=berglandschaft-1"></script></body></html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Bauprojekte · ATM10 Campus</title>
+  <link rel="stylesheet" href="/assets/app.css?v=20261125-overhaul-1">
+  <link rel="stylesheet" href="/assets/projects.css?v=20261125-overhaul-1">
+</head>
+<body class="projects-page">
+  <a class="skip-link" href="#main">Zum Inhalt</a>
+  <!-- campus-navigation -->
+  <main id="main" class="c-shell projects-main">
+    <div id="projectToolbar" class="project-toolbar" hidden>
+      <a id="projectsBack" class="c-btn c-btn--ghost c-btn--sm" href="/projects">&larr; Alle Bauprojekte</a>
+      <div class="row project-toolbar-actions">
+        <button id="reload" type="button" class="c-btn c-btn--sm">Aktualisieren</button>
+        <button id="download" type="button" class="c-btn c-btn--sm" hidden>Plan als JSON</button>
+        <button id="print" type="button" class="c-btn c-btn--sm" hidden>Drucken / PDF</button>
+      </div>
+    </div>
+    <p id="error" class="c-notice c-notice--danger project-error" role="alert"></p>
+    <div id="content" aria-live="polite">
+      <div class="c-card project-loading">Bauprojekte werden geladen …</div>
+    </div>
+  </main>
+  <script type="module" src="/assets/projects.js?v=20261125-overhaul-1"></script>
+</body>
+</html>

@@ -152,3 +152,282 @@ export const atmStarStockRules = [...new Map([
 ].map(rule => [rule.key, rule])).values()].map(({ key, id, components, displayName, excludedName }) => ({
   key, id, components, displayName, excludedName,
 }));
+
+// ---------- Extended metadata (kept outside atmStarStockRules so revision stays pinned) ----------
+
+export const NETHER_STARS_PER_STAR = 15 * 6561; // 98,415 Nether Stars per ATM Star
+
+export const MOD_NAMES = Object.freeze({
+  advanced_ae: 'Advanced AE',
+  ae2: 'Applied Energistics 2',
+  ae2wtlib: 'AE2 Wireless Terminals',
+  aeinfinitybooster: 'AE Infinity Booster',
+  allthecompressed: 'AllTheCompressed',
+  allthemodium: 'Allthemodium',
+  allthetweaks: 'AllTheTweaks',
+  apothic_enchanting: 'Apothic Enchanting',
+  ars_nouveau: 'Ars Nouveau',
+  bigreactors: 'Extreme Reactors',
+  cataclysm: 'L_Ender’s Cataclysm',
+  create: 'Create',
+  deeperdarker: 'Deeper and Darker',
+  eternal_starlight: 'Eternal Starlight',
+  evilcraft: 'EvilCraft',
+  forbidden_arcanus: 'Forbidden & Arcanus',
+  generatorgalore: 'Generator Galore',
+  hostilenetworks: 'Hostile Neural Networks',
+  immersiveengineering: 'Immersive Engineering',
+  industrialforegoing: 'Industrial Foregoing',
+  ironfurnaces: 'Iron Furnaces',
+  irons_spellbooks: 'Iron’s Spells ’n Spellbooks',
+  justdirethings: 'Just Dire Things',
+  kubejs: 'ATM10 (KubeJS)',
+  megacells: 'MEGA Cells',
+  mekanism: 'Mekanism',
+  minecraft: 'Minecraft',
+  modern_industrialization: 'Modern Industrialization',
+  mysticalagradditions: 'Mystical Agradditions',
+  mysticalagriculture: 'Mystical Agriculture',
+  neovitae: 'Blood Magic',
+  occultism: 'Occultism',
+  oritech: 'Oritech',
+  pneumaticcraft: 'PneumaticCraft',
+  pocketstorage: 'Pocket Storage',
+  powah: 'Powah',
+  productivebees: 'Productive Bees',
+  productivetrees: 'Productive Trees',
+  rootsclassic: 'Roots Classic',
+  stevescarts: 'Steve’s Carts',
+  twilightforest: 'Twilight Forest',
+});
+
+export function modInfo(itemId) {
+  const namespace = String(itemId || '').split(':')[0] || 'unknown';
+  return { id: namespace, label: MOD_NAMES[namespace] ?? namespace };
+}
+
+export const atmStarPartMeta = Object.freeze({
+  'allthecompressed:nether_star_block_3x': {
+    station: 'Kompression',
+    stationDetail: '9× Nethersternblock 2x pro 3x-Block (6.561 Nethersterne)',
+    category: 'Kompression',
+  },
+  'allthemodium:unobtainium_allthemodium_alloy_block': {
+    station: 'Runic Crucible / Legierung',
+    stationDetail: 'ATM-Legierungsblock aus 8 Blöcken (inkl. 2× Piglich Heart Block)',
+    category: 'Legierungen',
+  },
+  'awakened-alloy-block': {
+    station: 'Runic Enchanter',
+    stationDetail: 'Erweckter Unobtainium-Vibranium Alloy Block mit Unbreaking I',
+    category: 'Legierungen',
+  },
+  'allthetweaks:oblivion_shard': {
+    station: 'Werkbank',
+    stationDetail: 'Boss- & Endgame-Trophäen zu einem Oblivion Shard kombiniert',
+    category: 'Komponenten',
+  },
+  'mysticalagradditions:creative_essence': {
+    station: 'Infusion / Werkbank',
+    stationDetail: 'Insanium-Blöcke, Gemstone-Blöcke und Master Infusion Crystal',
+    category: 'Essenz',
+  },
+  'allthetweaks:nexium_emitter': {
+    station: 'Werkbank',
+    stationDetail: 'AE2-, Powah-, Mekanism- und Tech-Endgame-Module',
+    category: 'Komponenten',
+  },
+  'allthetweaks:withers_compass': {
+    station: 'Werkbank',
+    stationDetail: 'Wither- und Boss-Komponenten inkl. Scroll Lv. 10 & Long-Wither-Pfeil',
+    category: 'Komponenten',
+  },
+  'allthetweaks:improbable_probability_device': {
+    station: 'Werkbank',
+    stationDetail: 'Antimatter, Singularity und High-Tier-Maschinen',
+    category: 'Komponenten',
+  },
+  'allthetweaks:dragon_soul': {
+    station: 'Werkbank',
+    stationDetail: 'Drachen- & Seelen-Komponenten inkl. Data Model (1254/1255) und Piglich Heart Block',
+    category: 'Komponenten',
+  },
+  'allthetweaks:philosophers_fuel': {
+    station: 'Werkbank',
+    stationDetail: 'Energie- & Brennstoff-Komponenten inkl. Dark Tank (16.000 mB T4 Fluid)',
+    category: 'Komponenten',
+  },
+  'allthetweaks:pulsating_black_hole': {
+    station: 'Werkbank',
+    stationDetail: 'Oritech, AE2 Quantum Ring, Paradox Machine und Magie-Artefakte',
+    category: 'Komponenten',
+  },
+  'allthetweaks:dimensional_seed': {
+    station: 'Werkbank',
+    stationDetail: 'Hochkomprimierte Dimensionsblöcke (4x–6x) und Miniatur-Portale',
+    category: 'Kompression',
+  },
+  'allthetweaks:patrick_star': {
+    station: 'Mechanical Crafter',
+    stationDetail: '55 Beton- und Trockenbetonblöcke in Patrick-Star-Form',
+    category: 'Komponenten',
+  },
+});
+
+export const atmStarItemRequirements = Object.freeze({
+  'awakened-alloy-block': [
+    {
+      kind: 'name',
+      badge: 'Name',
+      label: 'Exakter Anzeigename',
+      detail: 'Anzeigename muss exakt „Awakened Unobtainium-Vibranium Alloy Block“ lauten.',
+    },
+    {
+      kind: 'enchant',
+      badge: 'Unbreaking I',
+      label: 'Verzauberung Unbreaking I',
+      detail: 'Komponente minecraft:enchantments mit minecraft:unbreaking Stufe 1 erforderlich.',
+    },
+  ],
+  'allthemodium:unobtainium_vibranium_alloy_block': [
+    {
+      kind: 'name',
+      badge: 'Nicht erweckt',
+      label: 'Normale Legierungsvariante',
+      detail: 'Darf nicht den Anzeigenamen „Awakened Unobtainium-Vibranium Alloy Block“ tragen.',
+    },
+  ],
+  'unbreaking-book': [
+    {
+      kind: 'enchant',
+      badge: 'Unbreaking I',
+      label: 'Verzaubertes Buch (Unbreaking I)',
+      detail: 'Gespeicherte Verzauberung minecraft:unbreaking Stufe 1 in minecraft:stored_enchantments.',
+    },
+  ],
+  'evilcraft:mace_of_destruction': [
+    {
+      kind: 'fluid',
+      badge: '4.000 mB Blood',
+      label: '4.000 mB EvilCraft Blood',
+      detail: 'Muss exakt mit 4.000 mB evilcraft:blood gefüllt sein (cyclopscore:fluid_content).',
+    },
+  ],
+  'ae2wtlib:wireless_universal_terminal': [
+    {
+      kind: 'energy',
+      badge: '6,4M AE',
+      label: 'Voll geladen (6.400.000 AE)',
+      detail: 'Komponente ae2:stored_energy muss exakt 6.400.000 betragen.',
+    },
+    {
+      kind: 'module',
+      badge: '4 Terminalmodule',
+      label: 'Alle 4 Terminalmodule installiert',
+      detail: 'Crafting, Pattern Encoding, Pattern Access und Extended Pattern Access Terminal müssen enthalten sein.',
+    },
+  ],
+  'productivebees:configurable_comb': [
+    {
+      kind: 'nbt',
+      badge: 'Withered Bee',
+      label: 'Bienentyp: Withered',
+      detail: 'Komponente productivebees:bee_type muss productivebees:withered sein.',
+    },
+  ],
+  'irons_spellbooks:scroll': [
+    {
+      kind: 'spell',
+      badge: 'Wither Skull Lv. 10',
+      label: 'Zauberrolle Wither Skull Stufe 10',
+      detail: 'irons_spellbooks:spell_container mit irons_spellbooks:wither_skull auf Level 10 (gesperrt, Slot 0).',
+    },
+  ],
+  'minecraft:tipped_arrow': [
+    {
+      kind: 'potion',
+      badge: 'Long Wither',
+      label: 'Trankeffekt Long Wither',
+      detail: 'minecraft:potion_contents.potion muss apothic_attributes:long_wither sein.',
+    },
+  ],
+  'justdirethings:creaturecatcher': [
+    {
+      kind: 'entity',
+      badge: 'Dragon Familiar',
+      label: 'Gefangene Kreatur: Dragon Familiar',
+      detail: 'justdirethings:entitytype muss occultism:dragon_familiar enthalten.',
+    },
+  ],
+  'hostilenetworks:data_model': [
+    {
+      kind: 'data',
+      badge: '1254–1255 Daten',
+      label: 'Ender Dragon Data Model (Self Aware)',
+      detail: 'hostilenetworks:data_model = hostilenetworks:ender_dragon mit exakt 1254 oder 1255 Daten.',
+    },
+  ],
+  'productivebees:spawn_egg_configurable_bee': [
+    {
+      kind: 'entity',
+      badge: 'Soul Lava Bee',
+      label: 'Spawn-Ei: Soul Lava Bee',
+      detail: 'minecraft:entity_data mit id=productivebees:configurable_bee und type=productivebees:soul_lava.',
+    },
+  ],
+  'evilcraft:dark_tank': [
+    {
+      kind: 'fluid',
+      badge: '16.000 mB T4 Fluid',
+      label: '16.000 mB Refined T4 Fluid',
+      detail: 'Muss exakt 16.000 mB justdirethings:refined_t4_fluid_source enthalten (cyclopscore:fluid_content).',
+    },
+  ],
+});
+
+export const starryBeeRoadmap = Object.freeze({
+  title: 'Produktion mit der Starry Bee',
+  subtitle: 'Vom ersten ATM Star bis zur endlosen Shard-Automatisierung',
+  steps: [
+    {
+      step: 1,
+      id: 'stars-18',
+      title: '18 ATM Stars herstellen',
+      detail: 'Zwei ATM Star Blocks (je 9 Stars) bilden die Basis für Umwandlung und Futterblock.',
+      targetStars: 18,
+    },
+    {
+      step: 2,
+      id: 'patrick-bee',
+      title: 'Patrick Bee angeln & umwandeln',
+      detail: 'Patrick Bee im Warm Ocean angeln und den ersten ATM Star Block für die Umwandlung zur Starry Bee verwenden.',
+      targetStars: 9,
+      targetBlocks: 1,
+    },
+    {
+      step: 3,
+      id: 'starry-beehive',
+      title: 'Starry Bee & Centrifuge anbinden',
+      detail: 'Den zweiten ATM Star Block vor dem Advanced Beehive auf den Feeding Slab setzen. Starry Combs in der Powered Centrifuge verarbeiten und ATM Star Shards zurück ins ME leiten.',
+      targetStars: 18,
+      targetBlocks: 2,
+    },
+    {
+      step: 4,
+      id: 'altar-automation',
+      title: 'Runic Star Altar automatisieren',
+      detail: 'Pro weiterem Star 292 Shards einplanen (5 Star-Fragmente, Infused Patrick Star, Corrupti Dust, Mundabitur Dust, Lens of the Killer). Automatic Hephaestus Forge, Runic Crucible, Runic Enchanter und Atomic Reconstructor über Processing Patterns an die Item Input Hatch anbinden und per ME Import Bus zurückführen.',
+      shardsPerStar: 292,
+    },
+  ],
+  links: [
+    {
+      label: 'Altar-Rezepte in ATM10 8.6',
+      href: 'https://github.com/AllTheMods/ATM-10/blob/8.6/kubejs/server_scripts/modpack/runic_multis/recipes/star_altar.js',
+    },
+    {
+      label: 'Creative-Questreihe',
+      href: 'https://github.com/AllTheMods/ATM-10/blob/8.6/config/ftbquests/quests/lang/en_us/chapters/achapter_2r_6the_atm_star.snbt',
+    },
+  ],
+});

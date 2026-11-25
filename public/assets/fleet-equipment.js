@@ -1,10 +1,10 @@
-import { api } from './campus-client.js?v=20261114-status-1';
-import { esc } from './format.js?v=20261114-status-1';
-import { renderFleetIssues } from './connection-status.js?v=20261114-status-1';
+import { api } from './campus-client.js?v=20261125-overhaul-1';
+import { esc } from './format.js?v=20261125-overhaul-1';
+import { renderFleetIssues } from './connection-status.js?v=20261125-overhaul-1';
 
 const fleet = '/api/projects/erebor/cannon-sites';
 const queue = '/api/projects/erebor/planfolge';
-const button = (id, label) => '<button type="button" data-command="' + id + '">' + label + '</button>';
+const button = (id, label, cls = 'small') => '<button type="button" class="' + cls + '" data-command="' + id + '">' + label + '</button>';
 
 export function fleetEquipment(root, { admin, notify }) {
   let snapshot = null,
@@ -25,18 +25,17 @@ export function fleetEquipment(root, { admin, notify }) {
         const text = row.result || (Date.now() < row.expires ? 'Wartet auf Freigabe' : 'Zeitfenster abgelaufen');
         results.set(text, (results.get(text) || 0) + 1);
       }
+      const configuredSupply = data.supplySettings.filter((s) => s.configured).length;
+      const totalSupply = data.supplySettings.length;
       const html =
-        '<h2>Flottenbetrieb</h2><p>Zusatzkanonen ' +
-        (data.enabled ? 'freigegeben' : 'pausiert') +
-        ' · Steinbestellung über K02 ' +
-        (data.stoneOrders ? 'aktiv' : 'aus') +
-        ' · Automatisches Nachlegen ' +
-        (data.autoLoad ? 'aktiv' : 'pausiert') +
-        ' · Materialpuffer an ' +
-        data.supplySettings.filter((s) => s.configured).length +
-        ' / ' +
-        data.supplySettings.length +
-        ' Standorten eingestellt.</p>' +
+        '<section class="panel fleet-overview">' +
+        '<div class="fleet-overview-head"><h2>Flottenbetrieb</h2>' +
+        '<div class="fleet-status-strip">' +
+        '<span class="badge ' + (data.enabled ? 'built' : 'warning') + '">Zusatzkanonen: ' + (data.enabled ? 'freigegeben' : 'pausiert') + '</span>' +
+        '<span class="badge ' + (data.stoneOrders ? 'built' : '') + '">Steinbestellung K02: ' + (data.stoneOrders ? 'aktiv' : 'aus') + '</span>' +
+        '<span class="badge ' + (data.autoLoad ? 'ok' : 'warning') + '">Auto-Nachlegen: ' + (data.autoLoad ? 'aktiv' : 'pausiert') + '</span>' +
+        '<span class="badge ' + (configuredSupply === totalSupply && totalSupply > 0 ? 'built' : '') + '">Materialpuffer: ' + configuredSupply + ' / ' + totalSupply + '</span>' +
+        '</div></div>' +
         (editors
           ? '<div class="row">' +
             (data.staleQueue
@@ -46,26 +45,26 @@ export function fleetEquipment(root, { admin, notify }) {
                   data.autoLoad ? 'Nachlegen für die Flotte pausieren' : 'Nachlegen für die Flotte aktivieren',
                 )) +
             button('helpers', data.enabled ? 'Neue Helferaufträge pausieren' : 'Helferaufträge freigeben') +
-            button('start', 'Dreierbetrieb an allen Stationen starten') +
+            button('start', 'Dreierbetrieb an allen Stationen starten', 'primary small') +
             button('resume', 'Pausierte Steinaufträge fortsetzen') +
             '</div>'
           : '') +
-        (results.size ? '<p>' + [...results].map(([s, n]) => n + ' × ' + esc(s)).join(' · ') + '</p>' : '') +
+        (results.size ? '<p class="muted">' + [...results].map(([s, n]) => n + ' × ' + esc(s)).join(' · ') + '</p>' : '') +
         '<div class="row">' +
         (editors
           ? button('supply', '16 Stacks und 64 Schießpulver je Station setzen') +
             button('stone', data.stoneOrders ? 'Steinbestellung ausschalten' : 'Stein automatisch nachbestellen')
           : '') +
-        '<a href="/assets/erebor-me-auftrag.html">Connecting-Blöcke bestellen</a></div>' +
+        '<a class="btn small" href="/assets/erebor-me-auftrag.html">Connecting-Blöcke bestellen</a></div>' +
         renderFleetIssues(data.diagnostics) +
         '<details data-maintenance><summary>Aufbau und Wartung</summary><p>A, B und C verwenden dieselbe Materialkiste. Bei K09 steht C unter der Kiste.</p>' +
-        '<p>Controller ' +
+        '<p class="muted">Controller ' +
         esc(data.chestController ?? 'unbekannt') +
         ' · Kistentracker ' +
         esc(data.chestTracker ?? 'unbekannt') +
-        '</p><div class="row"><a href="/assets/erebor-shared-v5.zip">Kistensteuerung V5</a><a href="/assets/erebor-solid-v6.zip">Massiv-Update V6</a>' +
-        (editors ? ' <a href="' + queue + '/drucker-reparatur.zip">Druckerreparatur herunterladen</a>' : '') +
-        '</div></details>';
+        '</p><div class="row"><a class="btn small" href="/assets/erebor-shared-v5.zip">Kistensteuerung V5</a><a class="btn small" href="/assets/erebor-solid-v6.zip">Massiv-Update V6</a>' +
+        (editors ? ' <a class="btn small" href="' + queue + '/drucker-reparatur.zip">Druckerreparatur herunterladen</a>' : '') +
+        '</div></details></section>';
       if (html !== lastMarkup) {
         const opened = [...root.querySelectorAll('details[open]')].map(d=>d.querySelector('summary').textContent);
         const focus = root.contains(document.activeElement) ? document.activeElement.dataset.command : null;

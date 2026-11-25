@@ -3,20 +3,29 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Campus-Viewer · ATM10</title>
-<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><rect x='2' y='2' width='12' height='12' rx='3' fill='%2373d8e5'/></svg>">
-<link rel="stylesheet" href="/viewer/viewer.css?v=20261114-status-1">
+<meta name="theme-color" content="#0c1311">
+<title>3D-Viewer · ATM10 Campus</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><rect width='16' height='16' rx='4' fill='%230c1311'/><rect x='2.5' y='2.5' width='11' height='11' rx='2.5' fill='%237ee0a8'/><rect x='5.5' y='5.5' width='5' height='5' rx='1' fill='%23091d14'/></svg>">
+<link rel="stylesheet" href="/assets/campus-tokens.css?v=20261125-overhaul-1">
+<link rel="stylesheet" href="/viewer/viewer.css?v=20261125-overhaul-1">
+<link rel="stylesheet" href="/assets/blueprint-preview.css?v=20261125-overhaul-1">
 <script type="importmap">
 { "imports": { "three": "/vendor/three/build/three.module.min.js", "three/addons/": "/vendor/three/examples/jsm/" } }
 </script>
-<link rel="stylesheet" href="/assets/blueprint-preview.css?v=20261114-status-1"></head>
+</head>
 <body>
 <canvas id="scene" tabindex="0" aria-label="3D-Ansicht des Campus"></canvas>
 
 <div id="loading" class="loading">
-
   <div class="loading-card">
-    <div class="brand">ATM10 Campus</div>
+    <div class="brand">
+      <svg class="brand-mark" width="20" height="20" viewBox="0 0 20 20" aria-hidden="true">
+        <rect width="20" height="20" rx="5" fill="#182a22" stroke="#4c745f" stroke-width="1.2"/>
+        <rect x="4" y="4" width="12" height="12" rx="2.5" fill="#7ee0a8"/>
+        <rect x="7.5" y="7.5" width="5" height="5" rx="1" fill="#091d14"/>
+      </svg>
+      <span>ATM10 Campus</span>
+    </div>
     <h1>3D-Ansicht laden</h1>
     <p id="loading-step">Lade Szene …</p>
     <div class="bar"><div id="loading-bar"></div></div>
@@ -24,7 +33,15 @@
 </div>
 
 <header class="topbar glass">
-  <a class="brand" href="/app" title="Zur Übersicht"><span class="brand-text">ATM10 Campus</span><span class="brand-short">Campus</span></a>
+  <a class="brand" href="/erebor/dashboard" title="Zum Dashboard">
+    <svg class="brand-mark" width="20" height="20" viewBox="0 0 20 20" aria-hidden="true">
+      <rect width="20" height="20" rx="5" fill="#182a22" stroke="#4c745f" stroke-width="1.2"/>
+      <rect x="4" y="4" width="12" height="12" rx="2.5" fill="#7ee0a8"/>
+      <rect x="7.5" y="7.5" width="5" height="5" rx="1" fill="#091d14"/>
+    </svg>
+    <span class="brand-text">ATM10 Campus</span><span class="brand-short">Campus</span>
+  </a>
+  <span id="viewer-mode" class="badge viewer-mode-badge">3D-Viewer</span>
   <label class="select project-select"><span class="sr">Projekt</span><select id="project" aria-label="Projekt"></select></label>
   <div class="snap">
     <span id="live-badge" class="badge">–</span>
@@ -32,8 +49,12 @@
   </div>
   <div id="edition" class="edition"></div>
   <div class="viewer-refresh"><span id="refresh-label" role="status">Prüfung in 30 s</span><button id="refresh-now" type="button" class="tool-btn">Jetzt prüfen</button><progress id="refresh-progress" max="1" value="0" aria-label="Zeit bis zur nächsten Aktualisierung"></progress></div>
-  <nav class="links">
-    <a id="project-link" href="/projects">Projekt</a><a id="blueprints-link" href="/app">Baupläne</a><a href="/app#cannons">Kanonen</a>
+  <nav class="links" aria-label="Campus">
+    <a href="/erebor/dashboard">Dashboard</a>
+    <a href="/atm-star" class="link-star">ATM Star</a>
+    <a id="blueprints-link" href="/app#overview">Bauaufträge</a>
+    <a href="/app#cannons">Stationstechnik</a>
+    <a id="project-link" href="/projects">Bauprojekte</a>
   </nav>
   <button id="panel-toggle" class="icon-btn mobile-only" aria-label="Ansicht und Baupläne öffnen" aria-expanded="false" aria-controls="panel">Ansicht</button>
 </header>
@@ -78,6 +99,13 @@
   <section data-pane="places" class="pane">
     <div id="pois" class="pois"></div>
   </section>
+  <nav class="mobile-nav-links" aria-label="Campus-Bereiche">
+    <a href="/erebor/dashboard">Dashboard</a>
+    <a href="/atm-star">ATM Star</a>
+    <a href="/app#overview">Bauaufträge</a>
+    <a href="/app#cannons">Stationstechnik</a>
+    <a href="/projects">Bauprojekte</a>
+  </nav>
 </aside>
 
 <div id="detail" class="detail glass hidden"></div>
@@ -126,6 +154,6 @@
 <div id="hud" class="hud"></div>
 <div id="toast" class="toast hidden"></div>
 
-<script type="module" src="/viewer/main.js?v=20261119-gold-halls"></script>
+<script type="module" src="/viewer/main.js?v=20261125-overhaul-1"></script>
 </body>
 </html>

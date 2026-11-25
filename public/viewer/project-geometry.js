@@ -75,13 +75,13 @@ export class ProjectGeometry {
   }
   makeCannon(item) {
     const group = new THREE.Group();
-    const marker = new THREE.Mesh(new THREE.OctahedronGeometry(8),this.material('#73d8e5'));
+    const marker = new THREE.Mesh(new THREE.OctahedronGeometry(8),this.material('#7ee0a8'));
     marker.position.set(...item.position); marker.position.y += 8;
     marker.userData.item = item; this.pickables.push(marker); group.add(marker);
     const canvas = document.createElement('canvas'); canvas.width = 128; canvas.height = 64;
-    const ctx = canvas.getContext('2d'); ctx.fillStyle = '#142530'; ctx.fillRect(0,0,128,64);
-    ctx.strokeStyle = '#73d8e5'; ctx.lineWidth = 4; ctx.strokeRect(2,2,124,60);
-    ctx.fillStyle = '#e8f0f5'; ctx.font = 'bold 36px system-ui'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(item.id,64,32);
+    const ctx = canvas.getContext('2d'); ctx.fillStyle = '#131d19'; ctx.fillRect(0,0,128,64);
+    ctx.strokeStyle = '#7ee0a8'; ctx.lineWidth = 4; ctx.strokeRect(2,2,124,60);
+    ctx.fillStyle = '#edf3ee'; ctx.font = 'bold 36px system-ui'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(item.id,64,32);
     const texture = new THREE.CanvasTexture(canvas); texture.colorSpace = THREE.SRGBColorSpace;
     const label = new THREE.Sprite(new THREE.SpriteMaterial({map:texture,depthTest:false,clippingPlanes:[this.clip]}));
     label.position.set(...item.position); label.position.y += 36; label.scale.set(44,22,1); label.renderOrder=10;
@@ -131,7 +131,7 @@ export class ProjectGeometry {
     return ray.intersectObjects(this.pickables.filter(visible),false).find(h=>h.point.y<=this.clip.constant)?.object.userData.item || null;
   }
   async loadPreview(preview) {
-    const { loadBlockPreview } = await import('./block-preview.js?v=20261114-status-1');
+    const { loadBlockPreview } = await import('./block-preview.js?v=20261125-overhaul-1');
     const { mesh, bounds, blockCount } = await loadBlockPreview(preview);
     mesh.rotation.y = this.data.rotationDegrees * Math.PI/180;
     mesh.position.set(...this.data.origin); mesh.updateMatrixWorld(true);

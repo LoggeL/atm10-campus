@@ -1,4 +1,4 @@
-import {esc} from './format.js?v=20261114-status-1';
+import {esc} from './format.js?v=20261125-overhaul-1';
 
 // A computer heartbeat is not proof of a working ME network. Retain the last
 // reported fault when stale, but never infer a power/channel cause from offline.

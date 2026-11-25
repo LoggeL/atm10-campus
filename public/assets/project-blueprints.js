@@ -1,6 +1,6 @@
-import {esc,fmt} from './format.js?v=20261114-status-1';
-import {coordinateFields,placementCard,coordinateListText} from './placement.js?v=20261114-status-1';
-import {blueprintPreview} from './blueprint-preview.js?v=20261114-status-1';
+import {esc,fmt} from './format.js?v=20261125-overhaul-1';
+import {coordinateFields,placementCard,coordinateListText} from './placement.js?v=20261125-overhaul-1';
+import {blueprintPreview} from './blueprint-preview.js?v=20261125-overhaul-1';
 
 export function preparedBlueprints(project,packages){
  return packages.flatMap(p=>p.files.map((f,i)=>({...f,id:f.fileName.replace(/\.nbt$/i,''),project:project.id,version:p.version,part:p.part,order:i,savedAt:p.savedAt,sourceRegions:p.sourceRegions,name:`Erebor · ${p.cannon} · Paket ${String(p.part).padStart(2,'0')} · ${f.tile}`,download:`/api/projects/${encodeURIComponent(project.id)}/stone/prepared/${encodeURIComponent(p.cannon)}/${p.part}/${encodeURIComponent(f.tile)}.nbt?version=${p.version}`,packageDownload:`/api/projects/${encodeURIComponent(project.id)}/stone/prepared/${encodeURIComponent(p.cannon)}/${p.part}.zip?version=${p.version}`})));
@@ -103,17 +103,18 @@ const [prepared,architecture,manifest,icons]=await Promise.all([api('/api/projec
   if(!isSelected())return;
   const spawn=await api('/api/projects/erebor/mobschutz').catch(()=>null);
   if(!isSelected())return;
+  const queryParams=new URLSearchParams(globalThis.location?.search||'');
   if($('ereborSpawnPlans')){
    $('ereborSpawnPlans').hidden=!spawn?.published;
    if(spawn?.published){
     $('spawnPlanCounts').textContent=fmt(spawn.torches)+' Mega Torches · '+fmt(spawn.runs)+' Kanoneneinsätze. '+fmt(spawn.ready)+' Positionen sind laut Weltprüfung zum Einbau bereit.'+(spawn.openCells?' Für '+fmt(spawn.openCells)+' Prüfabschnitte ist die Abdeckung noch offen.':'');
-    if(new URLSearchParams(location.search).get('mobschutz')==='1')$('ereborSpawnPlans').open=true;
+    if(queryParams.get('mobschutz')==='1'){if($('esgarothCatalog'))$('esgarothCatalog').open=true;$('ereborSpawnPlans').open=true;}
    }
   }
   if($('surfaceCatalog')){
-   const parts=surface?.parts.filter(p=>p.files>0)||[];
+   const parts=Array.isArray(surface?.parts)?surface.parts.filter(p=>p.files>0):[];
    $('surfaceCatalog').hidden=!parts.length;
-   if(parts.length&&new URLSearchParams(location.search).get('surface')==='1'&&!$('surfaceCatalog').dataset.opened){$('surfaceCatalog').open=true;$('surfaceCatalog').dataset.opened='1';$('surfaceCatalog').scrollIntoView({block:'start'});}
+   if(parts.length&&queryParams.get('surface')==='1'&&!$('surfaceCatalog').dataset.opened){if($('esgarothCatalog'))$('esgarothCatalog').open=true;$('surfaceCatalog').open=true;$('surfaceCatalog').dataset.opened='1';$('surfaceCatalog').scrollIntoView?.({block:'start'});}
    $('surfaceDownloads').innerHTML=parts.map(p=>'<p><a download href="/api/projects/erebor/landschaft/bauplaene/'+encodeURIComponent(p.id)+'/'+encodeURIComponent(p.id)+'.zip">'+esc(p.id)+' · '+fmt(p.files)+' Schematics (ZIP)</a> · '+fmt(p.blocks)+' Blöcke</p>').join('');
   }
   const finishes=architecture.packages.filter(p=>p.finishing&&p.group!=='E01'&&p.files.length);
@@ -131,6 +132,6 @@ const [prepared,architecture,manifest,icons]=await Promise.all([api('/api/projec
   }
   esgarothPackages(architecture.packages);
   catalogAt=Date.now();
-  $('cards').innerHTML='<a href="/api/projects/erebor/stone/massif/plans">Massiv-Baupläne und Sonderziele</a><a href="/api/projects/erebor/stone/massif/urnenpakete">Urnen-Sammelpläne</a><a href="/viewer?project=erebor&room=E05">Blockvorschau öffnen</a>';rows();coordinates();
+  $('cards').innerHTML='<a class="quick-link-card" href="/api/projects/erebor/stone/massif/plans"><span class="quick-link-eyebrow">Erebor Massiv</span><strong>Massiv-Baupläne und Sonderziele</strong></a><a class="quick-link-card" href="/api/projects/erebor/stone/massif/urnenpakete"><span class="quick-link-eyebrow">Sammelpakete</span><strong>Urnen-Sammelpläne</strong></a><a class="quick-link-card" href="/viewer?project=erebor&room=E05"><span class="quick-link-eyebrow">3D-Ansicht</span><strong>Blockvorschau öffnen</strong></a>';rows();coordinates();
  },rows,coordinates,changeSite(){limit=150;renderKey='';rows();},refreshQueue,updateLoadStates,coordinateText:()=>coordinateListText(items).replace('ATM10 Campus – Einsetzkoordinaten der aktuellen Baupläne','Erebor – Einsetzkoordinaten der gespeicherten Schematics')};
 }

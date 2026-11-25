@@ -1,4 +1,4 @@
-import { loadBlockPreview } from '/viewer/block-preview.js?v=20261114-status-1';
+import { loadBlockPreview } from '/viewer/block-preview.js?v=20261125-overhaul-1';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
@@ -30,9 +30,9 @@ async function start(){
  const resize=()=>{const w=stage.clientWidth,h=stage.clientHeight;renderer.setSize(w,h);camera.aspect=w/h;camera.updateProjectionMatrix();};
  new ResizeObserver(resize).observe(stage);resize();front();
  $('#detail').textContent=blockCount.toLocaleString('de-DE')+' Blöcke · Originaltexturen · Ziehen: drehen · Mausrad: zoomen';
- document.title='Erebor · Minecraft-Blockvorschau v'+preview.revision;
+ document.title='Erebor · Minecraft-Blockvorschau v'+preview.revision+' · ATM10 Campus';
  renderer.domElement.setAttribute('aria-label','Erebor-Blockmodell mit LoggeL und KGZJonny');
  status.hidden=true;
  renderer.setAnimationLoop(()=>{controls.update();renderer.render(scene,camera);});
 }
-start().catch(e=>{status.textContent=e.message;status.style.color='#ffc0b8';});
+start().catch(e=>{status.textContent=e.message;status.style.color='var(--danger, #f08c84)';});

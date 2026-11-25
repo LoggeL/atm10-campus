@@ -1,5 +1,5 @@
-import {linkStation} from './campus-client.js?v=20261114-status-1';
-import {fmt} from './format.js?v=20261114-status-1';
+import {linkStation} from './campus-client.js?v=20261125-overhaul-1';
+import {fmt} from './format.js?v=20261125-overhaul-1';
 
 const base='/api/projects/erebor/planfolge';
 const positions=Array.from({length:37},(_,i)=>'K'+String(i+1).padStart(2,'0'));

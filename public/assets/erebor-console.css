@@ -1,51 +1,166 @@
+/* ==========================================================================
+   ATM10 Campus — Erebor Queue & Fleet Console
+   Layers onto campus-tokens.css and app.css.
+   ========================================================================== */
+
 #ereborQueue {
-  margin: 18px 0 10px;
+  margin: 0 0 18px;
 }
+
 .fleet-headed,
 .fleet-actions,
 .fleet-lists {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: 8px 12px;
 }
+
 .fleet-headed {
   justify-content: space-between;
+  margin-bottom: 12px;
 }
+
+.fleet-headed label {
+  font-size: var(--text-xs, 0.75rem);
+  font-weight: 600;
+  color: var(--muted, #8ea397);
+}
+
 .fleet-job {
-  margin: 15px 0;
-  padding: 16px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  background: var(--surface);
+  margin: 0 0 16px;
+  padding: 18px 20px;
+  border: 1px solid var(--border, #263730);
+  border-radius: var(--radius-md, 11px);
+  background: var(--surface-1, #131d19);
+  box-shadow: var(--shadow-sm);
 }
+
+.fleet-job-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 14px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+
+.fleet-job h2 {
+  margin: 0;
+  font-size: 1.05rem;
+}
+
+.fleet-job-headline {
+  display: flex;
+  align-items: center;
+  gap: 8px 10px;
+  flex-wrap: wrap;
+  margin: 8px 0;
+}
+
 .fleet-job strong {
   overflow-wrap: anywhere;
-  font: 13px/1.5 var(--mono);
+  font: 600 0.85rem / 1.5 var(--font-mono, ui-monospace, monospace);
+  color: var(--text, #edf3ee);
 }
+
+.fleet-job-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px 14px;
+  flex-wrap: wrap;
+  margin: 6px 0 12px;
+  font-size: var(--text-xs, 0.75rem);
+  color: var(--muted, #8ea397);
+  font-variant-numeric: tabular-nums;
+}
+
 .fleet-pill {
-  font-size: 13px;
-  line-height: 1.35;
-  padding: 4px 10px;
-  border: 1px solid var(--line-strong);
-  border-radius: 16px;
-  color: var(--muted);
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: var(--text-xs, 0.75rem);
+  font-weight: 620;
+  line-height: 1.4;
+  padding: 3px 10px;
+  border: 1px solid var(--border, #263730);
+  border-radius: 999px;
+  background: var(--neutral-soft, rgba(125, 145, 135, 0.16));
+  color: var(--text-2, #c2d0c7);
 }
+
 .fleet-pill.working {
-  color: var(--cyan);
+  color: var(--sky, #7cc9e8);
+  background: var(--sky-soft, rgba(124, 201, 232, 0.14));
+  border-color: rgba(124, 201, 232, 0.32);
 }
+
 .fleet-pill.ready {
-  color: var(--green);
+  color: var(--accent-strong, #9beab9);
+  background: var(--accent-soft, rgba(126, 224, 168, 0.14));
+  border-color: rgba(126, 224, 168, 0.32);
 }
+
 .fleet-pill.waiting {
-  color: var(--amber);
+  color: var(--gold, #f2be6b);
+  background: var(--gold-soft, rgba(242, 190, 107, 0.14));
+  border-color: rgba(242, 190, 107, 0.34);
 }
-.fleet-lists {
-  margin: 12px 0 5px;
+
+.fleet-pill.offline {
+  color: var(--muted, #8ea397);
 }
-.fleet-lists button[aria-pressed='true'],
+
+.fleet-actions {
+  margin-top: 12px;
+}
+
 .fleet-actions [data-auto][aria-pressed='true'] {
-  border-color: var(--cyan);
-  color: var(--cyan);
-  background: var(--cyan-soft);
+  border-color: var(--border-accent, #4c745f);
+  color: var(--accent-strong, #9beab9);
+  background: var(--accent-soft, rgba(126, 224, 168, 0.14));
+}
+
+.fleet-job [data-hint] {
+  margin: 10px 0 0;
+  font-size: var(--text-xs, 0.75rem);
+}
+
+.fleet-catalog-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px 14px;
+  flex-wrap: wrap;
+  margin-top: 14px;
+}
+
+.fleet-catalog-bar h3 {
+  margin: 0;
+  font-size: 0.95rem;
+}
+
+.fleet-lists {
+  margin: 0;
+}
+
+.fleet-lists button[aria-pressed='true'] {
+  background: var(--accent-soft, rgba(126, 224, 168, 0.14));
+  border-color: var(--border-accent, #4c745f);
+  color: var(--accent-strong, #9beab9);
+  font-weight: 650;
+}
+
+@media (max-width: 640px) {
+  .fleet-job {
+    padding: 14px 16px;
+  }
+
+  .fleet-lists {
+    width: 100%;
+  }
+
+  .fleet-lists > button {
+    flex: 1 1 auto;
+  }
 }

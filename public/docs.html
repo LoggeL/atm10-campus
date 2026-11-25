@@ -1,33 +1,281 @@
 <!doctype html>
-<html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Campus API-Doku</title><link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><rect x='2' y='2' width='12' height='12' rx='3' fill='%2373d8e5'/></svg>"><link rel="stylesheet" href="/assets/app.css?v=20261114-status-1"></head>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>API-Dokumentation · ATM10 Campus</title>
+  <link rel="stylesheet" href="/assets/app.css?v=20261125-overhaul-1">
+  <style>
+    .docs-page main.c-shell--narrow {
+      width: min(var(--shell-narrow), calc(100% - var(--gutter) * 2));
+      max-width: var(--shell-narrow);
+      margin: 0 auto;
+      padding: 28px 0 64px;
+      display: block;
+    }
+
+    .docs-toc {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex-wrap: wrap;
+      margin: 0 0 22px;
+      padding: 10px 12px;
+      background: var(--surface-1);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+    }
+
+    .docs-toc a {
+      display: inline-flex;
+      align-items: center;
+      min-height: 32px;
+      padding: 5px 11px;
+      border-radius: 7px;
+      border: 1px solid transparent;
+      color: var(--text-2);
+      font-size: 0.8125rem;
+      font-weight: 550;
+      text-decoration: none;
+      transition: background-color var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast);
+    }
+
+    .docs-toc a:hover {
+      background: var(--surface-2);
+      border-color: var(--border);
+      color: var(--accent-strong);
+      text-decoration: none;
+    }
+
+    .docs-stack {
+      display: grid;
+      gap: 18px;
+    }
+
+    .docs-section {
+      min-width: 0;
+      scroll-margin-top: calc(var(--header-h, 60px) + 18px);
+    }
+
+    .docs-section-head {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 10px 16px;
+      flex-wrap: wrap;
+      margin-bottom: 12px;
+      padding-bottom: 12px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .docs-section-head h2 {
+      margin: 0;
+      font-size: var(--h2);
+      font-weight: 680;
+      letter-spacing: -0.015em;
+      color: var(--text);
+    }
+
+    .docs-section h3 {
+      margin: 22px 0 10px;
+      font-size: var(--h3);
+      font-weight: 650;
+      color: var(--text);
+    }
+
+    .docs-section p,
+    .docs-section li {
+      color: var(--text-2);
+      line-height: 1.6;
+    }
+
+    .docs-section strong {
+      color: var(--text);
+    }
+
+    .docs-section ul {
+      margin: 12px 0 16px;
+      padding-left: 20px;
+      display: grid;
+      gap: 8px;
+    }
+
+    .docs-section code,
+    .docs-section .mono {
+      font-family: var(--font-mono);
+      font-size: 0.8125rem;
+      padding: 1px 6px;
+      border-radius: 5px;
+      border: 1px solid var(--border);
+      background: var(--field);
+      color: var(--accent-strong);
+      overflow-wrap: anywhere;
+    }
+
+    .docs-section pre {
+      margin: 14px 0;
+      padding: 14px 16px;
+      border-radius: var(--radius-sm);
+      border: 1px solid var(--border);
+      background: var(--field);
+      color: var(--text);
+      font: 400 0.8125rem / 1.62 var(--font-mono);
+      overflow-x: auto;
+      max-width: 100%;
+    }
+
+    .docs-section pre .base {
+      color: var(--accent-strong);
+    }
+
+    .docs-endpoints {
+      margin: 14px 0 16px;
+    }
+
+    .docs-endpoints td:first-child {
+      width: 82px;
+      white-space: nowrap;
+    }
+
+    .docs-endpoints td:nth-child(2) {
+      font-family: var(--font-mono);
+      font-size: 0.8125rem;
+      color: var(--text);
+      overflow-wrap: anywhere;
+    }
+
+    .docs-kv {
+      display: grid;
+      grid-template-columns: 185px minmax(0, 1fr);
+      gap: 12px 20px;
+      margin: 14px 0;
+    }
+
+    .docs-kv dt {
+      color: var(--text);
+      font-weight: 600;
+      font-size: var(--text-sm);
+    }
+
+    .docs-kv dd {
+      margin: 0;
+      min-width: 0;
+      color: var(--text-2);
+      font-size: var(--text-sm);
+      line-height: 1.55;
+      overflow-wrap: anywhere;
+    }
+
+    @media (max-width: 860px) {
+      .docs-page main.c-shell--narrow {
+        padding: 20px 0 48px;
+      }
+
+      .docs-section {
+        scroll-margin-top: 72px;
+      }
+    }
+
+    @media (max-width: 640px) {
+      .docs-kv {
+        grid-template-columns: 1fr;
+        gap: 4px;
+      }
+
+      .docs-kv dd {
+        margin-bottom: 10px;
+      }
+
+      .docs-section pre {
+        padding: 12px;
+        font-size: 0.75rem;
+      }
+    }
+  </style>
+</head>
 <body class="docs-page">
-<!-- campus-navigation -->
-<main><div class="page-heading"><h1>API-Dokumentation</h1><a href="/api/openapi.json">OpenAPI</a></div>
-<div class="panel">
-<h2>Zugang</h2>
-<p>Token in der App unter <strong>Agent-Zugang</strong> erzeugen und als <span class="mono">Authorization: Bearer atc_…</span> mitschicken. Ein Token handelt im Namen seines Accounts, jede Änderung landet mit Namen im Protokoll. „Nur lesen“-Tokens dürfen ausschließlich GET-Anfragen.</p>
-<p>Admins können unter „Token anlegen“ den Zugriff <strong>Erebor-Materialpuffer</strong> auswählen und später widerrufen. Dieser Token erlaubt GET und POST auf <code>/api/projects/erebor/cannon-sites/materialpuffer</code>. Beispiel für einen POST-Body, der bei K01 den Puffer auf 16 Stacks setzt: <code>{"sites":["K01"],"bufferStacks":16}</code>. Für alle 37 Standorte das Feld <code>sites</code> weglassen.</p>
-<h2>Begriffe</h2>
-<dl class="kv">
-<dt>Live / Bestand</dt><dd>Snapshot der echten ATM10-Welt im Campus-Ausschnitt (x −64…223, y 48…319, z −96…223). Wird automatisch alle paar Minuten aus den Region-Files gelesen, wenn der Server gespeichert hat.</dd>
-<dt>Edition</dt><dd>Die jeweils aktuelle Version aller nicht archivierten Baupläne, also das, was gebaut werden soll.</dd>
-<dt>Bauplan</dt><dd>Vanilla-/Create-Structure-NBT plus <span class="mono">origin</span> (Weltkoordinate der Ecke mit den kleinsten x/y/z). <span class="mono">minecraft:air</span> = abreißen, <span class="mono">minecraft:structure_void</span> = nicht anfassen.</dd>
-<dt>Planungsstand</dt><dd>Der Snapshot, auf dem eine Version geplant wurde (<span class="mono">baseSnapshotId</span>). Daraus ergibt sich „seit Planung geändert“.</dd>
-</dl>
-<h2>Status und Konflikte</h2>
-<dl class="kv">
-<dt><span class="badge conflict">Konflikt</span></dt><dd>Eine Block-Entity (Maschine, Kiste, AE2 …) steht dort, wo der Bauplan etwas anderes setzt oder abreißt, oder zwei Baupläne beanspruchen dieselbe Zelle mit unterschiedlichen Blöcken.</dd>
-<dt><span class="badge warning">Geändert</span></dt><dd>Im Baufeld hat sich der Bestand seit dem Planungsstand verändert. Jemand hat dort gebaut.</dd>
-<dt><span class="badge ok">Offen</span></dt><dd>Keine Konflikte, noch nicht fertig gebaut.</dd>
-<dt><span class="badge built">Gebaut</span></dt><dd>Live entspricht dem Bauplan zu ≥ 99,9 %.</dd>
-<dt>409 Bearbeitungskonflikt</dt><dd>Beim Hochladen <span class="mono">baseVersion</span> mitschicken. Hat inzwischen jemand eine neuere Version hochgeladen, antwortet die API mit 409 samt <span class="mono">currentVersion</span>. Dann neu herunterladen, Änderungen zusammenführen, erneut hochladen.</dd>
-</dl>
-</div>
-<div class="panel">
-<h2>Baupläne blockgenau ändern (empfohlen für Agents)</h2>
-<p>Statt NBT-Dateien zu bauen, schickt ein Agent <strong>Operationen</strong>. Der Server wendet sie auf die aktuelle Version an, prüft Blocknamen, rechnet die Analyse gegen den Live-Bestand und speichert eine neue Version. Mit <span class="mono">"dryRun": true</span> gibt es nur die Vorschau (keine Schreibrechte nötig).</p>
-<pre>H="Authorization: Bearer $CAMPUS_TOKEN"
+  <a class="skip-link" href="#main">Zum Inhalt</a>
+  <!-- campus-navigation -->
+  <main id="main" class="c-shell c-shell--narrow">
+    <header class="c-page-head">
+      <div class="c-page-head-main">
+        <p class="c-eyebrow">System &amp; API</p>
+        <h1>API-Dokumentation</h1>
+        <p class="c-page-sub">HTTP-Endpunkte, Token-Berechtigungen, blockgenaue Bauplan-Operationen und CC:Tweaked-Anbindung für den ATM10 Campus.</p>
+      </div>
+      <div class="c-page-actions">
+        <a class="c-btn c-btn--primary c-btn--sm" href="/api/openapi.json">OpenAPI (JSON)</a>
+        <a class="c-btn c-btn--ghost c-btn--sm" href="/erebor/dashboard">&larr; Dashboard</a>
+      </div>
+    </header>
+
+    <nav class="docs-toc" aria-label="Dokumentationsbereiche">
+      <a href="#zugang">Zugang &amp; Begriffe</a>
+      <a href="#edits">Bauplan-Operationen</a>
+      <a href="#materials">Materialliste &amp; Rest-NBT</a>
+      <a href="#cannons">Schematicannons (CC:Tweaked)</a>
+      <a href="#snapshots">NBT-Dateien &amp; Snapshots</a>
+    </nav>
+
+    <div class="docs-stack">
+      <section id="zugang" class="c-card docs-section">
+        <div class="docs-section-head">
+          <h2>Zugang &amp; Grundlagen</h2>
+          <span class="c-badge c-badge--ok">Bearer Token</span>
+        </div>
+        <p>Token in der App unter <strong>Agent-Zugang</strong> erzeugen und als <code>Authorization: Bearer atc_…</code> mitschicken. Ein Token handelt im Namen seines Accounts, jede Änderung landet mit Namen im Protokoll. „Nur lesen“-Tokens dürfen ausschließlich GET-Anfragen.</p>
+        <p>Admins können unter „Token anlegen“ den Zugriff <strong>Erebor-Materialpuffer</strong> auswählen und später widerrufen. Dieser Token erlaubt GET und POST auf <code>/api/projects/erebor/cannon-sites/materialpuffer</code>. Beispiel für einen POST-Body, der bei K01 den Puffer auf 16 Stacks setzt: <code>{"sites":["K01"],"bufferStacks":16}</code>. Für alle 37 Standorte das Feld <code>sites</code> weglassen.</p>
+
+        <h3>Begriffe</h3>
+        <dl class="docs-kv">
+          <dt>Live / Bestand</dt>
+          <dd>Snapshot der echten ATM10-Welt im Campus-Ausschnitt (x −64…223, y 48…319, z −96…223). Wird automatisch alle paar Minuten aus den Region-Files gelesen, wenn der Server gespeichert hat.</dd>
+          <dt>Edition</dt>
+          <dd>Die jeweils aktuelle Version aller nicht archivierten Baupläne, also das, was gebaut werden soll.</dd>
+          <dt>Bauplan</dt>
+          <dd>Vanilla-/Create-Structure-NBT plus <code>origin</code> (Weltkoordinate der Ecke mit den kleinsten x/y/z). <code>minecraft:air</code> = abreißen, <code>minecraft:structure_void</code> = nicht anfassen.</dd>
+          <dt>Planungsstand</dt>
+          <dd>Der Snapshot, auf dem eine Version geplant wurde (<code>baseSnapshotId</code>). Daraus ergibt sich „seit Planung geändert“.</dd>
+        </dl>
+
+        <h3>Status und Konflikte</h3>
+        <dl class="docs-kv">
+          <dt><span class="c-badge c-badge--danger">Konflikt</span></dt>
+          <dd>Eine Block-Entity (Maschine, Kiste, AE2 …) steht dort, wo der Bauplan etwas anderes setzt oder abreißt, oder zwei Baupläne beanspruchen dieselbe Zelle mit unterschiedlichen Blöcken.</dd>
+          <dt><span class="c-badge c-badge--warn">Geändert</span></dt>
+          <dd>Im Baufeld hat sich der Bestand seit dem Planungsstand verändert. Jemand hat dort gebaut.</dd>
+          <dt><span class="c-badge c-badge--craftable">Offen</span></dt>
+          <dd>Keine Konflikte, noch nicht fertig gebaut.</dd>
+          <dt><span class="c-badge c-badge--ok">Gebaut</span></dt>
+          <dd>Live entspricht dem Bauplan zu ≥ 99,9 %.</dd>
+          <dt>409 Bearbeitungskonflikt</dt>
+          <dd>Beim Hochladen <code>baseVersion</code> mitschicken. Hat inzwischen jemand eine neuere Version hochgeladen, antwortet die API mit 409 samt <code>currentVersion</code>. Dann neu herunterladen, Änderungen zusammenführen, erneut hochladen.</dd>
+        </dl>
+      </section>
+
+      <section id="edits" class="c-card docs-section">
+        <div class="docs-section-head">
+          <h2>Baupläne blockgenau ändern (empfohlen für Agents)</h2>
+          <span class="c-badge c-badge--craftable">Dry-Run unterstützt</span>
+        </div>
+        <p>Statt NBT-Dateien zu bauen, schickt ein Agent <strong>Operationen</strong>. Der Server wendet sie auf die aktuelle Version an, prüft Blocknamen, rechnet die Analyse gegen den Live-Bestand und speichert eine neue Version. Mit <code>"dryRun": true</code> gibt es nur die Vorschau (keine Schreibrechte nötig).</p>
+
+        <div class="c-table-wrap docs-endpoints">
+          <table>
+            <thead>
+              <tr><th>Methode</th><th>Endpunkt</th><th>Zweck</th></tr>
+            </thead>
+            <tbody>
+              <tr><td><span class="c-badge c-badge--ok">GET</span></td><td>/api/blueprints/:id/layers?y=63..66</td><td>Bauplan als Text-Schichten (Weltkoordinaten)</td></tr>
+              <tr><td><span class="c-badge c-badge--ok">GET</span></td><td>/api/blueprints/:id/blocks?coords=world</td><td>Blöcke eines Bauplans als JSON</td></tr>
+              <tr><td><span class="c-badge c-badge--ok">GET</span></td><td>/api/world/blocks?from=…&amp;to=…&amp;format=layers</td><td>Echten Weltbestand im Quader abfragen</td></tr>
+              <tr><td><span class="c-badge c-badge--craftable">POST</span></td><td>/api/blueprints/:id/edits</td><td>Operationen prüfen (<code>dryRun</code>) oder neue Version speichern</td></tr>
+              <tr><td><span class="c-badge c-badge--craftable">POST</span></td><td>/api/blueprints/new</td><td>Neuen Bauplan direkt aus Operationen erzeugen</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <pre>H="Authorization: Bearer $CAMPUS_TOKEN"
 
 # Ansehen: als Text-Schichten (Weltkoordinaten), als JSON oder den echten Bestand
 curl -s -H "$H" "$CAMPUS_URL/api/blueprints/40_Pavillon/layers?y=63..66"
@@ -52,20 +300,47 @@ curl -s -X POST -H "$H" -H "content-type: application/json" $CAMPUS_URL/api/blue
 # Neuer Bauplan aus Operationen
 curl -s -X POST -H "$H" -H "content-type: application/json" $CAMPUS_URL/api/blueprints/new \
   -d '{"fileName":"41_Kiosk.nbt","origin":[60,63,20],"size":[5,4,5],"name":"41 · Kiosk","edits":[{"op":"fill","from":[0,0,0],"to":[4,3,4],"block":"minecraft:oak_planks","mode":"hollow"}]}'</pre>
-<dl class="kv">
-<dt>set / setMany</dt><dd>Einzelne Blöcke: <span class="mono">{"op":"set","pos":[x,y,z],"block":"ns:name","properties":{…}}</span></dd>
-<dt>fill</dt><dd>Quader <span class="mono">from</span>–<span class="mono">to</span>. <span class="mono">mode</span>: <span class="mono">all</span> (Standard), <span class="mono">hollow</span> (Hülle, innen Luft), <span class="mono">outline</span> (nur Hülle), <span class="mono">keep</span> (nur leere Zellen), <span class="mono">replace</span> (nur Zellen, die <span class="mono">match</span> entsprechen).</dd>
-<dt>replace</dt><dd>Alle Blöcke, die <span class="mono">match</span> (Glob mit <span class="mono">*</span>) entsprechen, durch <span class="mono">block</span> ersetzen; optional nur in <span class="mono">from</span>–<span class="mono">to</span>, mit <span class="mono">keepProperties</span> bleiben Ausrichtungen erhalten.</dd>
-<dt>clear / void</dt><dd><span class="mono">clear</span> setzt Luft (= im Spiel abreißen), <span class="mono">void</span> entfernt Zellen aus dem Plan (= Bestand nicht anfassen).</dd>
-<dt>copy</dt><dd>Bereich <span class="mono">from</span>–<span class="mono">to</span> nach <span class="mono">dest</span> kopieren (z. B. Fensterachsen wiederholen).</dd>
-<dt>coords / grow</dt><dd><span class="mono">"coords":"world"</span> für Weltkoordinaten statt relativ zur Bauplan-Ecke. <span class="mono">"grow":true</span> vergrößert den Bauplan, wenn Operationen darüber hinausgehen.</dd>
-<dt>Antwort</dt><dd><span class="mono">changes</span> (gesetzt / abgerissen / freigegeben), <span class="mono">warnings</span> (z. B. Blockname weder in der Welt noch in einem Bauplan bekannt – Tippfehler?), neue <span class="mono">origin</span>/<span class="mono">size</span>, <span class="mono">analysis</span> gegen Live inkl. Maschinen im Weg, ohne dryRun die neue <span class="mono">version</span>.</dd>
-</dl>
-</div>
-<div class="panel">
-<h2>Materialliste und Rest-NBT</h2>
-<p>Die Materialliste vergleicht die Baupläne mit dem Live-Bestand und zählt, was noch fehlt – als <em>Items</em> (Wandfackel → Fackel, Türen und Betten einmal, doppelte Stufen zweimal, Wasser → Eimer, Create-Bänder → Bandverbinder + Wellen, ummantelte Wellen → Welle + Gehäuse). Zellen, die mehrere ausgewählte Baupläne gemeinsam haben, zählen einmal. Die Rest-NBT enthält nur Blöcke, die noch fehlen, hat aber dieselbe Größe und denselben <span class="mono">origin</span> wie der volle Bauplan: an derselben Stelle platzieren, und die Schematicannon setzt im normalen Modus nur noch den Rest. Entities (Rahmen, Rüstungsständer) sind nicht enthalten, damit sie nicht doppelt gesetzt werden.</p>
-<pre>H="Authorization: Bearer $CAMPUS_TOKEN"
+
+        <dl class="docs-kv">
+          <dt>set / setMany</dt>
+          <dd>Einzelne Blöcke: <code>{"op":"set","pos":[x,y,z],"block":"ns:name","properties":{…}}</code></dd>
+          <dt>fill</dt>
+          <dd>Quader <code>from</code>–<code>to</code>. <code>mode</code>: <code>all</code> (Standard), <code>hollow</code> (Hülle, innen Luft), <code>outline</code> (nur Hülle), <code>keep</code> (nur leere Zellen), <code>replace</code> (nur Zellen, die <code>match</code> entsprechen).</dd>
+          <dt>replace</dt>
+          <dd>Alle Blöcke, die <code>match</code> (Glob mit <code>*</code>) entsprechen, durch <code>block</code> ersetzen; optional nur in <code>from</code>–<code>to</code>, mit <code>keepProperties</code> bleiben Ausrichtungen erhalten.</dd>
+          <dt>clear / void</dt>
+          <dd><code>clear</code> setzt Luft (= im Spiel abreißen), <code>void</code> entfernt Zellen aus dem Plan (= Bestand nicht anfassen).</dd>
+          <dt>copy</dt>
+          <dd>Bereich <code>from</code>–<code>to</code> nach <code>dest</code> kopieren (z. B. Fensterachsen wiederholen).</dd>
+          <dt>coords / grow</dt>
+          <dd><code>"coords":"world"</code> für Weltkoordinaten statt relativ zur Bauplan-Ecke. <code>"grow":true</code> vergrößert den Bauplan, wenn Operationen darüber hinausgehen.</dd>
+          <dt>Antwort</dt>
+          <dd><code>changes</code> (gesetzt / abgerissen / freigegeben), <code>warnings</code> (z. B. Blockname weder in der Welt noch in einem Bauplan bekannt – Tippfehler?), neue <code>origin</code>/<code>size</code>, <code>analysis</code> gegen Live inkl. Maschinen im Weg, ohne dryRun die neue <code>version</code>.</dd>
+        </dl>
+      </section>
+
+      <section id="materials" class="c-card docs-section">
+        <div class="docs-section-head">
+          <h2>Materialliste und Rest-NBT</h2>
+          <span class="c-badge c-badge--neutral">JSON · Text · CSV · HTML</span>
+        </div>
+        <p>Die Materialliste vergleicht die Baupläne mit dem Live-Bestand und zählt, was noch fehlt – als <em>Items</em> (Wandfackel → Fackel, Türen und Betten einmal, doppelte Stufen zweimal, Wasser → Eimer, Create-Bänder → Bandverbinder + Wellen, ummantelte Wellen → Welle + Gehäuse). Zellen, die mehrere ausgewählte Baupläne gemeinsam haben, zählen einmal. Die Rest-NBT enthält nur Blöcke, die noch fehlen, hat aber dieselbe Größe und denselben <code>origin</code> wie der volle Bauplan: an derselben Stelle platzieren, und die Schematicannon setzt im normalen Modus nur noch den Rest. Entities (Rahmen, Rüstungsständer) sind nicht enthalten, damit sie nicht doppelt gesetzt werden.</p>
+
+        <div class="c-table-wrap docs-endpoints">
+          <table>
+            <thead>
+              <tr><th>Methode</th><th>Endpunkt</th><th>Zweck</th></tr>
+            </thead>
+            <tbody>
+              <tr><td><span class="c-badge c-badge--ok">GET</span></td><td>/api/blueprints/:id/materials?format=…</td><td>Fehlende Items für einen Bauplan (<code>json|text|csv|html</code>)</td></tr>
+              <tr><td><span class="c-badge c-badge--ok">GET</span></td><td>/api/materials?ids=…&amp;format=…</td><td>Fehlende Items für mehrere oder alle Baupläne</td></tr>
+              <tr><td><span class="c-badge c-badge--ok">GET</span></td><td>/api/blueprints/:id/remaining.nbt</td><td>Rest-NBT nur mit noch fehlenden Blöcken</td></tr>
+              <tr><td><span class="c-badge c-badge--ok">GET</span></td><td>/api/remaining.zip</td><td>Alle Rest-NBTs gebündelt inkl. <code>manifest.json</code></td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <pre>H="Authorization: Bearer $CAMPUS_TOKEN"
 
 # Was fehlt für einen Bauplan? (json | text | csv | html mit Blockbildern)
 curl -s -H "$H" "$CAMPUS_URL/api/blueprints/01_Technikhof_P01/materials?format=text"
@@ -76,25 +351,51 @@ curl -s -H "$H" "$CAMPUS_URL/api/materials?ids=01_Technikhof_P01,02_Produktionsh
 # Rest-NBT: nur fehlende Blöcke; Maschinen-Zellen werden standardmäßig ausgelassen
 curl -s -H "$H" -o 01_rest.nbt "$CAMPUS_URL/api/blueprints/01_Technikhof_P01/remaining.nbt"
 curl -s -H "$H" -o rest.zip "$CAMPUS_URL/api/remaining.zip"   # alle Baupläne, manifest.json mit Statistik</pre>
-<dl class="kv">
-<dt>clear</dt><dd>Luft-Zellen (Abriss) übernehmen. Standard: nein. Nur für den Vanilla-Strukturblock sinnvoll: Die Schematicannon ignoriert Luft im normalen Modus, und im Modus „Replace Solid with Empty“ räumt sie <em>alle</em> nicht enthaltenen Zellen leer – also auch schon Gebautes.</dd>
-<dt>skipBlocked</dt><dd>Zellen auslassen, in denen eine Block-Entity (Maschine, Kiste …) steht. Standard: ja, damit nichts versehentlich zerstört wird.</dd>
-<dt>skipChanged</dt><dd>Zellen auslassen, die sich seit dem Planungsstand verändert haben. Standard: nein.</dd>
-</dl>
-<p>Liegt ein ME-Bestand vor (siehe unten), steht bei jedem Item zusätzlich <span class="mono">me</span> (im ME-System), <span class="mono">short</span> (fehlt auch dort) und <span class="mono">craftable</span>; mit <span class="mono">?me=0</span> abschaltbar.</p>
-</div>
-<div class="panel">
-<h2>Schematicannons am ME-System (CC:Tweaked)</h2>
-<p>Ein CC:Tweaked-Computer mit Advanced-Peripherals-ME-Bridge füllt die Kiste an einer Schematicannon mit genau den Items, die ihr Bauplan noch braucht, unterste Schichten zuerst und nur ein paar Stacks auf Vorrat. Fehlt etwas im ME, kann er es craften lassen. Wechselt der Auftrag oder ist der Bau fertig, gehen Reste zurück ins ME. Welche Kanone welchen Bauplan baut, wird in der App unter „Kanonen“ festgelegt.</p>
-<pre># am Computer im Spiel (Token mit Scope „Station“ unter /app → Agent-Zugang anlegen)
+
+        <dl class="docs-kv">
+          <dt>clear</dt>
+          <dd>Luft-Zellen (Abriss) übernehmen. Standard: nein. Nur für den Vanilla-Strukturblock sinnvoll: Die Schematicannon ignoriert Luft im normalen Modus, und im Modus „Replace Solid with Empty“ räumt sie <em>alle</em> nicht enthaltenen Zellen leer – also auch schon Gebautes.</dd>
+          <dt>skipBlocked</dt>
+          <dd>Zellen auslassen, in denen eine Block-Entity (Maschine, Kiste …) steht. Standard: ja, damit nichts versehentlich zerstört wird.</dd>
+          <dt>skipChanged</dt>
+          <dd>Zellen auslassen, die sich seit dem Planungsstand verändert haben. Standard: nein.</dd>
+        </dl>
+        <p>Liegt ein ME-Bestand vor (siehe unten), steht bei jedem Item zusätzlich <code>me</code> (im ME-System), <code>short</code> (fehlt auch dort) und <code>craftable</code>; mit <code>?me=0</code> abschaltbar.</p>
+      </section>
+
+      <section id="cannons" class="c-card docs-section">
+        <div class="docs-section-head">
+          <h2>Schematicannons am ME-System (CC:Tweaked)</h2>
+          <span class="c-badge c-badge--warn">Station-Scope</span>
+        </div>
+        <p>Ein CC:Tweaked-Computer mit Advanced-Peripherals-ME-Bridge füllt die Kiste an einer Schematicannon mit genau den Items, die ihr Bauplan noch braucht, unterste Schichten zuerst und nur ein paar Stacks auf Vorrat. Fehlt etwas im ME, kann er es craften lassen. Wechselt der Auftrag oder ist der Bau fertig, gehen Reste zurück ins ME. Welche Kanone welchen Bauplan baut, wird in der App unter „Stationstechnik“ festgelegt.</p>
+
+        <pre># am Computer im Spiel (Token mit Scope „Station“ unter /app → Agent-Zugang anlegen)
 wget run <span class="base">https://campus.logge.top</span>/cc/install.lua</pre>
-<ul>
-<li>Aufbau: ME Bridge und Kiste (einfache Kiste oder Fass) beide direkt am Computer oder beide am selben Wired-Modem-Netz; die Kiste berührt die Kanone. Alternativ <span class="mono">set campus.direction up</span> = Richtung von der Bridge zur Kiste.</li>
-<li>In der Kanone „Skip Missing“ ausschalten, Modus „Replace Solid with Any“ lassen. Dann wartet sie auf fehlende Blöcke und baut weiter, sobald nachgefüllt ist.</li>
-<li>Läuft mit Advanced Peripherals 0.8.x (ATM10 ab 8.1) und 0.7.x; bei 0.7.x zusätzlich <span class="mono">set campus.direction &lt;north|…|up|down&gt;</span> setzen, weil 0.7 Seitennamen von der Bridge aus auflöst. Wasser, Lava und Kessel-Füllungen setzt die Kanone nicht; Eimer werden deshalb nicht geliefert.</li>
-<li>Der Fortschritt hängt am Live-Bestand und ist so frisch wie der letzte Weltspeicher (einige Minuten). Damit eine leere Kiste das ME nicht leerzieht, liefert der Computer je Auftrag höchstens etwa 110 % der Menge.</li>
-</ul>
-<pre>H="Authorization: Bearer $CAMPUS_TOKEN"
+
+        <ul>
+          <li>Aufbau: ME Bridge und Kiste (einfache Kiste oder Fass) beide direkt am Computer oder beide am selben Wired-Modem-Netz; die Kiste berührt die Kanone. Alternativ <code>set campus.direction up</code> = Richtung von der Bridge zur Kiste.</li>
+          <li>In der Kanone „Skip Missing“ ausschalten, Modus „Replace Solid with Any“ lassen. Dann wartet sie auf fehlende Blöcke und baut weiter, sobald nachgefüllt ist.</li>
+          <li>Läuft mit Advanced Peripherals 0.8.x (ATM10 ab 8.1) und 0.7.x; bei 0.7.x zusätzlich <code>set campus.direction &lt;north|…|up|down&gt;</code> setzen, weil 0.7 Seitennamen von der Bridge aus auflöst. Wasser, Lava und Kessel-Füllungen setzt die Kanone nicht; Eimer werden deshalb nicht geliefert.</li>
+          <li>Der Fortschritt hängt am Live-Bestand und ist so frisch wie der letzte Weltspeicher (einige Minuten). Damit eine leere Kiste das ME nicht leerzieht, liefert der Computer je Auftrag höchstens etwa 110 % der Menge.</li>
+        </ul>
+
+        <div class="c-table-wrap docs-endpoints">
+          <table>
+            <thead>
+              <tr><th>Methode</th><th>Endpunkt</th><th>Zweck</th></tr>
+            </thead>
+            <tbody>
+              <tr><td><span class="c-badge c-badge--ok">GET</span></td><td>/api/cannons</td><td>Kanonen mit Auftrag, Fortschritt und letztem Status</td></tr>
+              <tr><td><span class="c-badge c-badge--warn">PUT</span></td><td>/api/cannons/:name</td><td>Bauplan zuweisen (pinnt Version) &amp; Optionen setzen</td></tr>
+              <tr><td><span class="c-badge c-badge--ok">GET</span></td><td>/api/cannons/:name/plan</td><td>Lieferplan für den Computer (unterste Schicht zuerst)</td></tr>
+              <tr><td><span class="c-badge c-badge--ok">GET</span></td><td>/api/me/stock?items=1</td><td>Zuletzt gemeldeter ME-Bestand</td></tr>
+              <tr><td><span class="c-badge c-badge--ok">GET</span></td><td>/api/me/wanted</td><td>Welche Items der Campus noch benötigt</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <pre>H="Authorization: Bearer $CAMPUS_TOKEN"
 
 # Kanonen mit Auftrag, Fortschritt und letztem Status des Computers
 curl -s -H "$H" $CAMPUS_URL/api/cannons
@@ -109,18 +410,48 @@ curl -s -H "$H" $CAMPUS_URL/api/cannons/nord-1/plan
 # ME-Bestand (zuletzt gemeldet) und welche Items der Campus noch braucht
 curl -s -H "$H" "$CAMPUS_URL/api/me/stock?items=1"
 curl -s -H "$H" $CAMPUS_URL/api/me/wanted</pre>
-<dl class="kv">
-<dt>bufferStacks</dt><dd>So viele Stacks je Item höchstens in der Kiste (1–64, Standard 2).</dd>
-<dt>gunpowder</dt><dd>Schießpulver, das immer in der Kiste liegen soll (0–64, Standard 16).</dd>
-<dt>autoCraft · craftBatch</dt><dd>Fehlt ein Item im ME und gibt es ein Muster, einen Crafting-Auftrag über höchstens craftBatch Stück starten (Standard aus, 256).</dd>
-<dt>returnLeftovers</dt><dd>Reste nach Auftragswechsel oder Fertigstellung zurück ins ME (Standard an).</dd>
-<dt>skipBlocked</dt><dd>Zellen mit Maschine im Weg nicht beliefern, wie in der Rest-NBT (Standard an).</dd>
-<dt>paused</dt><dd>Computer liefert nichts.</dd>
-</dl>
-</div>
-<div class="panel">
-<h2>Ganze NBT-Dateien und Snapshots</h2>
-<pre>H="Authorization: Bearer $CAMPUS_TOKEN"
+
+        <dl class="docs-kv">
+          <dt>bufferStacks</dt>
+          <dd>So viele Stacks je Item höchstens in der Kiste (1–64, Standard 2).</dd>
+          <dt>gunpowder</dt>
+          <dd>Schießpulver, das immer in der Kiste liegen soll (0–64, Standard 16).</dd>
+          <dt>autoCraft · craftBatch</dt>
+          <dd>Fehlt ein Item im ME und gibt es ein Muster, einen Crafting-Auftrag über höchstens craftBatch Stück starten (Standard aus, 256).</dd>
+          <dt>returnLeftovers</dt>
+          <dd>Reste nach Auftragswechsel oder Fertigstellung zurück ins ME (Standard an).</dd>
+          <dt>skipBlocked</dt>
+          <dd>Zellen mit Maschine im Weg nicht beliefern, wie in der Rest-NBT (Standard an).</dd>
+          <dt>paused</dt>
+          <dd>Computer liefert nichts.</dd>
+        </dl>
+      </section>
+
+      <section id="snapshots" class="c-card docs-section">
+        <div class="docs-section-head">
+          <h2>Ganze NBT-Dateien und Snapshots</h2>
+          <span class="c-badge c-badge--neutral">Status &amp; Export</span>
+        </div>
+
+        <div class="c-table-wrap docs-endpoints">
+          <table>
+            <thead>
+              <tr><th>Methode</th><th>Endpunkt</th><th>Zweck</th></tr>
+            </thead>
+            <tbody>
+              <tr><td><span class="c-badge c-badge--ok">GET</span></td><td>/api/status</td><td>Live-Snapshot, Fortschritt, Konflikte und Überlappungen</td></tr>
+              <tr><td><span class="c-badge c-badge--ok">GET</span></td><td>/api/blueprints/:id</td><td>Details, Versionen und Live-Analyse eines Bauplans</td></tr>
+              <tr><td><span class="c-badge c-badge--ok">GET</span></td><td>/api/blueprints/:id/download</td><td>NBT-Datei herunterladen (optional <code>?version=N</code>)</td></tr>
+              <tr><td><span class="c-badge c-badge--warn">PUT</span></td><td>/api/blueprints/:id/nbt</td><td>Rohe NBT-Datei als neue Version hochladen</td></tr>
+              <tr><td><span class="c-badge c-badge--craftable">POST</span></td><td>/api/blueprints</td><td>Bauplan als JSON mit <code>nbtBase64</code> anlegen/aktualisieren</td></tr>
+              <tr><td><span class="c-badge c-badge--warn">PATCH</span></td><td>/api/blueprints/:id</td><td>Position (<code>origin</code>) verschieben oder Metadaten ändern</td></tr>
+              <tr><td><span class="c-badge c-badge--craftable">POST</span></td><td>/api/snapshots</td><td>Weltbestand sofort neu erfassen (<code>{"force":true}</code>)</td></tr>
+              <tr><td><span class="c-badge c-badge--ok">GET</span></td><td>/api/blueprints.zip</td><td>Alle aktiven Baupläne als ZIP für <code>schematics/</code></td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <pre>H="Authorization: Bearer $CAMPUS_TOKEN"
 
 # 1. Überblick: Live-Snapshot, Fortschritt, Konflikte je Bauplan, Überlappungen
 curl -s -H "$H" $CAMPUS_URL/api/status
@@ -148,6 +479,11 @@ curl -s -X POST -H "$H" -H "content-type: application/json" $CAMPUS_URL/api/snap
 
 # Alles als ZIP (für den Create-Ordner schematics/)
 curl -s -H "$H" -o campus.zip $CAMPUS_URL/api/blueprints.zip</pre>
-<p class="muted">Die heruntergeladenen .nbt-Dateien kommen im Client in <span class="mono">.minecraft/schematics/</span> und lassen sich dann am Schematic-Table hochladen und mit der Schematicannon bauen.</p>
-</div>
-</main><script>document.querySelectorAll('.base').forEach(e => { e.textContent = location.origin; });</script></body></html>
+
+        <p class="muted">Die heruntergeladenen .nbt-Dateien kommen im Client in <code>.minecraft/schematics/</code> und lassen sich dann am Schematic-Table hochladen und mit der Schematicannon bauen.</p>
+      </section>
+    </div>
+  </main>
+  <script>document.querySelectorAll('.base').forEach(e => { e.textContent = location.origin; });</script>
+</body>
+</html>

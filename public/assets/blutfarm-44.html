@@ -1,15 +1,59 @@
 <!doctype html>
-<html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Blutfarm · Kanone 44</title><link rel="stylesheet" href="/assets/app.css">
-<style>main{max-width:44rem;margin:3rem auto;padding:0 1rem}output{display:block;margin:1rem 0}</style></head>
-<body><main><a href="/app#cannons">Alle Kanonen</a><h1>EvilCraft-Blutfarm</h1>
-<p>Turm Südwest · <strong>X 49 / Y 64 / Z 89</strong><br>Advanced Computer bei Z 87, Netherite-Kiste bei Z 88.</p>
-<p>Beim Start bestätigt der Campus diesen Kanonenblock für die Station <strong>Blutfarm-Suedwest</strong>. Die Kanone erhält Bauplan 44 am Anker <strong>38 / 64 / 90</strong> und bebaut freie Stellen.</p>
-<button class="primary" id="build" disabled>Kanone verbinden und Bauplan 44 starten</button>
-<output id="status" role="status">Stationsstatus wird geladen …</output><p id="feedback" role="alert"></p>
-<p><a id="login" href="/login" hidden>Beim Campus anmelden</a></p>
-<a href="/api/blueprints/44_EvilCraft_Blutfarm_Turm_Suedwest/materials?format=html">Materialliste für Bauplan 44</a>
-</main><script type="module">
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#0c1311">
+<title>Blutfarm · Kanone 44 · ATM10 Campus</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><rect width='16' height='16' rx='4' fill='%230c1311'/><rect x='2.5' y='2.5' width='11' height='11' rx='2.5' fill='%237ee0a8'/><rect x='5.5' y='5.5' width='5' height='5' rx='1' fill='%23091d14'/></svg>">
+<link rel="stylesheet" href="/assets/campus-tokens.css?v=20261125-overhaul-1">
+<link rel="stylesheet" href="/assets/app.css?v=20261125-overhaul-1">
+<style>
+.static-bar{position:sticky;top:0;z-index:30;background:var(--header-bg);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border-bottom:1px solid var(--border)}
+.static-bar-inner{width:min(var(--shell-max),calc(100% - var(--gutter)*2));margin:0 auto;min-height:56px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;padding:6px 0}
+.static-brand{display:inline-flex;align-items:center;gap:10px;color:var(--text);font-weight:720;font-size:15px;text-decoration:none}
+.static-brand:hover{color:var(--accent-strong);text-decoration:none}
+.static-links{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+output{display:block;margin:14px 0 8px;color:var(--text-2)}
+#feedback{color:var(--gold);margin:8px 0}
+#feedback:empty{display:none}
+</style>
+</head>
+<body>
+<a class="skip-link" href="#main">Zum Inhalt</a>
+<header class="static-bar">
+  <div class="static-bar-inner">
+    <a class="static-brand" href="/erebor/dashboard">
+      <svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true"><rect width="20" height="20" rx="5" fill="#182a22" stroke="#4c745f" stroke-width="1.2"/><rect x="4" y="4" width="12" height="12" rx="2.5" fill="#7ee0a8"/><rect x="7.5" y="7.5" width="5" height="5" rx="1" fill="#091d14"/></svg>
+      <span>ATM10 Campus</span>
+    </a>
+    <nav class="static-links" aria-label="Zurück zum Campus">
+      <a class="c-btn c-btn--sm c-btn--ghost" href="/erebor/dashboard">Dashboard</a>
+      <a class="c-btn c-btn--sm" href="/app#cannons">← Stationstechnik</a>
+      <a class="c-btn c-btn--sm c-btn--ghost" href="/app#overview">Bauaufträge</a>
+    </nav>
+  </div>
+</header>
+<main id="main" class="c-shell c-shell--narrow">
+  <div class="c-page-head">
+    <div class="c-page-head-main">
+      <p class="c-eyebrow">Stationstechnik · Einzelkanone</p>
+      <h1>EvilCraft-Blutfarm</h1>
+      <p class="c-page-sub">Turm Südwest · <strong class="c-mono">X 49 / Y 64 / Z 89</strong> · Advanced Computer bei Z 87, Netherite-Kiste bei Z 88.</p>
+    </div>
+    <div class="c-page-actions">
+      <a class="c-btn c-btn--sm" href="/api/blueprints/44_EvilCraft_Blutfarm_Turm_Suedwest/materials?format=html">Materialliste Bauplan 44</a>
+    </div>
+  </div>
+  <div class="c-card">
+    <p style="margin-top:0">Beim Start bestätigt der Campus diesen Kanonenblock für die Station <strong>Blutfarm-Suedwest</strong>. Die Kanone erhält Bauplan 44 am Anker <strong class="c-mono">38 / 64 / 90</strong> und bebaut freie Stellen.</p>
+    <button class="c-btn c-btn--primary primary" id="build" disabled>Kanone verbinden und Bauplan 44 starten</button>
+    <output id="status" role="status">Stationsstatus wird geladen …</output>
+    <p id="feedback" role="alert"></p>
+    <p style="margin-bottom:0"><a id="login" class="c-btn c-btn--sm" href="/login" hidden>Beim Campus anmelden</a></p>
+  </div>
+</main>
+<script type="module">
 const route='/api/cannons/Blutfarm-Suedwest', plan='44_EvilCraft_Blutfarm_Turm_Suedwest';
 const target={dimension:'minecraft:overworld',x:49,y:64,z:89,owner:'Campus'};
 const build=document.querySelector('#build'), status=document.querySelector('#status'), feedback=document.querySelector('#feedback');
@@ -70,4 +114,6 @@ build.onclick=async()=>{
 };
 try{const me=await request('/api/me');admin=me.via==='session'&&me.user.role==='admin';await refresh();setInterval(refresh,10000);}
 catch(e){status.textContent=e.message;}
-</script></body></html>
+</script>
+</body>
+</html>

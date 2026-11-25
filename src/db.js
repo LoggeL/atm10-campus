@@ -157,6 +157,13 @@ CREATE TABLE IF NOT EXISTS atm_star_stock (
   revision TEXT NOT NULL,
   counts_json TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS atm_star_stock_history (
+  id INTEGER PRIMARY KEY,
+  at TEXT NOT NULL,
+  source TEXT NOT NULL,
+  revision TEXT NOT NULL,
+  counts_json TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS cannons (
   name TEXT PRIMARY KEY COLLATE NOCASE,
   blueprint_id TEXT REFERENCES blueprints(id),
@@ -171,6 +178,7 @@ CREATE TABLE IF NOT EXISTS cannons (
 );
 CREATE INDEX IF NOT EXISTS idx_versions_bp ON blueprint_versions(blueprint_id, version);
 CREATE INDEX IF NOT EXISTS idx_activity_at ON activity(at);
+CREATE INDEX IF NOT EXISTS idx_atm_star_history_rev_id ON atm_star_stock_history(revision, id);
 `;
 
 export function openDb(dataDir) {

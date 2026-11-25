@@ -3,61 +3,229 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>ATM-Star-Checkliste | ATM10 Campus</title>
-  <link rel="stylesheet" href="/assets/erebor-dashboard.css?v=20261121-aushub">
-  <link rel="stylesheet" href="/assets/atm-star.css?v=20261114-status-1&amp;revision=pack-icons-1">
+  <title>ATM-Star-Checkliste · ATM10 Campus</title>
+  <link rel="stylesheet" href="/assets/atm-star.css?v=20261125-overhaul-1">
 </head>
 <body>
-  <a href="#main" class="skip">Zum Inhalt</a>
+  <a href="#main" class="skip-link">Zum Inhalt</a>
   <!-- campus-navigation -->
-  <main class="shell star-page" id="main">
-    <header class="star-hero">
-      <img src="/assets/atm-star-altar.webp?v=20261114-status-1&amp;revision=altar-1" alt="" width="1440" height="720" fetchpriority="high">
-      <div class="star-hero-copy">
-        <p class="star-game-version">ATM10 <span>8.6</span></p>
-        <h1>ATM-Star-Checkliste</h1>
-        <p>18 ATM Stars für zwei ATM Star Blocks. Einer wandelt die Patrick Bee um, der andere dient der Starry Bee als Futter.</p>
+  <main class="c-shell star-page" id="main">
+    <header class="star-hero" aria-labelledby="starTitle">
+      <img class="star-hero-bg" src="/assets/atm-star-altar.webp?v=20261125-overhaul-1&amp;revision=altar-1" alt="" width="1440" height="720" fetchpriority="high">
+      <div class="star-hero-inner">
+        <div class="star-hero-top">
+          <p class="c-eyebrow star-eyebrow">ATM10 8.6 · Runic Star Altar</p>
+          <div class="c-status-pill star-sync-pill" id="syncPill" data-state="loading">
+            <span class="c-status-dot" aria-hidden="true"></span>
+            <span id="stock-status" role="status">ME-Bestand wird geladen …</span>
+            <button type="button" id="refresh" class="c-btn c-btn--ghost c-btn--sm star-refresh-btn" title="ME-Bestand sofort aktualisieren">
+              <svg class="star-refresh-icon" viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M13.5 8a5.5 5.5 0 1 1-1.4-3.7"/>
+                <path d="M13.5 3v2.8h-2.8"/>
+              </svg>
+              <span>Aktualisieren</span>
+            </button>
+            <progress class="c-status-progress" id="pollProgress" max="1" value="0" aria-label="Zeit bis zur nächsten automatischen Aktualisierung"></progress>
+          </div>
+        </div>
+        <div class="star-hero-copy">
+          <h1 id="starTitle">ATM-Star-Checkliste</h1>
+          <p class="star-hero-sub">18 ATM Stars für zwei ATM Star Blocks — vom ersten Star bis zur endlosen Starry-Bee-Automatisierung.</p>
+          <div class="star-goal-row">
+            <span class="star-goal-label" id="milestoneLabel">Zielmodus</span>
+            <div class="c-seg star-milestones" id="milestoneSwitch" role="group" aria-labelledby="milestoneLabel">
+              <button type="button" data-milestone="1" aria-pressed="false"><span>Nächster Star (1)</span><kbd aria-hidden="true">1</kbd></button>
+              <button type="button" data-milestone="9" aria-pressed="false"><span>1. Block (9)</span><kbd aria-hidden="true">2</kbd></button>
+              <button type="button" data-milestone="18" aria-pressed="true"><span>Starry Bee (18)</span><kbd aria-hidden="true">3</kbd></button>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="star-hero-deck" id="heroDeck" hidden>
+        <div class="star-readiness" id="heroReadiness"></div>
+        <div class="star-hero-kpis" id="heroKpis"></div>
       </div>
     </header>
-    <div class="star-sync">
-      <p id="stock-status" role="status">ME-Bestand wird geladen …</p>
-      <button type="button" id="refresh">ME-Meldung neu laden</button>
-    </div>
-    <p id="stock-error" role="alert" hidden></p>
-    <dl class="star-metrics" id="metrics" hidden></dl>
-    <section class="star-materials" aria-labelledby="parts-title">
-      <div class="star-list-heading">
+
+    <div id="stock-error" class="c-notice c-notice--danger star-banner" role="alert" hidden></div>
+    <div id="stock-waiting" class="c-notice c-notice--info star-banner" role="status" hidden></div>
+
+    <section class="star-actions" id="actionDeck" aria-label="Nächste Schritte" hidden>
+      <article class="c-card star-action-card star-action-card--craft">
+        <div class="star-action-head">
+          <div>
+            <h2>Sofort craftbar</h2>
+            <p class="star-action-sub" id="craftableSub">Bauteile, deren direkte Zutaten komplett im ME liegen.</p>
+          </div>
+          <span class="c-badge c-badge--craftable" id="craftableBadge">0</span>
+        </div>
+        <div id="craftableList" class="star-action-list"></div>
+      </article>
+      <article class="c-card star-action-card star-action-card--bottleneck">
+        <div class="star-action-head">
+          <div>
+            <h2>Größte Engpässe</h2>
+            <p class="star-action-sub" id="bottleneckSub">Priorisiert nach Deckung, geteilten Pools und Sonder-NBT.</p>
+          </div>
+          <span class="c-badge c-badge--warn" id="bottleneckBadge">Top 5</span>
+        </div>
+        <div id="bottleneckList" class="star-action-list"></div>
+      </article>
+    </section>
+
+    <section class="c-card star-nether-bar" id="netherBar" aria-labelledby="netherTitle" hidden>
+      <div class="star-nether-head">
         <div>
-          <h2 id="parts-title">Materialliste</h2>
-          <p>Bauteile aufklappen, um ihre direkten Zutaten zu sehen.</p>
+          <h2 id="netherTitle">Nether-Stern-Kompression</h2>
+          <p class="star-nether-sub" id="netherSub"></p>
         </div>
-        <div class="star-tools" id="list-tools" hidden>
-          <label class="star-search">
-            <span class="star-sr-only">Bauteil oder Zutat suchen</span>
-            <input type="search" id="search" placeholder="Bauteil oder Zutat suchen">
-          </label>
-          <label class="star-filter"><input type="checkbox" id="open-only"> Nur offene Bauteile</label>
-        </div>
+        <div class="star-nether-badges" id="netherBadges"></div>
       </div>
-      <div class="star-ledger" id="ledger" hidden>
-        <div class="star-columns" aria-hidden="true">
-          <span>Bauteil</span><span>Bedarf</span><span>Im ME</span><span>Fehlt</span>
-        </div>
-        <div id="parts"></div>
-        <p id="empty" class="star-empty" role="status" hidden></p>
+      <div class="star-nether-chain" id="netherTiers"></div>
+      <div class="star-nether-foot">
+        <div class="c-progress c-progress--sm" id="netherProgress" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" aria-label="Nether-Stern-Deckung"></div>
+        <p class="star-nether-note" id="netherNote"></p>
       </div>
     </section>
-    <details class="star-automation">
-      <summary>Produktion mit der Starry Bee</summary>
-      <ol>
-        <li>Patrick Bee im Warm Ocean angeln. Einen ATM Star Block für die Umwandlung verwenden und den zweiten vor dem Advanced Beehive auf den Feeding Slab setzen.</li>
-        <li>Starry Combs in der Powered Centrifuge verarbeiten und die ATM Star Shards zurück ins ME leiten.</li>
-        <li>Pro weiterem Star 292 Shards einplanen. Der Runic Star Altar braucht fünf Star-Fragmente, einen Infused Patrick Star, Corrupti Dust, Mundabitur Dust und eine Lens of the Killer.</li>
-        <li>Automatic Hephaestus Forge, Runic Crucible, Runic Enchanter und Atomic Reconstructor für die Vorprodukte anbinden. Processing Patterns an die Item Input Hatch anschließen und das Ergebnis per ME Import Bus zurückführen.</li>
-      </ol>
-      <p><a href="https://github.com/AllTheMods/ATM-10/blob/8.6/kubejs/server_scripts/modpack/runic_multis/recipes/star_altar.js">Altar-Rezepte in ATM10 8.6</a> · <a href="https://github.com/AllTheMods/ATM-10/blob/8.6/config/ftbquests/quests/lang/en_us/chapters/achapter_2r_6the_atm_star.snbt">Creative-Questreihe</a></p>
-    </details>
+
+    <section class="star-explorer" id="explorer" aria-labelledby="explorerTitle" hidden>
+      <div class="star-explorer-head">
+        <div class="star-explorer-tabs-wrap">
+          <h2 id="explorerTitle" class="c-sr-only">ATM-Star-Explorer</h2>
+          <div class="c-seg star-view-tabs" id="viewTabs" role="tablist" aria-label="Ansichten">
+            <button type="button" role="tab" id="tabParts" data-view="parts" aria-selected="true" aria-controls="panelParts">
+              <span>Bauteile &amp; Rezepte</span>
+              <span class="star-tab-count" id="tabPartsCount">13</span>
+            </button>
+            <button type="button" role="tab" id="tabShopping" data-view="shopping" aria-selected="false" aria-controls="panelShopping">
+              <span>Einkaufsliste</span>
+              <span class="star-tab-count" id="tabShoppingCount">0</span>
+            </button>
+            <button type="button" role="tab" id="tabRoadmap" data-view="roadmap" aria-selected="false" aria-controls="panelRoadmap">
+              <span>Starry-Bee-Roadmap</span>
+            </button>
+          </div>
+        </div>
+        <div class="star-view-actions" id="viewActions">
+          <button type="button" id="toggleExpandAll" class="c-btn c-btn--sm">Alle aufklappen</button>
+          <button type="button" id="copyShopping" class="c-btn c-btn--sm" hidden>Markdown kopieren</button>
+          <button type="button" id="downloadShoppingCsv" class="c-btn c-btn--sm" hidden>CSV laden</button>
+        </div>
+      </div>
+
+      <div id="panelParts" role="tabpanel" aria-labelledby="tabParts">
+        <div class="star-toolbar">
+          <label class="star-search-wrap">
+            <span class="c-sr-only">Bauteil, Zutat, Mod oder NBT suchen</span>
+            <svg class="star-search-icon" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true">
+              <circle cx="7" cy="7" r="4.8"/>
+              <path d="m10.8 10.8 3.2 3.2" stroke-linecap="round"/>
+            </svg>
+            <input type="search" id="search" class="c-input star-search-input" placeholder="Bauteil, Zutat, Mod oder NBT suchen …" autocomplete="off">
+            <kbd class="star-kbd" aria-hidden="true">/</kbd>
+          </label>
+          <div class="c-seg star-status-filters" id="partsFilterGroup" role="group" aria-label="Status filtern">
+            <button type="button" data-filter="all" aria-pressed="true">Alle</button>
+            <button type="button" data-filter="open" aria-pressed="false">Offen</button>
+            <button type="button" data-filter="craftable" aria-pressed="false">Craftbar</button>
+            <button type="button" data-filter="done" aria-pressed="false">Gedeckt</button>
+            <button type="button" data-filter="nbt" aria-pressed="false">Sonder-NBT</button>
+          </div>
+          <label class="star-sort-wrap">
+            <span class="c-sr-only">Bauteile sortieren</span>
+            <select id="partsSort" class="c-select">
+              <option value="recipe">Rezeptfolge</option>
+              <option value="readiness-asc">Fortschritt ↑</option>
+              <option value="readiness-desc">Fortschritt ↓</option>
+              <option value="missing-desc">Meiste fehlend</option>
+              <option value="craftable-first">Craftbar zuerst</option>
+            </select>
+          </label>
+        </div>
+
+        <div class="star-meta-strip">
+          <p id="partsMeta" class="star-meta-text"></p>
+          <button type="button" id="resetPartsFilters" class="c-btn c-btn--ghost c-btn--sm" hidden>Filter zurücksetzen</button>
+        </div>
+
+        <div class="star-ledger" id="ledger">
+          <div class="star-columns" aria-hidden="true">
+            <span>Bauteil &amp; Status</span>
+            <span class="num">Bedarf</span>
+            <span class="num">Im ME</span>
+            <span class="num">Craftbar</span>
+            <span class="num">Fehlt</span>
+            <span></span>
+          </div>
+          <div id="parts"></div>
+          <p id="partsEmpty" class="star-empty" role="status" hidden></p>
+        </div>
+      </div>
+
+      <div id="panelShopping" role="tabpanel" aria-labelledby="tabShopping" hidden>
+        <div class="star-toolbar">
+          <label class="star-search-wrap">
+            <span class="c-sr-only">Einkaufsliste durchsuchen</span>
+            <svg class="star-search-icon" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true">
+              <circle cx="7" cy="7" r="4.8"/>
+              <path d="m10.8 10.8 3.2 3.2" stroke-linecap="round"/>
+            </svg>
+            <input type="search" id="shoppingSearch" class="c-input star-search-input" placeholder="Fehlendes Item, Mod oder Bauteil suchen …" autocomplete="off">
+            <kbd class="star-kbd" aria-hidden="true">/</kbd>
+          </label>
+          <div class="c-seg" id="shoppingGroupToggle" role="group" aria-label="Gruppierung">
+            <button type="button" data-group="flat" aria-pressed="true">Flache Liste</button>
+            <button type="button" data-group="mod" aria-pressed="false">Nach Mod</button>
+          </div>
+          <div class="c-seg" id="shoppingFilterGroup" role="group" aria-label="Einkaufsliste filtern">
+            <button type="button" data-sfilter="all" aria-pressed="true">Alle</button>
+            <button type="button" data-sfilter="shared" aria-pressed="false">Geteilt</button>
+            <button type="button" data-sfilter="nbt" aria-pressed="false">Sonder-NBT</button>
+          </div>
+          <label class="star-sort-wrap">
+            <span class="c-sr-only">Einkaufsliste sortieren</span>
+            <select id="shoppingSort" class="c-select">
+              <option value="missing-desc">Meiste fehlend</option>
+              <option value="coverage-asc">Niedrigste Deckung</option>
+              <option value="nbt-first">Sonder-NBT zuerst</option>
+              <option value="name-asc">Name A–Z</option>
+            </select>
+          </label>
+        </div>
+
+        <div class="star-meta-strip">
+          <p id="shoppingMeta" class="star-meta-text"></p>
+          <button type="button" id="resetShoppingFilters" class="c-btn c-btn--ghost c-btn--sm" hidden>Filter zurücksetzen</button>
+        </div>
+
+        <div id="shoppingContent" class="star-shopping-wrap"></div>
+        <p id="shoppingEmpty" class="star-empty star-empty--boxed" role="status" hidden></p>
+      </div>
+
+      <div id="panelRoadmap" role="tabpanel" aria-labelledby="tabRoadmap" hidden>
+        <div id="roadmapContent" class="star-roadmap"></div>
+      </div>
+    </section>
+
+    <div id="starAnnounce" class="c-sr-only" aria-live="polite" aria-atomic="true"></div>
+    <div id="starToast" class="star-toast" role="status" aria-live="polite" hidden></div>
   </main>
-  <script type="module" src="/assets/atm-star.js?v=20261114-status-1&amp;revision=pack-icons-1"></script>
+
+  <dialog id="itemDrawer" class="c-drawer star-drawer" aria-labelledby="drawerTitle">
+    <div class="c-drawer-head star-drawer-head">
+      <div class="star-drawer-title-wrap">
+        <div id="drawerIcon" class="star-drawer-icon"></div>
+        <div class="star-drawer-title-copy">
+          <p id="drawerEyebrow" class="c-eyebrow star-drawer-eyebrow"></p>
+          <h2 id="drawerTitle">Item-Details</h2>
+        </div>
+      </div>
+      <button type="button" id="drawerClose" class="c-btn c-btn--ghost c-btn--sm star-drawer-close" aria-label="Inspektor schließen">✕</button>
+    </div>
+    <div class="c-drawer-body" id="drawerBody"></div>
+    <div class="c-drawer-foot" id="drawerFoot"></div>
+  </dialog>
+
+  <script type="module" src="/assets/atm-star.js?v=20261125-overhaul-1"></script>
 </body>
 </html>

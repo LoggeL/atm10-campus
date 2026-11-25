@@ -1,5 +1,5 @@
-import { api } from './campus-client.js?v=20261114-status-1';
-import { esc } from './format.js?v=20261114-status-1';
+import { api } from './campus-client.js?v=20261125-overhaul-1';
+import { esc } from './format.js?v=20261125-overhaul-1';
 const $ = (id) => document.getElementById(id);
 const SCOPES = {
   write: 'Lesen + Schreiben',

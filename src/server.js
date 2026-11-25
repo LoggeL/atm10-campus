@@ -91,7 +91,7 @@ export async function buildServer(config = defaultConfig) {
     }
   });
   app.get('/erebor/bauzaehler',async(req,reply)=>reply.redirect(req.actor?.via==='session'?'/erebor/dashboard':'/login'));
-  app.get('/docs', async (req, reply) => html(reply, campusPage(page('docs.html'),req.actor)));
+  app.get('/docs', async (req, reply) => html(reply, campusPage(page('docs.html'), req.actor, 'docs')));
   app.get('/viewer', async (req, reply) => (req.actor?.via === 'session' ? html(reply, page('viewer/index.html')) : reply.redirect('/login')));
   app.get('/healthz', async () => ({ ok: true, version, time: now(), live: campus.latestSnapshot('live')?.capturedAt ?? null }));
   app.get('/api/openapi.json', async () => openapi(config.publicUrl));

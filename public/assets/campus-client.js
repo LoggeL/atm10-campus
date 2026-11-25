@@ -31,9 +31,20 @@ export function linkStation(site) {
   if (!/^K(0[1-9]|[12][0-9]|3[0-7])$/.test(site)) return;
   const nav = document.querySelector('.campus-nav');
   if (!nav) return;
-  nav.querySelector('[data-section="dashboard"]').href = '/erebor/dashboard?kanone=' + site;
+  const dash = nav.querySelector('[data-section="dashboard"]');
+  if (dash) dash.href = '/erebor/dashboard?kanone=' + site;
   if (location.pathname !== '/app') {
-    for (const key of ['overview', 'cannons'])
-      nav.querySelector('[data-tab="' + key + '"]').href = '/app?project=erebor&kanone=' + site + '#' + key;
+    for (const key of ['overview', 'cannons']) {
+      const link = nav.querySelector('[data-tab="' + key + '"]');
+      if (link) link.href = '/app?project=erebor&kanone=' + site + '#' + key;
+    }
   }
+}
+
+export async function copyText(text) {
+  if (navigator.clipboard?.writeText) {
+    await navigator.clipboard.writeText(text);
+    return true;
+  }
+  return false;
 }

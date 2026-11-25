@@ -1,5 +1,5 @@
 import {groupOf,slotsFor} from './erebor-groups.js';
-import {campusPage} from './campus-page.js';
+import {ASSET_VERSION,campusPage} from './campus-page.js';
 import {readFileSync} from 'node:fs';
 import {stationSource} from './erebor-me-order.js';
 import {Worker} from 'node:worker_threads';
@@ -21,13 +21,21 @@ function linkPage(report,actor) {
     const head=report.hubs[id];
     const pending=links.filter(l=>l.state!=='paired').map(l=>name(l)+' ('+({absent:'Block fehlt',unknown:'unbekannt',ambiguous:'mehrdeutig',unpaired:'offen'}[l.state])+')');
     const ports=head.ports.map(p=>p.port+' → '+(p.peers.map(label).join(', ')||'unbekanntes Ziel')).join('<br>');
-    return '<tr><th scope="row">'+label(id)+'</th><td>'+(head.position||pos).join(' / ')+'</td><td>'+links.map(name).join(', ')+'</td><td>'+
-      (head.present===null?'Unbekannt':head.present?'Belegt: '+head.ports.length+'/8<br>'+ports:'Hub fehlt')+'</td><td>'+(pending.join(', ')||'Alle gekoppelt')+'</td></tr>';
+    const portCell=head.present===null
+      ?'<span class="c-badge c-badge--neutral">Unbekannt</span>'
+      :head.present
+        ?'<span class="c-badge c-badge--ok">Belegt: '+head.ports.length+'/8</span>'+(ports?'<div class="cell-note">'+ports+'</div>':'')
+        :'<span class="c-badge c-badge--danger">Hub fehlt</span>';
+    const checkCell=pending.length
+      ?'<span class="c-badge c-badge--warn">Offen</span><div class="cell-note">'+pending.join(', ')+'</div>'
+      :'<span class="c-badge c-badge--ok">Alle gekoppelt</span>';
+    return '<tr><th scope="row">'+label(id)+'</th><td class="c-mono">'+(head.position||pos).join(' / ')+'</td><td>'+links.map(name).join(', ')+'</td><td>'+portCell+'</td><td>'+checkCell+'</td></tr>';
   }).join('');
-  return campusPage('<!doctype html><html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Erebor · Funkverbindungen</title><link rel="stylesheet" href="/assets/app.css?v=20261114-status-1"></head><body><!-- campus-navigation --><main>'+
-    '<a href="/app?project=erebor#cannon-coordinates">← Kanonenstandorte</a><h1>Funkverbindungen bei Erebor</h1><p>Mit dem ME Wireless Setup Kit beide Partner eines Paars rechtsklicken. Bei einer Kanone den Wireless Connector anklicken. Eine Hub-Verbindung wird nur einmal gekoppelt.</p>'+
-    '<p>Gespeicherte Kopplungen aus der Welt. Abgerufen am '+new Date(report.surveyedAt).toLocaleString('de-DE',{timeZone:'Europe/Berlin'})+' Uhr (Berlin).</p>'+
-    '<div class="table-wrap"><table><thead><tr><th>Hub</th><th>X / Y / Z</th><th>Vorgesehene Partner</th><th>Gespeicherte Ports</th><th>Zu prüfen</th></tr></thead><tbody>'+rows+'</tbody></table></div></main></body></html>',actor,'tech');
+  const surveyed=new Date(report.surveyedAt).toLocaleString('de-DE',{timeZone:'Europe/Berlin'});
+  return campusPage('<!doctype html><html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Funkverbindungen · ATM10 Campus</title><link rel="stylesheet" href="/assets/app.css?v='+ASSET_VERSION+'"></head><body><a class="skip-link" href="#main">Zum Inhalt</a><!-- campus-navigation --><main id="main" class="c-shell">'+
+    '<div class="c-page-head"><div class="c-page-head-main"><p class="c-eyebrow">Bauprojekt Erebor · Stationstechnik</p><h1>Funkverbindungen bei Erebor</h1><p class="c-page-sub">Mit dem ME Wireless Setup Kit beide Partner eines Paars rechtsklicken. Bei einer Kanone den Wireless Connector anklicken. Eine Hub-Verbindung wird nur einmal gekoppelt.</p></div>'+
+    '<div class="c-page-actions"><span class="c-status-pill c-status-pill--info"><span class="c-status-dot c-status-dot--info" aria-hidden="true"></span>Weltstand: '+surveyed+' Uhr (Berlin)</span><a class="c-btn c-btn--sm" href="/app?project=erebor#cannon-coordinates">← Kanonenstandorte</a></div></div>'+
+    '<div class="c-table-wrap table-wrap" role="region" aria-label="Funkverbindungen" tabindex="0"><table><thead><tr><th scope="col">Hub</th><th scope="col">X / Y / Z</th><th scope="col">Vorgesehene Partner</th><th scope="col">Gespeicherte Ports</th><th scope="col">Zu prüfen</th></tr></thead><tbody>'+rows+'</tbody></table></div></main></body></html>',actor,'tech');
 }
 function checkedLayout(req,campus,permission='read') {
   const actor=requireActor(req,permission);

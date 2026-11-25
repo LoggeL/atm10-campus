@@ -1,6 +1,6 @@
 import * as THREE from 'three';
-import {installViewerControls} from './controls.js?v=20261114-status-1';
-import {connectPolling} from '/assets/live-updates.js?v=20261114-status-1';
+import {installViewerControls} from './controls.js?v=20261125-overhaul-1';
+import {connectPolling} from '/assets/live-updates.js?v=20261125-overhaul-1';
 
 const $=s=>document.querySelector(s);
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -15,6 +15,8 @@ export async function startArchitectureViewer({view,nav,scene,hash,api,loading,t
   view.scene.add(new THREE.AmbientLight(0xffffff,1.25));
   nav.orbit.minDistance=.5;nav.orbit.maxPolarAngle=Math.PI*.98;
   document.body.classList.add('architecture-viewer');
+  const modeBadge=$('#viewer-mode');
+  if(modeBadge){modeBadge.textContent='Blockansicht';modeBadge.title='Begehbare Architektur-Blockansicht';}
   $('.snap').classList.add('hidden');
   $('#project-note').classList.remove('hidden');
   $('#project-note').textContent='Echte Planblöcke aus den Erebor-Schematics. Wähle eine Halle oder einen Gang und betrete ihn.';

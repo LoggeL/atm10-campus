@@ -1,24 +1,60 @@
 <!doctype html>
 <html lang="de">
-<head>
-<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Erebor · Aufstellung | ATM10 Campus</title>
-<link rel="stylesheet" href="/assets/erebor-dashboard.css?v=20261121-aushub">
-<link rel="stylesheet" href="/assets/erebor-placement.css?v=20261121-aushub&revision=placement-1">
-</head>
-<body>
-<a href="#main" class="skip">Zum Inhalt</a>
-<!-- campus-navigation -->
-<main class="shell" id="main">
-<p class="project">Bauprojekt Erebor · Entwurf</p><h1>Aufstellung</h1>
-<p>Je Truhe zunächst Kanone A; B und C bleiben optionale Reservepositionen. Dieser Plan aktiviert keine Station und verändert keine Weltblöcke.</p>
-<section class="panel" aria-labelledby="manual-title"><h2 id="manual-title">Manuelle Checkliste</h2>
-<p>Häkchen sind persönliche Notizen in diesem Browser, keine Telemetrie und keine Freigabe für den Betrieb. „Lauf beobachtet“ bestätigt nur deine eigene Beobachtung, nicht den aktuellen Zustand.</p>
-<p id="storage-status" role="status">Nicht zwischen Geräten oder Personen synchronisiert.</p></section>
-<p id="plan-status" role="status">Lade Aufstellungsplan …</p>
-<p id="plan-error" role="alert" hidden></p>
-<label class="search-label">Station suchen <input id="search" type="search" placeholder="Stations-ID oder Bezeichnung"></label>
-<div id="placement-stations"></div>
-</main>
-<script type="module" src="/assets/erebor-placement.js?v=20261121-aushub&revision=placement-1"></script>
-</body></html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <meta name="theme-color" content="#0c1311" />
+    <title>Aufstellung · ATM10 Campus</title>
+    <link rel="stylesheet" href="/assets/erebor-placement.css?v=20261125-overhaul-1" />
+  </head>
+  <body>
+    <a href="#main" class="skip-link">Zum Inhalt</a>
+    <!-- campus-navigation -->
+    <main class="c-shell placement-main" id="main">
+      <div class="c-page-head">
+        <div class="c-page-head-main">
+          <p class="c-eyebrow">Bauprojekt Erebor · Planungsentwurf</p>
+          <h1>Aufstellung</h1>
+          <p class="c-page-sub">
+            Manuelle Checkliste je Truhe: zunächst Kanone A; B und C bleiben optionale Reservepositionen. Dieser Plan
+            aktiviert keine Station und verändert keine Weltblöcke.
+          </p>
+        </div>
+        <div class="c-page-actions">
+          <a class="c-btn c-btn--sm" href="/app?project=erebor#cannon-coordinates">Live-Aufstellkoordinaten</a>
+        </div>
+      </div>
+
+      <section class="c-card placement-manual" aria-labelledby="manual-title">
+        <div class="placement-manual-head">
+          <h2 id="manual-title">Manuelle Checkliste</h2>
+          <span class="c-badge c-badge--neutral">Nur lokal im Browser</span>
+        </div>
+        <p class="placement-manual-copy">
+          Häkchen sind persönliche Notizen in diesem Browser, keine Telemetrie und keine Freigabe für den Betrieb. „Lauf
+          beobachtet“ bestätigt nur deine eigene Beobachtung, nicht den aktuellen Zustand.
+        </p>
+        <div class="placement-manual-meta">
+          <p id="storage-status" role="status">Nicht zwischen Geräten oder Personen synchronisiert.</p>
+          <p>
+            Gemeinsame Server-Koordinaten und laufende Kanonen-Telemetrie findest du unter
+            <a href="/app?project=erebor#cannon-coordinates">Stationstechnik → Aufstellkoordinaten</a>.
+          </p>
+        </div>
+      </section>
+
+      <div class="placement-toolbar">
+        <p id="plan-status" class="placement-status" role="status">Lade Aufstellungsplan …</p>
+        <label class="search-label" for="search">
+          <span>Station suchen</span>
+          <input id="search" class="c-input" type="search" placeholder="Stations-ID oder Bezeichnung" />
+        </label>
+      </div>
+
+      <p id="plan-error" class="c-notice c-notice--danger placement-error" role="alert" hidden></p>
+      <div id="placement-stations" class="placement-stations"></div>
+      <p id="search-empty" class="placement-empty" role="status" hidden>Keine Station passt zur Suche.</p>
+    </main>
+    <script type="module" src="/assets/erebor-placement.js?v=20261125-overhaul-1"></script>
+  </body>
+</html>

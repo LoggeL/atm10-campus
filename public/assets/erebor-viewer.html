@@ -1,3 +1,49 @@
-<!doctype html><html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Erebor · Blockgenaue Architektur</title><style>
-*{box-sizing:border-box}body{margin:0;background:#12191e;color:#eee;font:15px system-ui}header{padding:14px 22px;display:flex;gap:20px;align-items:center;flex-wrap:wrap;border-bottom:1px solid #46515a}h1{font-size:20px;margin:0;color:#ebcf86}a{color:#cfe1ef}button,select{font:inherit;color:#eee;background:#25343d;border:1px solid #657783;border-radius:7px;padding:8px}#stage{height:calc(100vh - 148px);min-height:350px}#stage canvas{width:100%;height:100%;display:block}footer{padding:10px 22px;color:#b5c1c8;font-size:12px}#status{padding:8px 22px;color:#e7d7ad}label{display:flex;gap:8px;align-items:center}
-</style><script type="importmap">{"imports":{"three":"/vendor/three/build/three.module.js","three/addons/":"/vendor/three/examples/jsm/"}}</script></head><body><header><h1>Erebor · Architektur R2</h1><select id="zone" aria-label="Bauteil"></select><label><input type="checkbox" id="cut">Dach und Vorderwand ausblenden</label><button id="reset">Ansicht zurücksetzen</button><a href="/app?project=erebor#overview">Baupläne & Koordinaten</a><a href="/projects?id=erebor">Projektkarte</a></header><div id="status">Blockmodell wird geladen …</div><main id="stage"></main><footer id="note">Ziehen: drehen · Mausrad: zoomen · rechte Maustaste: verschieben. Tatsächliche Planblöcke, kein Ingame-Screenshot.</footer><script type="module" src="/assets/erebor-viewer.js?v=20261114-status-1"></script></body></html>
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#0c1311">
+<title>Erebor · Blockgenaue Architektur · ATM10 Campus</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><rect width='16' height='16' rx='4' fill='%230c1311'/><rect x='2.5' y='2.5' width='11' height='11' rx='2.5' fill='%237ee0a8'/><rect x='5.5' y='5.5' width='5' height='5' rx='1' fill='%23091d14'/></svg>">
+<link rel="stylesheet" href="/assets/campus-tokens.css?v=20261125-overhaul-1">
+<style>
+html,body{height:100%}
+body{display:flex;flex-direction:column;background:var(--bg);color:var(--text)}
+header{padding:10px 20px;min-height:var(--header-h);display:flex;gap:14px;align-items:center;flex-wrap:wrap;background:var(--header-bg);border-bottom:1px solid var(--border)}
+.brand{display:inline-flex;align-items:center;gap:9px;color:var(--text);font-weight:720;font-size:15px;text-decoration:none}
+.brand:hover{color:var(--accent-strong)}
+h1{font-size:17px;margin:0;color:var(--gold);font-weight:700}
+.nav-links{margin-left:auto;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+label{display:inline-flex;gap:8px;align-items:center;color:var(--text-2);font-size:var(--text-sm);cursor:pointer}
+label input[type="checkbox"]{accent-color:var(--accent)}
+#status{padding:8px 20px;background:var(--surface-1);border-bottom:1px solid var(--border);color:var(--gold);font-size:var(--text-sm)}
+#stage{flex:1;min-height:350px}
+#stage canvas{width:100%;height:100%;display:block}
+footer{padding:9px 20px;background:var(--surface-1);border-top:1px solid var(--border);color:var(--muted);font-size:var(--text-xs)}
+</style>
+<script type="importmap">{"imports":{"three":"/vendor/three/build/three.module.js","three/addons/":"/vendor/three/examples/jsm/"}}</script>
+</head>
+<body>
+<header>
+  <a class="brand" href="/erebor/dashboard">
+    <svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true"><rect width="20" height="20" rx="5" fill="#182a22" stroke="#4c745f" stroke-width="1.2"/><rect x="4" y="4" width="12" height="12" rx="2.5" fill="#7ee0a8"/><rect x="7.5" y="7.5" width="5" height="5" rx="1" fill="#091d14"/></svg>
+    <span>ATM10 Campus</span>
+  </a>
+  <h1>Erebor · Architektur R2</h1>
+  <select id="zone" class="c-select" aria-label="Bauteil"></select>
+  <label><input type="checkbox" id="cut">Dach und Vorderwand ausblenden</label>
+  <button id="reset" class="c-btn c-btn--sm" type="button">Ansicht zurücksetzen</button>
+  <nav class="nav-links" aria-label="Zurück zum Campus">
+    <a class="c-btn c-btn--sm c-btn--ghost" href="/erebor/dashboard">Dashboard</a>
+    <a class="c-btn c-btn--sm c-btn--ghost" href="/app?project=erebor#overview">Bauaufträge</a>
+    <a class="c-btn c-btn--sm c-btn--ghost" href="/projects?id=erebor">Projektkarte</a>
+    <a class="c-btn c-btn--sm" href="/viewer?project=erebor&amp;room=E05">3D-Viewer</a>
+  </nav>
+</header>
+<div id="status" role="status">Blockmodell wird geladen …</div>
+<main id="stage"></main>
+<footer id="note">Ziehen: drehen · Mausrad: zoomen · rechte Maustaste: verschieben. Tatsächliche Planblöcke, kein Ingame-Screenshot.</footer>
+<script type="module" src="/assets/erebor-viewer.js?v=20261125-overhaul-1"></script>
+</body>
+</html>

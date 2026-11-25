@@ -1,4 +1,5 @@
-import { esc, fmt } from './format.js?v=20261114-status-1';
+import { esc, fmt } from './format.js?v=20261125-overhaul-1';
+
 export const states = {
   placing: 'Baut',
   clearing: 'Hebt aus',
@@ -9,6 +10,18 @@ export const states = {
   unknown: 'Kein Signal',
   unverified: 'Plan ungeprüft',
 };
+
+const stateTone = {
+  placing: 'ok',
+  clearing: 'ok',
+  searching: 'warn',
+  waiting: 'warn',
+  handover: 'craftable',
+  idle: 'neutral',
+  unknown: 'neutral',
+  unverified: 'danger',
+};
+
 const reasons = {
   missingItem: 'Material fehlt',
   missingBlock: 'Baublock fehlt',
@@ -16,7 +29,9 @@ const reasons = {
   targetNotLoaded: 'Zielchunk lädt',
   ready: 'Startbereit',
 };
+
 export const borrowed = (row) => row.home && row.home !== row.site;
+
 export function freshFleet(data, now = Date.now()) {
   const age = now - data.telemetryAt;
   const fresh = Number.isFinite(data.telemetryAt) && age >= 0 && age < 45000;
@@ -25,13 +40,79 @@ export function freshFleet(data, now = Date.now()) {
     rows: fresh ? data.fleet : data.fleet.map((row) => ({ ...row, state: 'unknown', placed: null, total: null })),
   };
 }
-export function landscapePanel(surface){
- if(!surface)return '<p>Für die aktuelle Bergversion sind keine Landschaftspläne veröffentlicht.</p>';
- return '<div class="facts"><span><b>'+fmt(surface.published)+' / '+fmt(surface.regions)+'</b> Regionen veröffentlicht</span>'+
-  '<span><b>'+fmt(surface.files)+'</b> Schematics</span><span><b>'+fmt(surface.blocks)+'</b> geplante Blöcke</span></div>'+
-  '<p class="volume">Erde und Wald an den unteren Hängen · '+fmt(surface.trees)+(surface.published>0&&surface.saplingParts===surface.published?' Baumstandorte mit Setzlingen':' geplante Bäume')+' · Schneegipfel auf Y '+fmt(surface.summitY)+'</p>'+
-  '<p class="meta">Die Aufgabenliste zählt die abgeschlossenen und zugewiesenen Landschaftspläne.</p>'+
-  '<p class="volume"><a href="/app?project=erebor&amp;surface=1#overview">Landschafts-Baupläne öffnen</a> · <a href="/projects?id=erebor#landschaft">Höhenprofil ansehen</a></p>';
+
+function formatTaskPercent(done, total) {
+  if (!(total > 0)) return '–';
+  const value = (100 * done) / total;
+  if (value > 0 && value < 0.1) return '&lt; 0,1 %';
+  if (value > 99.9 && value < 100) return '&gt; 99,9 %';
+  return fmt(Math.round(value * 10) / 10) + ' %';
+}
+
+export function taskProgressCell(row) {
+  if (!row) return '<span class="dash-muted">Unbekannt</span>';
+  const total = Number(row.total) || 0;
+  const done = Number(row.done) || 0;
+  const active = Number(row.inProgress) || 0;
+  const donePct = total > 0 ? Math.min(100, Math.max(0, (100 * done) / total)) : 0;
+  const activePct = total > 0 ? Math.min(100 - donePct, Math.max(0, (100 * active) / total)) : 0;
+  return (
+    '<div class="task-progress-cell">' +
+    '<span class="task-progress-meta"><span class="task-counts c-mono">' +
+    fmt(row.done) +
+    ' / ' +
+    fmt(row.total) +
+    '</span><span class="pct c-mono">' +
+    formatTaskPercent(row.done, row.total) +
+    '</span></span>' +
+    (total > 0
+      ? '<div class="c-progress c-progress--sm" aria-hidden="true">' +
+        '<span class="c-progress-bar c-progress-bar--ok" style="width:' +
+        donePct +
+        '%"></span>' +
+        (activePct > 0
+          ? '<span class="c-progress-bar c-progress-bar--warn" style="width:' + activePct + '%"></span>'
+          : '') +
+        '</div>'
+      : '') +
+    '</div>'
+  );
+}
+
+export function landscapePanel(surface) {
+  if (!surface) return '<p class="dash-meta">Für die aktuelle Bergversion sind keine Landschaftspläne veröffentlicht.</p>';
+  const publishedPct =
+    surface.regions > 0 ? Math.min(100, Math.max(0, (100 * (surface.published || 0)) / surface.regions)) : 0;
+  return (
+    '<div class="dash-facts"><span><b>' +
+    fmt(surface.published) +
+    ' / ' +
+    fmt(surface.regions) +
+    '</b> Regionen veröffentlicht</span>' +
+    '<span><b>' +
+    fmt(surface.files) +
+    '</b> Schematics</span><span><b>' +
+    fmt(surface.blocks) +
+    '</b> geplante Blöcke</span></div>' +
+    (surface.regions > 0
+      ? '<div class="c-progress c-progress--sm" aria-hidden="true"><span class="c-progress-bar c-progress-bar--ok" style="width:' +
+        publishedPct +
+        '%"></span></div>'
+      : '') +
+    '<p class="volume">Erde und Wald an den unteren Hängen · ' +
+    fmt(surface.trees) +
+    (surface.published > 0 && surface.saplingParts === surface.published
+      ? ' Baumstandorte mit Setzlingen'
+      : ' geplante Bäume') +
+    ' · Schneegipfel auf Y ' +
+    fmt(surface.summitY) +
+    '</p>' +
+    '<p class="dash-meta">Die Aufgabenliste zählt die abgeschlossenen und zugewiesenen Landschaftspläne.</p>' +
+    '<div class="dash-landscape-actions">' +
+    '<a class="c-btn c-btn--sm" href="/app?project=erebor&amp;surface=1#overview">Landschafts-Baupläne öffnen</a>' +
+    '<a class="c-btn c-btn--ghost c-btn--sm" href="/projects?id=erebor#landschaft">Höhenprofil ansehen</a>' +
+    '</div>'
+  );
 }
 
 export function workloadDetails(massif, unassigned) {
@@ -50,6 +131,7 @@ export function workloadDetails(massif, unassigned) {
     ' veröffentlichte Teile ohne Stationszuordnung. Weitere Weltprüfungen können neue Teile ergeben.</p>'
   );
 }
+
 export function stationCounts(row) {
   if (!row) return '';
   const mass = row.massif;
@@ -85,6 +167,7 @@ export function stationCounts(row) {
     '</details>'
   );
 }
+
 export function slotDetail(r, throughput) {
   const why = r.state === 'waiting' && reasons[r.reason] ? ' · ' + reasons[r.reason] : '';
   const assigned = r.tile || r.file;
@@ -120,10 +203,15 @@ export function slotDetail(r, throughput) {
             '"></progress>'
           : '')
       : '';
+  const tone = stateTone[r.state] || 'neutral';
   return (
-    '<div class="slot"><div class="slot-head"><span class="slot-name">Kanone ' +
+    '<div class="slot slot--' +
+    esc(r.state) +
+    '"><div class="slot-head"><span class="slot-name">Kanone ' +
     esc(r.slot) +
-    '</span><span>' +
+    '</span><span class="c-badge c-badge--' +
+    tone +
+    '">' +
     states[r.state] +
     why +
     '</span></div>' +
@@ -136,7 +224,6 @@ export function slotDetail(r, throughput) {
 }
 
 export function forecastView(estimate) {
-  const label = '<h3>ETA der Massiv-Füllung</h3>';
   const messages = {
     unknown: 'Noch keine automatischen Massiv-Teile veröffentlicht.',
     sampling: 'Für eine Schätzung fehlen noch genügend bestätigte Abschlüsse.',
@@ -145,7 +232,26 @@ export function forecastView(estimate) {
     complete: 'Alle veröffentlichten automatischen Massiv-Teile sind fertig.',
     offline: 'Die Prognose konnte nicht aktualisiert werden.',
   };
-  if (estimate?.state !== 'estimated') return label + '<p>' + messages[estimate?.state ?? 'unknown'] + '</p>';
+  const badges = {
+    estimated: ['ok', 'Prognose aktiv'],
+    complete: ['ok', 'Abgeschlossen'],
+    sampling: ['craftable', 'Messung läuft'],
+    paused: ['warn', 'Pausiert'],
+    inactive: ['warn', 'Inaktiv'],
+    offline: ['danger', 'Offline'],
+    unknown: ['neutral', 'Ausstehend'],
+  };
+  const state = estimate?.state ?? 'unknown';
+  const [tone, badgeText] = badges[state] ?? badges.unknown;
+  const header =
+    '<div class="dash-forecast-head"><h3>ETA der Massiv-Füllung</h3><span class="c-badge c-badge--' +
+    tone +
+    '">' +
+    badgeText +
+    '</span></div>';
+  if (state !== 'estimated') {
+    return header + '<p class="dash-forecast-msg">' + (messages[state] ?? messages.unknown) + '</p>';
+  }
   const hours = Math.ceil(estimate.seconds / 3600);
   let duration;
   if (estimate.seconds < 3600) duration = Math.max(1, Math.ceil(estimate.seconds / 60)) + ' min';
@@ -161,13 +267,13 @@ export function forecastView(estimate) {
     minute: '2-digit',
   }).format(roundedTime);
   return (
-    label +
+    header +
     '<p class="eta-line"><strong>Noch ca. ' +
     duration +
-    '</strong><span>Voraussichtlich ' +
+    '</strong><span class="eta-finish">Voraussichtlich ' +
     esc(finish) +
     ' Uhr (Berlin)</span></p>' +
-    '<p class="meta">' +
+    '<p class="dash-meta">' +
     fmt(Math.round(estimate.blocksPerHour)) +
     ' Planblöcke/h · ' +
     fmt(estimate.completedParts) +

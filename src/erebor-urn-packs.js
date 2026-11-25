@@ -3,7 +3,7 @@ import {createHash, randomUUID} from 'node:crypto';
 import {stoneNBT} from './project-stone.js';
 import {HttpError,requireActor} from './auth.js';
 import {logActivity,tx} from './db.js';
-import {campusPage} from './campus-page.js';
+import {ASSET_VERSION,campusPage} from './campus-page.js';
 
 const api='/api/projects/erebor/stone/massif/urnenpakete';
 const axes=[0,1,2];
@@ -120,7 +120,11 @@ export function registerUrnPacks(app,campus,stations,version,capability){
   requireActor(req,'read');const v=version(),rows=catalogs.all(v).map(r=>({id:r.pack,home:r.home,targets:JSON.parse(r.points).length,url:api+'/'+r.pack+'.nbt?version='+v}));
   const controller=capability(v);reply.header('Cache-Control','no-store');
   if(req.query.format==='json')return {version:v,controller,plans:rows.length,targets:rows.reduce((n,r)=>n+r.targets,0),rows};
-  return reply.type('text/html; charset=utf-8').send(campusPage('<!doctype html><html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"><link rel="stylesheet" href="/assets/app.css"><title>Erebor · Urnen-Sammelpläne</title></head><body><main><a href="/app?project=erebor#overview">Erebor-Baupläne</a><h1>Urnen-Sammelpläne</h1><p>'+rows.length+' Vorlagen · '+(controller>=3?'Sammelbetrieb auf der Homebox bereit':'Einzelbetrieb aktiv. Für Sammelbetrieb das Homebox-Update einspielen.')+' <a href="/assets/erebor-urnen-v3.py" download>Homebox-Installer V3</a></p><table><thead><tr><th>Empfohlener Standort</th><th>Urnen bei Veröffentlichung</th><th>Vorlage</th></tr></thead><tbody>'+rows.map(r=>'<tr><td>'+r.home+'</td><td>'+r.targets+'</td><td><a download href="'+r.url+'">'+r.id+'</a></td></tr>').join('')+'</tbody></table></main></body></html>',req.actor,'orders'));
+  const totalTargets=rows.reduce((n,r)=>n+r.targets,0);
+  const tableRows=rows.length
+   ?rows.map(r=>'<tr><td>'+r.home+'</td><td class="num">'+r.targets.toLocaleString('de-DE')+'</td><td class="c-mono"><a download href="'+r.url+'">'+r.id+'</a></td></tr>').join('')
+   :'<tr><td colspan="3" class="muted">Aktuell keine veröffentlichten Urnen-Sammelpläne.</td></tr>';
+  return reply.type('text/html; charset=utf-8').send(campusPage('<!doctype html><html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Urnen-Sammelpläne · ATM10 Campus</title><link rel="stylesheet" href="/assets/app.css?v='+ASSET_VERSION+'"></head><body><a class="skip-link" href="#main">Zum Inhalt</a><!-- campus-navigation --><main id="main" class="c-shell"><div class="c-page-head"><div class="c-page-head-main"><p class="c-eyebrow">Bauprojekt Erebor · Massiv</p><h1>Urnen-Sammelpläne</h1><p class="c-page-sub">'+rows.length.toLocaleString('de-DE')+' Vorlagen · '+totalTargets.toLocaleString('de-DE')+' Urnenziele · <span class="c-badge '+(controller>=3?'c-badge--ok':'c-badge--warn')+'">'+(controller>=3?'Sammelbetrieb auf der Homebox bereit':'Einzelbetrieb aktiv')+'</span></p></div><div class="c-page-actions"><a class="c-btn c-btn--sm" href="/api/projects/erebor/stone/massif/plans">← Massiver Cleanstone</a><a class="c-btn c-btn--sm" href="/app?project=erebor#overview">Bauaufträge</a><a class="c-btn c-btn--primary c-btn--sm" href="/assets/erebor-urnen-v3.py" download>Homebox-Installer V3</a></div></div>'+(controller>=3?'':'<p class="c-notice c-notice--warn">Einzelbetrieb aktiv. Für den Sammelbetrieb das Homebox-Update V3 einspielen.</p>')+'<div class="c-table-wrap table-wrap" role="region" aria-label="Urnen-Sammelpläne" tabindex="0"><table><thead><tr><th scope="col">Empfohlener Standort</th><th scope="col" class="num">Urnen bei Veröffentlichung</th><th scope="col">Vorlage (NBT)</th></tr></thead><tbody>'+tableRows+'</tbody></table></div></main></body></html>',req.actor,'orders'));
  });
  app.get(api+'/:id.nbt',async(req,reply)=>{
   requireActor(req,'read');const v=Number(req.query.version),r=db.prepare('SELECT home,points FROM erebor_urn_packs WHERE v=? AND pack=? UNION ALL SELECT site,points FROM erebor_urn_jobs WHERE v=? AND job=? LIMIT 1').get(v,req.params.id,v,req.params.id);

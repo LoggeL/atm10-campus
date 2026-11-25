@@ -1,12 +1,12 @@
 // Campus viewer: loads scene + data, feeds the mesher worker, drives UI, layers, picking and camera.
 import * as THREE from 'three';
-import { installViewerControls } from './controls.js?v=20261114-status-1';
-import { VoxelRenderer } from './renderer.js?v=20261114-status-1';
-import { Navigation } from './navigation.js';
-import { buildAtlas } from './atlas.js';
-import { LAYERS, PRESETS, MODES, CAT, categoryModes, categoryColors, statusLabel, statusColor } from './layers.js';
-import { blueprintPreview, installPreviewFallbacks } from '/assets/blueprint-preview.js?v=20261114-status-1';
-import { connectPolling } from '/assets/live-updates.js?v=20261114-status-1';
+import { installViewerControls } from './controls.js?v=20261125-overhaul-1';
+import { VoxelRenderer } from './renderer.js?v=20261125-overhaul-1';
+import { Navigation } from './navigation.js?v=20261125-overhaul-1';
+import { buildAtlas } from './atlas.js?v=20261125-overhaul-1';
+import { LAYERS, PRESETS, MODES, CAT, categoryModes, categoryColors, statusLabel, statusColor } from './layers.js?v=20261125-overhaul-1';
+import { blueprintPreview, installPreviewFallbacks } from '/assets/blueprint-preview.js?v=20261125-overhaul-1';
+import { connectPolling } from '/assets/live-updates.js?v=20261125-overhaul-1';
 installPreviewFallbacks();
 
 const $ = s => document.querySelector(s);
@@ -106,11 +106,17 @@ async function main() {
 
   if (scene.planning) {
     if (scene.planning.id === 'erebor' && params.has('room')) {
-      const { startArchitectureViewer } = await import('./architecture-viewer.js?v=20261119-gold-halls');
+      const { startArchitectureViewer } = await import('./architecture-viewer.js?v=20261125-overhaul-1');
       return startArchitectureViewer({view,nav,scene,hash,api,loading,toast,room:params.get('room')});
     }
-    const { startProjectViewer } = await import('./project-viewer.js?v=20261114-status-1');
+    const { startProjectViewer } = await import('./project-viewer.js?v=20261125-overhaul-1');
     return startProjectViewer({view,nav,scene,hash,api,loading,toast});
+  }
+
+  const modeBadge = $('#viewer-mode');
+  if (modeBadge) {
+    modeBadge.textContent = scene.snapshot ? 'Live-Welt' : 'Baupläne';
+    modeBadge.title = scene.snapshot ? 'Voxel-Ansicht aus Welt-Snapshot und Bauplänen' : 'Voxel-Ansicht ohne Weltbestand';
   }
 
   loading('Lade Bestand und Baupläne …', 12);
@@ -152,7 +158,7 @@ async function main() {
   state.visible = new Set(want !== null ? want.split(',').filter(id => state.bps.has(id)) : state.bps.keys());
 
   loading('Erzeuge Geometrie …', 35);
-  worker = new Worker('/viewer/mesher.worker.js');
+  worker = new Worker('/viewer/mesher.worker.js?v=20261125-overhaul-1');
   worker.onmessage = onWorker;
   worker.onerror = e => fail(new Error(e.message || 'Worker-Fehler'));
   const transfer = [];
@@ -681,7 +687,7 @@ function setupProjectSelector(scene) {
   select.onchange = () => { location.href = select.value ? '/viewer?project=' + encodeURIComponent(select.value) : '/viewer'; };
   $('#project-link').href = scene.project ? '/projects?id=' + encodeURIComponent(scene.project.id) : '/projects';
   if (scene.project) {
-    document.title = scene.project.title + ' · 3D-Viewer';
+    document.title = scene.project.title + ' · 3D-Viewer · ATM10 Campus';
     $('#scene').setAttribute('aria-label','3D-Ansicht · ' + scene.project.title);
   }
 }

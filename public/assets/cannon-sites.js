@@ -1,5 +1,5 @@
-import {esc,fmt} from './format.js?v=20261114-status-1';
-import {renderConnectionIssues} from './connection-status.js?v=20261114-status-1';
+import {esc,fmt} from './format.js?v=20261125-overhaul-1';
+import {renderConnectionIssues} from './connection-status.js?v=20261125-overhaul-1';
 
 export function cannonSiteRows(project,prepared){
  if(prepared.version!==project.version)throw Error('Der Projektstand wurde geändert. Bitte erneut aktualisieren.');
