@@ -231,6 +231,7 @@ def run(token,dry,rows):
             fuel_at=time.monotonic()
             last_print={}
             published={}
+            witnessed=set()
             def report(r,stage,n):
                 marker=(stage,n//64)
                 if published.get(r["key"])==marker: return
@@ -249,6 +250,8 @@ def run(token,dry,rows):
                             report(r,"world-complete",0)
                             rec["done"]=True; jsonwrite(journal,j); continue
                         if closed(o,rec):
+                            if key not in witnessed and not r["worldComplete"]:
+                                raise ValueError(key+": Abschluss während der Unterbrechung. Nach dem nächsten Welt-Speichern erneut starten.")
                             report(r,"finished",rec.get("placed",0))
                             print(f"P02{slot} {phase}: nativer Abschluss bestätigt.",flush=True)
                             rec["done"]=True; jsonwrite(journal,j); last_progress=time.monotonic(); continue
@@ -263,6 +266,9 @@ def run(token,dry,rows):
                                 raise
                             o=prepared["observed"]
                         verify(bridge,b,d,opts,o)
+                        if o["components"].get("create:schematic_bounds")!=r["job"]["size"]:
+                            raise ValueError(key+": native Abmessungen stimmen nicht.")
+                        witnessed.add(key)
                         if not rec.get("seen"):
                             rec.update(seen=True,base=o["outputCount"]); jsonwrite(journal,j)
                         if o["state"]=="STOPPED" or (o["state"]=="PAUSED" and o["status"]=="ready"):

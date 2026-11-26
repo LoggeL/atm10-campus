@@ -22,7 +22,7 @@ function terrain(world,check) {
     w.postMessage({interiorCheck:check});
   });
 }
-export function registerP02(app,campus) {
+export function registerP02(app,campus,checkTerrain=terrain) {
   const db=campus.db;
   let busy=false;
   app.post('/api/projects/erebor/wasserstadt/p02/meldung',async req=>{
@@ -61,9 +61,9 @@ export function registerP02(app,campus) {
           if(!f||rest.length||f.group!=='E25'||f.protectedCells!==0||f.unknownCells!==0||f.clearOmitted!==0||!inRange(f.origin,f.size,position))reject('P02'+slot+' hat keinen passenden veröffentlichten Plan.');
           const {job,bytes}=publishedPlan(db,project(),{version:baseVersion,sourceVersion:baseVersion,site:f.cannon,part,revision:DESIGN_REVISION,file:f.fileName,sha256:f.sha256});
           const check={bytes,anchor,kind:phase,watercity:true,details:true};
-          const result=await terrain(campus.config.worldSources.live,check);
+          const result=await checkTerrain(campus.config.worldSources.live,check);
           if(result!==true)reject('P02'+slot+' '+phase+' · '+(typeof result==='string'?result:'Ziel enthält fremde Blöcke oder ist nicht lesbar.'));
-          const done=await terrain(campus.config.worldSources.live,{...check,completed:true,details:false});
+          const done=await checkTerrain(campus.config.worldSources.live,{...check,completed:true,details:false});
           rows.push({slot,position,part,phase,job,source:f.cannon,worldComplete:done===true});
         }
       }
