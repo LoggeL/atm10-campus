@@ -68,14 +68,16 @@ export async function buildServer(config = defaultConfig) {
   function workspacePage(path, file, section) {
     app.get(path, async (req,reply)=>{
       if(req.actor?.via!=='session')return reply.redirect('/login');
-      return html(reply,campusPage(page(file),req.actor,section));
+      const areaHome=path==='/app'&&req.query.project==='wasserstadt';
+      reply.header('Cache-Control','private, no-store');
+      return reply.type('text/html; charset=utf-8').send(campusPage(page(areaHome?'projects.html':file),req.actor,areaHome?'watercity':section));
     });
   }
   workspacePage('/app','app.html','orders');
   workspacePage('/erebor/dashboard','erebor-dashboard.html','dashboard');
   workspacePage('/projects','projects.html','projects');
   workspacePage('/erebor/aufstellung','erebor-placement.html','placement');
-  workspacePage('/erebor/wasserstadt','watercity.html','watercity');
+  workspacePage('/erebor/wasserstadt','projects.html','watercity');
   app.get('/api/projects/erebor/wasserstadt', async (req, reply) => {
     requireActor(req,'session');
     reply.header('Cache-Control','private, no-store');
