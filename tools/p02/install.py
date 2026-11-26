@@ -150,6 +150,9 @@ def install_pc(console,root,cid):
     else: console.run(power_command(ROW,cid,"turn-on"))
     return disk
 
+class MaterialWait(ValueError):
+    pass
+
 def supply(disk,cid,targets,deadline=95):
     nonce=uuid.uuid4().hex
     end=time.monotonic()+deadline
@@ -164,7 +167,7 @@ def supply(disk,cid,targets,deadline=95):
             if r.get("run")!=nonce or r.get("computer")!=cid: continue
             if r.get("ready") is True: return
             reason=r.get("error") or str(r.get("missing"))
-        raise ValueError("P02-Materialprüfung: "+reason+" · Connector 773/191/-9280, Hub 315/315/-9649.")
+        raise MaterialWait("P02-Materialprüfung: "+reason+" · Connector 773/191/-9280, Hub 315/315/-9649.")
     finally: path.unlink(missing_ok=True)
 
 def closed(o,rec):
@@ -212,11 +215,8 @@ def run(token,dry,rows):
             for key,r in rows.items():
                 if r["phase"]=="build" and not r["worldComplete"] and not j[key].get("done"):
                     for item,n in r["job"]["materials"].items(): targets[item]=targets.get(item,0)+n
-            if not j.get("stocked"):
-                print("P02 prüft ME-Verbindung und füllt die gemeinsame Kiste für alle drei Bauplätze.",flush=True)
-                supply(disk,cid,targets)
-                j["stocked"]=True
-                jsonwrite(journal,j)
+            print("P02 prüft ME-Verbindung und Schießpulver in der gemeinsamen Kiste.",flush=True)
+            supply(disk,cid,{"minecraft:gunpowder":64})
             confirmed=plans(token,False)
             if any(confirmed[k]["desired"]!=r["desired"] for k,r in rows.items()): raise ValueError("Baupläne während der Vorprüfung geändert.")
             rows=confirmed
@@ -232,6 +232,8 @@ def run(token,dry,rows):
             last_print={}
             published={}
             witnessed=set()
+            stock_at=0
+            last_material=None
             def report(r,stage,n):
                 marker=(stage,n//64)
                 if published.get(r["key"])==marker: return
@@ -255,6 +257,9 @@ def run(token,dry,rows):
                             report(r,"finished",rec.get("placed",0))
                             print(f"P02{slot} {phase}: nativer Abschluss bestätigt.",flush=True)
                             rec["done"]=True; jsonwrite(journal,j); last_progress=time.monotonic(); continue
+                        if phase=="build" and not j.get("stocked") and o["inputEmpty"] is True:
+                            active=True
+                            break
                         if o["inputEmpty"]:
                             if rec.get("seen") or rec.get("intent"): raise ValueError(key+": Eingang nach Installation leer, Abschluss nicht eindeutig.")
                             rec["intent"]=True; jsonwrite(journal,j)
@@ -285,6 +290,15 @@ def run(token,dry,rows):
                         active=True
                         break
                 if not active: print("P02A, P02B und P02C: alle drei Wasserstadt-Abschnitte fertig.",flush=True); return
+                if not j.get("stocked") and time.monotonic()>=stock_at:
+                    stock_at=time.monotonic()+15
+                    try:
+                        supply(disk,cid,targets,7)
+                        j["stocked"]=True; jsonwrite(journal,j)
+                        print("Baumaterial für die drei Abschnitte liegt bereit.",flush=True)
+                    except MaterialWait as e:
+                        if str(e)!=last_material: print(e,flush=True)
+                        last_material=str(e)
                 if time.monotonic()-fuel_at>45:
                     supply(disk,cid,{"minecraft:gunpowder":64},20)
                     fuel_at=time.monotonic()
