@@ -7,6 +7,7 @@ import {zipStore} from './zip.js';
 // Deliberately restrictive: a saved player build is never treated as generic terrain.
 const NATURAL=/^minecraft:(?:air|cave_air|void_air|stone|deepslate|andesite|diorite|granite|tuff|calcite|dirt|coarse_dirt|rooted_dirt|grass_block|podzol|mycelium|sand|red_sand|gravel|clay|mud|water|snow|snow_block|ice|packed_ice|blue_ice|short_grass|tall_grass|fern|large_fern|dead_bush|vine|glow_lichen|seagrass|tall_seagrass|kelp|kelp_plant|lily_pad|sugar_cane|bamboo|bamboo_sapling|pointed_dripstone|dripstone_block|moss_block|moss_carpet|(?:deepslate_)?(?:coal|iron|copper|gold|redstone|emerald|lapis|diamond)_ore|(?:oak|birch|spruce|jungle|acacia|dark_oak|mangrove|cherry)_(?:log|leaves)|(?:red|brown)_mushroom(?:_block)?|mushroom_stem|dandelion|poppy|blue_orchid|allium|azure_bluet|(?:red|orange|white|pink)_tulip|oxeye_daisy|cornflower|lily_of_the_valley|sunflower|lilac|rose_bush|peony)$/;
 const hash=b=>createHash('sha256').update(b).digest('hex');
+export const isPublishedTerrain = name => NATURAL.test(name);
 // Additional natural terrain identified in the saved world at the four finish
 // sites. Technical blocks and block-entity buffers retain the same protection.
 const finishTerrain=new Set([

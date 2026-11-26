@@ -41,6 +41,7 @@ function supply(group,now,failed) {
 }
 export function renderWatercity(data,{now=Date.now(),failed=false}={}) {
  return data.groups.map(g=>{
+  if(g.id==='P02'&&data.p02?.length)return `<section class="project-section"><h2>P02 · Wasserstadt West</h2><p>Letzte Rückmeldung des Homebox-Installers</p><ul>${data.p02.map(p=>`<li><strong>${esc(p.slot)} · ${p.phase==='build'?'Bau':'Aushub'}</strong> · ${esc(({working:'Baufortschritt gemessen',loaded:'Plan eingelegt',finished:'Abschnitt abgeschlossen','world-complete':'im Weltstand bereits fertig'})[p.stage]??'reserviert')} · ${num(p.placed)} Blöcke · ${esc(stamp(p.at))}</li>`).join('')}</ul></section>`;
   if(!g.commissioned)return `<section class="project-note wc-inactive"><h2>${esc(g.id)} · Nicht in Betrieb</h2><p>Kein in Betrieb genommener Computer, keine Wasserstadt-Bauzuweisung. Aktueller Hardware-/Kopplungszustand hier nicht live gemessen; siehe Aufstellung.</p></section>`;
   const rows=data.slots.filter(s=>s.site===g.id);
   return `<section class="project-section wc-group"><div class="wc-group-head"><h2>${esc(g.id)} <span>Computer #${g.computerId}</span></h2><p>Truhe ${esc(g.chest.join(' / '))} · lokal ${esc(g.chestSide)} / Bridge ${esc(g.bridgeSide)}</p></div>
