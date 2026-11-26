@@ -398,3 +398,8 @@ def release_unstarted(bridge,b,previous,block,read):
             return current
         time.sleep(.07)
     raise ValueError('Kanone hat den ungestarteten Plan noch nicht freigegeben.')
+
+
+# Optional observation only; no new dispatch or material permissions.
+from campus_watercity import with_watercity as _with_watercity
+handle = _with_watercity(handle)
