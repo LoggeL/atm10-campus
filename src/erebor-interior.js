@@ -3,6 +3,7 @@ import {Region} from './region.js';
 import {chunkBlockReader} from './terrain.js';
 import {parseStructure} from './nbt.js';
 import {saplingSoil} from './erebor-saplings.js';
+import {isPublishedTerrain} from './erebor-export.js';
 
 export const interiorGroup=id=>/^(?:E(?:0[5-9]|1[0-46-9]|21[AB]|3[0-9])|S[1-4])$/.test(id);
 // Each architecture file occupies one aligned 32³ tile. Excavations on other
@@ -56,7 +57,7 @@ export function insideMassif(plan,origin,size){
  return true;
 }
 const air=name=>['minecraft:air','minecraft:cave_air','minecraft:void_air'].includes(name);
-export function interiorWorldCheck(world,{bytes,anchor,kind,completed=false,minimumSave=0,outdoor=false,details=false,resumeSurface=false}){
+export function interiorWorldCheck(world,{bytes,anchor,kind,completed=false,minimumSave=0,outdoor=false,details=false,resumeSurface=false,watercity=false}){
  const rejected=reason=>details?reason:false;
  const plan=parseStructure(bytes,completed);
  if(plan.entities||plan.blockEntities||!['build','clear','surface'].includes(kind))return false;
@@ -98,7 +99,7 @@ export function interiorWorldCheck(world,{bytes,anchor,kind,completed=false,mini
    if(!matches&&!dirtAndGrass&&!air(name))return rejected([x,y,z].join(' / ')+': '+name+' vorhanden, '+pt.name+' geplant');
    if(sapling&&!grown&&!saplingSoil(planned.get(index(pt)-sx*sz)??at(x,y-1,z).Name))return rejected('Pflanzboden fehlt bei '+[x,y,z].join(' / '));
    if(!pt.name.endsWith('_leaves')&&!planned.has(index(pt)-sx*sz)&&air(at(x,y-1,z).Name))return rejected('Untergrund fehlt bei '+[x,y,z].join(' / '));
-  }else if(!matches&&!air(name)&&name!=='minecraft:stone'&&!(outdoor&&/^minecraft:(?:dirt|grass_block|gravel|sand|andesite|diorite|granite|tuff|deepslate)$/.test(name)))return false;
+  }else if(!matches&&!air(name)&&name!=='minecraft:stone'&&!(watercity&&isPublishedTerrain(name))&&!(outdoor&&/^minecraft:(?:dirt|grass_block|gravel|sand|andesite|diorite|granite|tuff|deepslate)$/.test(name)))return rejected([x,y,z].join(' / ')+' · '+name);
  }
  return true;
 }

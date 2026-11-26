@@ -71,5 +71,7 @@ export function watercityData(db,report,now=Date.now()) {
   const assigned=slots.filter(s=>s.site===group.id&&s.assignment),batches=new Set(assigned.map(s=>parse(rows.find(r=>r.id===s.assignment.id)?.job)?.watercity?.batch));
   return {...group,supply:group.commissioned&&assigned.length===3&&batches.size===1?supplyView(report,group,[...batches][0],now):null};
  });
- return {version,at:now,automaticNextJob:false,readOnly:true,slots,groups};
+ const p02=exists?db.prepare("SELECT name,job FROM erebor_selections WHERE version=? AND json_extract(job,'$.p02.slot') IN ('P02A','P02B','P02C') ORDER BY id").all(version)
+   .map(row=>{const j=parse(row.job);return {...j.p02,phase:j.phase,name:row.name};}):[];
+ return {version,at:now,automaticNextJob:false,readOnly:true,slots,groups,p02};
 }

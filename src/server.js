@@ -28,6 +28,7 @@ import { registerTerrainRoutes } from './api-terrain.js';
 import { registerProjectStoneRoutes } from './api-project-stone.js';
 import { registerEreborArchitectureRoutes } from './api-erebor-architecture.js';
 import {watercityData} from './watercity.js';
+import {registerP02} from './watercity-p02.js';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const page = name => readFileSync(join(root, 'public', name), 'utf8');
@@ -78,6 +79,7 @@ export async function buildServer(config = defaultConfig) {
   workspacePage('/projects','projects.html','projects');
   workspacePage('/erebor/aufstellung','erebor-placement.html','placement');
   workspacePage('/erebor/wasserstadt','projects.html','watercity');
+  registerP02(app,campus);
   app.get('/api/projects/erebor/wasserstadt', async (req, reply) => {
     requireActor(req,'session');
     reply.header('Cache-Control','private, no-store');
