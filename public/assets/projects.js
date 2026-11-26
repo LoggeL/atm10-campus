@@ -6,12 +6,18 @@ import { renderExistingProject } from './project-existing.js?v=20261125-overhaul
 import { coordinateFields } from './placement.js?v=20261125-overhaul-1';
 import { landscapeView } from './erebor-landscape.js?v=20261125-overhaul-1';
 
+import {projectHero, projectNav, projectSection as section} from './project-shell.js?v=20261125-overhaul-1';
+import {projectEntries, areaFromUrl, projectMapData, PROJECT_AREAS} from './project-areas.js?v=20261125-overhaul-1';
+import {areaLinks,projectMapBody} from './project-map-view.js?v=20261125-overhaul-1';
+import {areaHome} from './project-area-view.js?v=20261125-overhaul-1';
+import {mountWatercity} from './watercity.js?v=20261125-overhaul-1&revision=20261126-area-1';
+
 const $ = (s) => document.querySelector(s);
 const list = (items) => `<ul>${(items || []).map((t) => `<li>${esc(t)}</li>`).join('')}</ul>`;
-const section = (id, title, body, card = false) =>
-  `<section id="${id}" class="project-section${card ? ' project-section-card' : ''}"><h2>${title}</h2>${body}</section>`;
 
 let current = null;
+let activeArea = null, watercity = null, stopWatercity = null;
+const mapData = () => projectMapData(current, activeArea, watercity?.slots || [], mapScope);
 let selected = null;
 let floor = '0';
 let zoom = 1;
@@ -80,14 +86,13 @@ function map() {
   const p = current.plan;
   const all = floor === 'all';
   const y = Number(floor) + (placed() ? p.worldOrigin[1] : 0);
-  const visible = p.zones.filter((z) => {
+  const {zones,stations,boxes}=mapData();
+  if(!boxes.length){$('#mapDrawing').textContent='Bereichsgeometrie unbekannt.';return;}
+  const visible = zones.filter((z) => {
     const b = boundsOf(z);
     return all || (b[0][1] <= y && b[1][1] > y);
   });
-  const stations = placed() ? p.cannonLayout?.stations || [] : [];
-  const boxes = stations.length && mapScope === 'mountain' ? [p.envelope.worldBounds] : p.zones.map(boundsOf);
-  if (placed()) boxes.push(p.envelope.worldBounds);
-  for (const s of stations) boxes.push([s.position, s.position]);
+
   const minX = Math.min(...boxes.map((b) => b[0][0])) - 100;
   const maxX = Math.max(...boxes.map((b) => b[1][0])) + 100;
   const minZ = Math.min(...boxes.map((b) => b[0][2])) - 120;
@@ -97,13 +102,13 @@ function map() {
     (all
       ? 'Gesamtlage mit überlagerten Raumvolumen.'
       : `Laufhöhe Y${y}; gestrichelt = offener Raum ohne Boden auf dieser Ebene.`);
-  const terrain = (placed() ? p.site?.terrainSamples : []) || [];
+  const terrain = ((placed() ? p.site?.terrainSamples : []) || []).filter(([x,z])=>x>=minX&&x<=maxX&&z>=minZ&&z<=maxZ);
   const [gx, , gz] = p.worldOrigin || [0, 0, 0];
-  $('#mapDrawing').innerHTML = `<svg role="group" aria-label="Erebor Standortplan mit Kanonen, Norden oben" viewBox="${minX} ${minZ} ${maxX - minX} ${maxZ - minZ}" style="width:${zoom * 100}%">
+  $('#mapDrawing').innerHTML = `<svg role="group" aria-label="${esc(activeArea?.title || p.title)} Standortplan, Norden oben" viewBox="${minX} ${minZ} ${maxX - minX} ${maxZ - minZ}" style="width:${zoom * 100}%">
    <defs><pattern id="grid" width="64" height="64" patternUnits="userSpaceOnUse"><path d="M64 0H0V64" fill="none" stroke="#293b33" stroke-width="1"/></pattern></defs>
    <rect x="${minX}" y="${minZ}" width="${maxX - minX}" height="${maxZ - minZ}" fill="url(#grid)"/>
    ${terrain.map(([x, z, h, w]) => `<rect x="${x - 16}" y="${z - 16}" width="32" height="32" fill="${w ? '#2b6b8c' : `hsl(140 16% ${Math.max(16, Math.min(58, h / 3))}%)`}" opacity=".48"/>`).join('')}
-   ${placed() ? `<ellipse cx="${p.mountainFill?.peak?.[0] ?? gx}" cy="${p.mountainFill?.peak?.[2] ?? gz}" rx="${(p.envelope.worldBounds[1][0] - p.envelope.worldBounds[0][0]) / 2}" ry="${(p.envelope.worldBounds[1][2] - p.envelope.worldBounds[0][2]) / 2}" fill="#f2be6b12" stroke="#f2be6b" stroke-width="5" stroke-dasharray="15 12"/>` : ''}
+   ${placed() && !activeArea ? `<ellipse cx="${p.mountainFill?.peak?.[0] ?? gx}" cy="${p.mountainFill?.peak?.[2] ?? gz}" rx="${(p.envelope.worldBounds[1][0] - p.envelope.worldBounds[0][0]) / 2}" ry="${(p.envelope.worldBounds[1][2] - p.envelope.worldBounds[0][2]) / 2}" fill="#f2be6b12" stroke="#f2be6b" stroke-width="5" stroke-dasharray="15 12"/>` : ''}
    ${visible
      .map((z) => {
        const [a, b] = boundsOf(z);
@@ -112,11 +117,11 @@ function map() {
        return `<g class="map-room ${z.id === selected ? 'selected' : ''}" data-room="${esc(z.id)}" tabindex="0" role="button" aria-label="${esc(z.id + ' ' + z.title)}"><title>${esc(z.id + ' · ' + z.title + ' · ' + dimensions(z))}</title>${poly ? `<polygon points="${poly.map((v) => v.join(',')).join(' ')}"` : `<rect x="${a[0]}" y="${a[2]}" width="${b[0] - a[0]}" height="${b[2] - a[2]}"`} class="${walk ? '' : 'map-void'}" fill="${color(z.style)}" fill-opacity="${all ? 0.3 : walk ? 0.55 : 0.1}" stroke="${color(z.style)}" stroke-width="${placed() ? 3 : 1.4}"/><text x="${(a[0] + b[0]) / 2}" y="${(a[2] + b[2]) / 2 + 6}" text-anchor="middle" style="font-size:${placed() ? 22 : 14}px">${esc(z.id)}</text></g>`;
      })
      .join('')}
-   ${(placed() ? p.site?.protectedAreas : [])?.map((q) => {
+   ${(placed() ? p.site?.protectedAreas : [])?.filter(q=>q.bounds[0][0]<maxX&&q.bounds[1][0]>minX&&q.bounds[0][2]<maxZ&&q.bounds[1][2]>minZ).map((q) => {
      const [a, b] = q.bounds;
      return `<rect x="${a[0]}" y="${a[2]}" width="${b[0] - a[0]}" height="${b[2] - a[2]}" fill="none" stroke="#f08c84" stroke-width="4" stroke-dasharray="10 6"><title>${esc(q.title)}</title></rect>`;
    }).join('') || ''}
-   <g class="map-axis" style="font-size:${placed() ? 30 : 14}px"><text x="${minX + 16}" y="${minZ + 42}">N ↑ / −Z · Ost → +X</text><circle cx="${gx}" cy="${gz}" r="${placed() ? 12 : 3}" fill="#f2be6b"/><text x="${gx + 18}" y="${gz - 24}">Tor ${placed() ? p.worldOrigin.join(' / ') : '(0, 0, 0)'}</text><path d="M${minX + 20} ${maxZ - 24}h128" stroke="#8ea397" stroke-width="5"/><text x="${minX + 20}" y="${maxZ - 40}">128 Blöcke</text></g>
+   <g class="map-axis" style="font-size:${placed() ? 30 : 14}px"><text x="${minX + 16}" y="${minZ + 42}">N ↑ / −Z · Ost → +X</text>${!activeArea?`<circle cx="${gx}" cy="${gz}" r="${placed()?12:3}" fill="#f2be6b"/><text x="${gx+18}" y="${gz-24}">Tor ${placed()?p.worldOrigin.join(' / '):'(0, 0, 0)'}</text>`:''}<path d="M${minX + 20} ${maxZ - 24}h128" stroke="#8ea397" stroke-width="5"/><text x="${minX + 20}" y="${maxZ - 40}">128 Blöcke</text></g>
    ${
      showCannons
        ? stations
@@ -127,7 +132,8 @@ function map() {
            })
            .join('')
        : ''
-   }</svg>`;
+   }
+   ${activeArea?(watercity?.slots||[]).map(s=>`<a href="#slot-${esc(s.key)}" aria-label="${esc(s.key)} · Statuskarte"><circle cx="${s.position[0]}" cy="${s.position[2]}" r="5" fill="#7ee0a8"><title>${esc(s.key)} · Y ${s.position[1]}</title></circle></a>`).join('')+(watercity?.groups||[]).filter(g=>g.commissioned).map(g=>`<a href="#slot-${esc(g.id)}A"><text x="${g.computer[0]}" y="${g.computer[2]-18}" text-anchor="middle" style="font-size:18px;fill:#7ee0a8">${esc(g.id)} · Y ${g.computer[1]}</text></a>`).join(''):''}</svg>`;
   for (const node of document.querySelectorAll('[data-room]')) {
     const select = () => {
       selectedCannon = null;
@@ -161,7 +167,7 @@ function map() {
 }
 
 function details() {
-  const s = current.plan.cannonLayout?.stations.find((st) => st.id === selectedCannon);
+  const s = mapData().stations.find((st) => st.id === selectedCannon);
   if (s) {
     $('#roomInfo').innerHTML = `<p class="c-eyebrow">Geplanter Kanonenstandort</p><h3>${esc(s.id)}${s.id === current.plan.cannonLayout.nearEntrance ? ' · Start nahe dem Tor' : ''}</h3>${coordinateFields({ origin: s.position })}<p><strong>Y ${s.position[1]} ist der Kanonenblock.</strong><br>Fundament darunter: Y ${s.position[1] - 1}.</p><p class="project-note">${esc(s.setup)}</p><p>${Number(s.assigned).toLocaleString('de-DE')} zugeordnete Steinabschnitte.</p><p class="muted">Bauplatzaufnahme vom ${esc(new Date(s.survey?.capturedAt).toLocaleString('de-DE', { timeZone: 'Europe/Berlin' }))} (Berlin). Geplanter Standort, keine bestätigte Kanone im Spiel.</p><div class="row"><button id="copyCannon" type="button" class="c-btn c-btn--sm">X / Y / Z kopieren</button><a class="c-btn c-btn--ghost c-btn--sm" href="#cannon-sites">Standortliste</a></div><p id="cannonCopyStatus" class="muted" role="status"></p>`;
     const copy = async (text) => {
@@ -178,7 +184,7 @@ function details() {
     }
     return;
   }
-  const z = current.plan.zones.find((zone) => zone.id === selected);
+  const z = mapData().zones.find((zone) => zone.id === selected);
   if (!z) return;
   const b = boundsOf(z);
   $('#roomInfo').innerHTML = `<p class="c-eyebrow">${esc(z.id)} · ${placed() ? 'Weltbereich' : 'Planungsvolumen'}</p><h3>${esc(z.title)}</h3><p><strong>${dimensions(z)} Blöcke</strong> <span class="muted">(lokale Breite × Länge × Höhe)</span></p><p class="c-mono">X ${b[0][0]} … ${b[1][0] - 1}<br>Z ${b[0][2]} … ${b[1][2] - 1}<br>Block-Y ${b[0][1]} … ${b[1][1] - 1}</p><p>Laufhöhen: <strong>${esc(floorsOf(z).join(' / '))}</strong></p>${list(z.features)}${current.id === 'erebor' ? `<p><a class="c-btn c-btn--primary c-btn--sm" href="/viewer?project=erebor&room=${encodeURIComponent(z.id)}">Raum in 3D ansehen &amp; betreten</a></p>` : ''}`;
@@ -305,30 +311,23 @@ function render() {
     ['sources', 'Referenzen'],
   ];
 
-  $('#content').innerHTML = `<header class="project-hero">
-    <div class="project-hero-head">
-      <div class="project-hero-copy">
-        <p class="project-status">Masterplan · ${placed() ? 'Standort festgelegt · Tor nach Osten' : 'Standort offen'} · Version ${current.version}</p>
-        <h1>${esc(p.title)}</h1>
-        <p class="project-hero-summary">${esc(p.summary)}</p>
-      </div>
-      <div class="project-hero-actions">
-        <a class="c-btn c-btn--primary" href="/app?project=erebor#overview">Baupläne · Erebor öffnen</a>
-      </div>
-    </div>
-    <div class="project-metrics">
-      <div class="project-metric"><strong>${(p.envelope.bounds[1][0] - p.envelope.bounds[0][0]).toLocaleString('de-DE')} × ${(p.envelope.bounds[1][2] - p.envelope.bounds[0][2]).toLocaleString('de-DE')}</strong><span>Bergmassiv in Blöcken</span></div>
-      <div class="project-metric"><strong>${(p.envelope.interior || [600, 800]).map((n) => Number(n).toLocaleString('de-DE')).join(' × ')}</strong><span>Reservat der unterirdischen Stadt</span></div>
-      <div class="project-metric"><strong>${p.packages.length} Bauabschnitte</strong><span>mit Reihenfolge und Raumprogramm</span></div>
-      <div class="project-metric"><strong>${placed() ? 'Y−40 bis Y312' : '−128 bis +224'}</strong><span>${placed() ? 'Welt-Blockhöhen des Berges' : 'lokale Blockhöhen'}</span></div>
-    </div>
-  </header>
+  $('#content').innerHTML = `${projectHero({
+    status:`Masterplan · ${placed() ? 'Standort festgelegt · Tor nach Osten' : 'Standort offen'} · Version ${current.version}`,
+    title:p.title, summary:p.summary,
+    actions:'<a class="c-btn c-btn--primary" href="/app?project=erebor#overview">Baupläne · Erebor öffnen</a>'+areaLinks(current),
+    metrics:[
+      [(p.envelope.bounds[1][0]-p.envelope.bounds[0][0]).toLocaleString('de-DE')+' × '+(p.envelope.bounds[1][2]-p.envelope.bounds[0][2]).toLocaleString('de-DE'),'Bergmassiv in Blöcken'],
+      [(p.envelope.interior||[600,800]).map(n=>Number(n).toLocaleString('de-DE')).join(' × '),'Reservat der unterirdischen Stadt'],
+      [p.packages.length+' Bauabschnitte','mit Reihenfolge und Raumprogramm'],
+      [placed()?'Y−40 bis Y312':'−128 bis +224',placed()?'Welt-Blockhöhen des Berges':'lokale Blockhöhen'],
+    ],
+  })}
   ${
     p.site?.relocation
       ? `<aside class="project-note"><strong>${p.site.relocation.status === 'surveying' ? 'Standortwechsel in Vorbereitung' : 'Neuer Standort'} · City1 bleibt erhalten.</strong>${p.site.esgarothShoreAccess ? `<p>Uferzugang Esgaroth: ${p.site.esgarothShoreAccess.join(' / ')} (X / Y / Z).</p>` : ''}<p>${p.site.relocation.status === 'surveying' ? 'Bisherige Torschwelle' : 'Neue Torschwelle'}: ${p.worldOrigin.join(' / ')} (X / Y / Z). Alte Schematics der Versionen ${esc(p.site.relocation.previousVersions || 'vor dem Umzug')} gehören zum bisherigen Standort. Verwende die Koordinaten und Dateien der aktuellen Version.</p>${p.site.exploration?.complete ? '' : '<p>Die neue Fläche ist noch nicht vollständig erkundet. Nicht gespeicherte Chunks zuerst laden und speichern lassen. Architekturpakete werden nur mit vollständig bekannter Zielfläche freigegeben; die 3D-Ansicht zeigt bereits den Entwurf.</p>'}</aside>`
       : ''
   }
-  <nav class="project-nav" aria-label="Projektbereiche">${navItems.map(([id, n]) => `<a href="#${id}">${n}</a>`).join('')}</nav>
+  ${projectNav(navItems)}
   <section id="architectureRelease" class="project-section project-section-card"><h2>Architektur · veröffentlichte Baupläne</h2><p class="muted">Veröffentlichungsstand wird geladen …</p></section>
   <details class="project-disclosure"><summary>Ursprünglicher Masterplan und Umfang</summary><p class="project-note">${esc(p.scope)}</p></details>
   ${
@@ -344,7 +343,7 @@ function render() {
   ${p.mountainFill ? stoneSection() : ''}
   ${current.id === 'erebor' && p.mountainFill ? section('landschaft', 'Außenhaut, Bergwald und Schneegipfel', '<p><a class="c-btn c-btn--sm" href="/app?project=erebor#overview">Landschafts-Schematics öffnen</a></p><div id="landscapeDraft" class="muted">Landschaftsentwurf wird geladen …</div>', true) : ''}
   ${p.cannonLayout ? cannonSitesSection() : ''}
-  ${section('layout', p.cannonLayout ? '01 · Karte, Kanonenstandorte und Grundriss' : '01 · Grundriss und Raumprogramm', `<p>Ein Baufeld anklicken oder unten auswählen. ${placed() ? 'Koordinaten sind Weltwerte. Die Geländeunterlage stammt aus gespeicherten API-Stichproben; Gold = Bergreserve, Koralle = Schutzbereiche.' : 'Alle Maße sind lokal.'} Der Grundriss zeigt reservierte Raumhüllen, keine bereits gesetzten Minecraft-Blöcke.</p><div class="map-tools">${p.cannonLayout ? `<label>Ausschnitt <select id="mapScope" class="c-select"><option value="mountain">Berg und Kanonen</option><option value="all">Gesamtes Projekt</option></select></label><label class="map-check"><input id="showCannons" type="checkbox" checked> Kanonen anzeigen</label>` : ''}<label>Ebene <select id="floor" class="c-select"><option value="all">Gesamtlage · alle Ebenen</option>${p.levels.map((l) => `<option value="${l.y}">Y ${l.y + (placed() ? p.worldOrigin[1] : 0)} · ${esc(l.title)}</option>`).join('')}</select></label><label>Vergrößerung <select id="zoom" class="c-select"><option value="1">100 %</option><option value="1.5">150 %</option><option value="2">200 %</option></select></label></div><p id="mapLabel" class="muted"></p>${p.cannonLayout ? `<p class="cannon-map-help"><strong>${esc(p.cannonLayout.stations[0]?.id)}–${esc(p.cannonLayout.stations.at(-1)?.id)} anklicken: Position und Bauplatz erscheinen daneben.</strong> Der Punkt unter dem Schild ist die genaue X-/Z-Position. Alle Kanonenhöhen sind gleichzeitig sichtbar; Y steht im Detailfeld.</p><div class="legend cannon-legend"><span style="--swatch:var(--sky)">Kanonenstandort</span><span style="--swatch:var(--gold)">Gelände noch unbekannt</span><span style="--swatch:#78b7f5">Arbeitsplatz im Wasser</span><span style="--swatch:var(--gold)">Ausgewählt</span></div>` : ''}<div class="legend">${p.styles.map((s) => `<span style="--swatch:${color(s.id)}">${esc(s.name)}</span>`).join('')}</div><div class="project-map-layout"><div class="map-column"><div class="map-frame" id="mapDrawing"></div><div class="project-room-list">${p.zones.map((z) => `<button type="button" data-zone="${esc(z.id)}" aria-pressed="false" title="${esc(z.title)}">${esc(z.id)} · ${esc(z.title)}</button>`).join('')}</div></div><aside class="map-room-info" id="roomInfo" aria-live="polite"></aside></div>`)}
+  ${section('layout', p.cannonLayout ? '01 · Karte, Kanonenstandorte und Grundriss' : '01 · Grundriss und Raumprogramm', projectMapBody(current))}
   ${section('height', '02 · Höhen und gemeinsame Bauachse', `<p>${esc(p.envelope.note)}</p>${crossSection()}<div class="project-cards">${Object.entries(p.coordinateSystem).map(([k, t]) => `<div class="project-card"><h3>${esc({ origin: 'Nullpunkt', axes: 'Richtung', bounds: 'Maße lesen', floors: 'Boden und Laufhöhe', placement: 'Weltposition und Ausrichtung' }[k] || k)}</h3><p>${esc(t)}</p></div>`).join('')}</div>`)}
   ${p.buildingMods ? section('building-mods', 'Baumods · Formen, Oberflächen und Einrichtung', buildingModsHtml(p.buildingMods)) : ''}
   ${section('palette', '03 · Steingrau, Jade und kräftiges Gold', `<p>Original-Blockbilder aus der lokalen ATM10-Instanz. Connecting-Varianten sind ausdrücklich markiert. Die Anteile beziehen sich auf sichtbare Flächen, nicht auf exakte Materialmengen.</p><div class="project-cards">${p.styles.filter((s) => !['rock', 'circulation', 'technical'].includes(s.id)).map((s) => `<div class="project-card" style="border-top:3px solid ${color(s.id)}"><h3>${esc(s.name)}</h3><p>${esc(s.use)}</p><p class="tag">${esc(s.ratio)}</p><p>${esc(s.rule)}</p></div>`).join('')}</div><div class="palette-grid">${p.palette.map((b) => `<div class="palette-item">${/^[a-z0-9_]+:[a-z0-9_]+$/.test(b.id) ? `<img src="/assets/project-blocks/${b.id.replace(':', '__')}.png" alt="${esc(b.name)}" loading="lazy" width="64" height="64">` : ''}<div><strong>${esc(b.name)}</strong><small class="${b.connecting ? 'connecting' : 'no-connecting'}">${b.connecting ? 'CONNECTING AN' : 'Keine Connecting-Variante'}</small><small>${esc(b.use)}</small></div><code>${esc(b.id)}</code></div>`).join('')}</div>`)}
@@ -354,48 +353,7 @@ function render() {
   ${section('export', '07 · Schematic-Pakete und Baufolge', `<p><a class="c-btn c-btn--primary" href="/app?project=erebor#overview">Erebor-Schematics unter Baupläne öffnen</a></p><div class="project-cards">${Object.entries(p.schematicStrategy).map(([k, v]) => `<div class="project-card"><h3>${esc({ grid: 'Modulgröße', naming: 'Eindeutige Dateinamen', ownership: 'Saubere Nahtstellen', layers: 'Getrennte Baupakete', air: 'Bauen und Aushub', release: 'Veröffentlichung', materials: 'Materialmengen' }[k] || k)}</h3>${Array.isArray(v) ? list(v) : `<p>${esc(v)}</p>`}</div>`).join('')}</div><p class="project-note">${esc(p.validation.notes)}</p>`)}
   ${section('sources', '08 · Referenzen und getroffene Entscheidungen', `${list(p.decisions)}<ul class="source-list">${p.sources.map((s) => `<li><a href="${esc(safeUrl(s.url))}" target="_blank" rel="noopener noreferrer">${esc(s.title)}</a><small>${esc(s.use)}</small></li>`).join('')}</ul><p class="muted">Gespeichert über die Campus-API: ${esc(new Date(current.updatedAt).toLocaleString('de-DE'))}. Planung und bestehende Welt-Baupläne werden getrennt geführt.</p>`)}`;
 
-  $('#floor').value = floor;
-  $('#zoom').value = String(zoom);
-  $('#floor').addEventListener('change', (e) => {
-    floor = e.target.value;
-    map();
-  });
-  $('#zoom').addEventListener('change', (e) => {
-    zoom = Number(e.target.value);
-    map();
-  });
-  if (p.cannonLayout) {
-    $('#mapScope').value = mapScope;
-    $('#showCannons').checked = showCannons;
-    $('#mapScope').onchange = (e) => {
-      mapScope = e.target.value;
-      map();
-    };
-    $('#showCannons').onchange = (e) => {
-      showCannons = e.target.checked;
-      if (!showCannons) selectedCannon = null;
-      map();
-      details();
-    };
-  }
-  for (const b of document.querySelectorAll('[data-cannon-link]')) {
-    b.onclick = () => selectCannon(b.dataset.cannonLink, true);
-  }
-  document.querySelectorAll('[data-zone]').forEach((el) =>
-    el.addEventListener('click', () => {
-      selectedCannon = null;
-      selected = el.dataset.zone;
-      const z = p.zones.find((zone) => zone.id === selected);
-      if (floor !== 'all' && !(z.bounds[0][1] <= Number(floor) && z.bounds[1][1] > Number(floor))) {
-        floor = String(z.floors[0]);
-        $('#floor').value = floor;
-      }
-      map();
-      details();
-    }),
-  );
-  map();
-  details();
+  wireMap();
 
   const landscape = document.getElementById('landscapeDraft');
   if (landscape) {
@@ -456,6 +414,54 @@ function render() {
   });
 }
 
+function wireMap() {
+  const p=current.plan;
+  $('#floor').value = floor;
+  $('#zoom').value = String(zoom);
+  $('#floor').addEventListener('change', (e) => {
+    floor = e.target.value;
+    map();
+  });
+  $('#zoom').addEventListener('change', (e) => {
+    zoom = Number(e.target.value);
+    map();
+  });
+  if (!activeArea && p.cannonLayout) {
+    $('#mapScope').value = mapScope;
+    $('#showCannons').checked = showCannons;
+    $('#mapScope').onchange = (e) => {
+      const area=PROJECT_AREAS.find(a=>a.id===e.target.value&&a.project===current.id);
+      if(area){location.assign(area.href+'#layout');return;}
+      mapScope = e.target.value;
+      map();
+    };
+    $('#showCannons').onchange = (e) => {
+      showCannons = e.target.checked;
+      if (!showCannons) selectedCannon = null;
+      map();
+      details();
+    };
+  }
+  for (const b of document.querySelectorAll('[data-cannon-link]')) {
+    b.onclick = () => selectCannon(b.dataset.cannonLink, true);
+  }
+  document.querySelectorAll('[data-zone]').forEach((el) =>
+    el.addEventListener('click', () => {
+      selectedCannon = null;
+      selected = el.dataset.zone;
+      const z = p.zones.find((zone) => zone.id === selected);
+      if (floor !== 'all' && !(z.bounds[0][1] <= Number(floor) && z.bounds[1][1] > Number(floor))) {
+        floor = String(z.floors[0]);
+        $('#floor').value = floor;
+      }
+      map();
+      details();
+    }),
+  );
+  map();
+  details();
+}
+
 function cannonSitesSection() {
   const layout = current.plan.cannonLayout;
   return section(
@@ -498,9 +504,9 @@ function projectIndexCard(p) {
   const isArchive = Boolean(p.archivedAt);
   const isExisting = p.status === 'existing';
   const badgeClass = isArchive ? 'c-badge--neutral' : isExisting ? 'c-badge--ok' : 'c-badge--warn';
-  const badgeLabel = isArchive ? 'Archiv' : isExisting ? 'Bestehende Anlage' : 'Masterplan';
+  const badgeLabel = isArchive ? 'Archiv' : p.area ? 'Teilbereich · Erebor' : isExisting ? 'Bestehende Anlage' : 'Masterplan';
   const cardClass = !isArchive && !isExisting ? 'project-index-card project-index-card--masterplan' : 'project-index-card';
-  return `<a class="${cardClass}" href="/projects?id=${encodeURIComponent(p.id)}">
+  return `<a class="${cardClass}" href="${esc(p.href || '/projects?id='+encodeURIComponent(p.id))}">
     <div class="project-index-meta">
       <span class="c-badge ${badgeClass}">${badgeLabel}</span>
       <span class="c-mono muted">v${Number(p.version)}</span>
@@ -508,17 +514,19 @@ function projectIndexCard(p) {
     <h2>${esc(p.title)}</h2>
     <p>${esc(p.summary)}</p>
     <div class="project-index-foot">
-      <span>Projekt öffnen</span>
+      <span>${p.area?'Bereich öffnen':'Projekt öffnen'}</span>
       <span aria-hidden="true">&rarr;</span>
     </div>
   </a>`;
 }
 
 async function load() {
+  stopWatercity?.();stopWatercity=null;
+  activeArea=areaFromUrl(new URL(location.href));watercity=null;
   $('#error').textContent = '';
   $('#reload').disabled = true;
   try {
-    const id = new URL(location.href).searchParams.get('id');
+    const id = activeArea?.project || new URL(location.href).searchParams.get('id');
     if (!id) {
       current = null;
       document.title = 'Bauprojekte · ATM10 Campus';
@@ -526,7 +534,7 @@ async function load() {
       $('#projectToolbar').hidden = true;
       setViewerLink('/viewer?project=erebor');
       const all = await api('/api/projects?includeArchived=1');
-      const active = all.filter((p) => !p.archivedAt);
+      const active = projectEntries(all.filter((p) => !p.archivedAt));
       const archive = all.filter((p) => p.archivedAt);
       $('#content').innerHTML = `<div class="c-page-head">
         <div class="c-page-head-main">
@@ -545,7 +553,17 @@ async function load() {
     } else {
       $('#projectToolbar').hidden = false;
       current = await api('/api/projects/' + encodeURIComponent(id));
-      if (current.plan.kind === 'blueprint_collection') {
+      if(activeArea){
+        current={...current,plan:withWorldCoordinates(current.plan)};
+        const [architecture,native]=await Promise.all([api('/api/projects/'+encodeURIComponent(current.id)+'/architecture').catch(()=>null),api('/api/projects/erebor/wasserstadt').catch(()=>null)]);
+        watercity=native;selected=activeArea.zones[0];selectedCannon=null;floor='all';zoom=1;
+        document.title=activeArea.title+' · ATM10 Campus';
+        $('#modelLink')?.remove();
+        $('#content').innerHTML=areaHome({project:current,area:activeArea,architecture,mapHtml:projectMapBody(current,activeArea)});
+        setViewerLink('/viewer?project=erebor&room='+encodeURIComponent(selected));
+        wireMap();wireStickyNav();
+        stopWatercity=mountWatercity({fleet:$('#wc-fleet'),status:$('#wc-status'),initial:watercity});
+      } else if (current.plan.kind === 'blueprint_collection') {
         $('#modelLink')?.remove();
         renderExistingProject($('#content'), current, await api('/api/status'));
         wireStickyNav();
@@ -553,7 +571,7 @@ async function load() {
         render();
       }
     }
-    $('#download').hidden = !current;
+    $('#download').hidden = !current || !!activeArea;
     $('#print').hidden = !current;
     if (location.hash) document.getElementById(location.hash.slice(1))?.scrollIntoView();
   } catch (e) {

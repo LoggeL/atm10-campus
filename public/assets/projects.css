@@ -25,6 +25,22 @@ main.projects-main {
   font-size: var(--text-sm);
 }
 
+/* ---------- Shared telemetry cards (project/area homes) ---------- */
+.project-card progress { display:block; width:100%; height:8px; margin-top:12px; accent-color:var(--accent); }
+.project-card dd, .wc-plan, .wc-supply code { overflow-wrap:anywhere; }
+.project-card dt { margin-top:12px; font-size:var(--text-xs); color:var(--muted); }
+.project-card dd { margin:3px 0 0; font-size:var(--text-sm); }
+.wc-card { scroll-margin-top:130px; }
+.wc-card-head { justify-content:space-between; }
+.project-card .wc-counter { font-size:var(--h2); font-weight:650; }
+.wc-counter span, .wc-time, .wc-coord, .wc-freshness, .wc-group-head span { font-size:var(--text-xs); color:var(--muted); font-weight:400; }
+.wc-warning { color:var(--gold); }
+.wc-card[data-fresh="false"] progress { opacity:.45; }
+.wc-card[data-fresh="true"] .wc-freshness { color:var(--accent); }
+.wc-unknown-bar { height:8px; margin-top:12px; border:1px dashed var(--border-strong); border-radius:3px; }
+.wc-supply { margin-top:12px; }
+.projects-page .map-frame--fit svg { min-width:0; }
+
 /* ---------- Detail toolbar ---------- */
 .project-toolbar {
   display: flex;
@@ -202,6 +218,8 @@ main.projects-main {
 }
 
 .project-hero-actions {
+  max-width: 100%;
+  min-width: 0;
   display: flex;
   align-items: center;
   gap: 10px;

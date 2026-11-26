@@ -11,8 +11,8 @@ function card(row,now,failed) {
  const total=o?.total;
  const denominator=Number.isSafeInteger(total)&&total>0&&Number.isSafeInteger(count)&&count<=total;
  const label=current?'Frisch gemessen':'Zuletzt beobachtet · aktueller Zustand unbekannt';
- return `<article class="wc-card" data-slot="${esc(row.key)}" data-fresh="${current}">
-  <div class="wc-card-head"><h3>${esc(row.key)}</h3><span class="wc-badge">${a?'Belegt':'Unbekannt'}</span></div>
+ return `<article id="slot-${esc(row.key)}" class="project-card wc-card" data-slot="${esc(row.key)}" data-fresh="${current}">
+  <div class="row wc-card-head"><h3>${esc(row.key)}</h3><span class="c-badge c-badge--neutral">${a?'Belegt':'Unbekannt'}</span></div>
   <p class="wc-coord">Kanone ${esc(row.position?.join(' / '))} · Overworld</p>
   ${row.problem?`<p class="wc-warning">${esc(row.problem)}</p>`:''}
   ${expired?'<p class="wc-warning">Freigabe abgelaufen · keine erneuerte Betriebsfreigabe bestätigt.</p>':''}
@@ -41,9 +41,9 @@ function supply(group,now,failed) {
 }
 export function renderWatercity(data,{now=Date.now(),failed=false}={}) {
  return data.groups.map(g=>{
-  if(!g.commissioned)return `<section class="wc-inactive"><h2>${esc(g.id)} · Nicht in Betrieb</h2><p>Kein in Betrieb genommener Computer, keine Wasserstadt-Bauzuweisung. Aktueller Hardware-/Kopplungszustand hier nicht live gemessen; siehe Aufstellung.</p></section>`;
+  if(!g.commissioned)return `<section class="project-note wc-inactive"><h2>${esc(g.id)} · Nicht in Betrieb</h2><p>Kein in Betrieb genommener Computer, keine Wasserstadt-Bauzuweisung. Aktueller Hardware-/Kopplungszustand hier nicht live gemessen; siehe Aufstellung.</p></section>`;
   const rows=data.slots.filter(s=>s.site===g.id);
-  return `<section class="wc-group"><div class="wc-group-head"><h2>${esc(g.id)} <span>Computer #${g.computerId}</span></h2><p>Truhe ${esc(g.chest.join(' / '))} · lokal ${esc(g.chestSide)} / Bridge ${esc(g.bridgeSide)}</p></div>
-   <div class="wc-slots">${rows.map(row=>card(row,now,failed)).join('')}</div>${supply(g,now,failed)}</section>`;
+  return `<section class="project-section wc-group"><div class="wc-group-head"><h2>${esc(g.id)} <span>Computer #${g.computerId}</span></h2><p>Truhe ${esc(g.chest.join(' / '))} · lokal ${esc(g.chestSide)} / Bridge ${esc(g.bridgeSide)}</p></div>
+   <div class="project-cards wc-slots">${rows.map(row=>card(row,now,failed)).join('')}</div>${supply(g,now,failed)}</section>`;
  }).join('')+'<p class="wc-note">Keine automatische Folgeauftrag-Zuteilung. Reservierungen und Betrieb bleiben unverändert.</p>';
 }

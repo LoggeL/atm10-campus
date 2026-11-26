@@ -40,7 +40,8 @@ test('private watercity fleet adopts exactly six retained selections read-only a
   const page=await app.inject({url:'/erebor/wasserstadt',headers});
   assert.equal(page.statusCode,200);
   assert.match(page.body,/href="\/erebor\/wasserstadt"[^>]*aria-current="page"/);
-  assert.match(page.body,/href="\/erebor\/aufstellung"/);
+  assert.match(page.body,/id="projectToolbar"/);
+  assert.match(page.body,/assets\/projects\.js/);
   assert.equal((await app.inject({method:'POST',url:endpoint,headers,payload:{start:true}})).statusCode,404);
  }finally{await app.close();app.campus.db.close();rmSync(dir,{recursive:true,force:true});}
 });

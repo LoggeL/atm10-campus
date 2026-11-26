@@ -2,7 +2,7 @@ import {setupAccountTools} from './campus-account.js?v=20261125-overhaul-1';
 import {fleetEquipment} from './fleet-equipment.js?v=20261125-overhaul-1';
 import {api} from './campus-client.js?v=20261125-overhaul-1';
 import {setupEreborQueue} from './erebor-queue.js?v=20261125-overhaul-1';
-import { createProjectBlueprints } from './project-blueprints.js?v=20261125-overhaul-1';
+import { createProjectBlueprints } from './project-blueprints.js?v=20261125-overhaul-1&revision=20261126-area-1';
 import { createCannonSites } from './cannon-sites.js?v=20261125-overhaul-1';
 import { esc, fmt } from './format.js?v=20261125-overhaul-1';
 import { updateCannonPicker } from './cannon-picker.js?v=20261125-overhaul-1';
@@ -128,6 +128,7 @@ function configureBlueprintProject(){document.getElementById('ereborMode')?.clas
   updateWorkspaceChrome(activeTab);
 }
 $('blueprintProject').addEventListener('change',guard(async()=>{
+  if($('blueprintProject').value==='wasserstadt'){location.assign('/projects?id=erebor&area=wasserstadt');return;}
   if($('blueprintProject').value==='campus'&&campusArchived){location.assign('/projects?id=campus');return;}
   blueprintProject=$('blueprintProject').value==='campus'?'campus':'erebor';
   const url=new URL(location.href);url.searchParams.set('project',blueprintProject);history.replaceState(null,'',url);
