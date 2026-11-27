@@ -10,7 +10,9 @@ const dungeonEntity=/^(lootr:lootr_(?:chest|barrel|trapped_chest)|minecraft:mob_
 const dungeonFittings=/^minecraft:(?:bed|skull|campfire)$/;
 const cavities=new Set(['minecraft:air','minecraft:cave_air','minecraft:void_air','minecraft:water']);
 const technical=/(?:^ae2:|^appflux:|^fluxnetworks:|^advancedperipherals:|^computercraft:|^laserio:|^pipez:|(?:^|[:_])(?:cable|pipe|conduit|tunnel|transporter|transmitter|controller|waystone|connector)(?:_|$))/;
-const immutable=new Set(['minecraft:bedrock','minecraft:end_portal','minecraft:end_portal_frame','minecraft:barrier']);
+// Preserve protected modded blocks that cannot be replaced by the native cannon.
+const immutable=new Set(['minecraft:bedrock','minecraft:end_portal','minecraft:end_portal_frame','minecraft:barrier',
+ 'cataclysm:dungeon_block','allthemodium:allthemodium_slate_ore']);
 const dungeon=(x,z)=>Math.abs(x-149)<=44&&Math.abs(z+9387)<=45;
 const pad=n=>String(n).padStart(2,'0');
 const inBox=(x,y,z,[a,b])=>x>=a[0]&&x<b[0]&&y>=a[1]&&y<b[1]&&z>=a[2]&&z<b[2];
