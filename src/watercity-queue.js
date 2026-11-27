@@ -5,6 +5,8 @@ import {inRange} from './erebor-interior.js';
 import {DESIGN_REVISION} from './erebor-design.js';
 import {terrain,P02} from './watercity-p02.js';
 import {WATER_GROUPS} from './watercity.js';
+import {Worker} from 'node:worker_threads';
+import {ereborUploadName} from './erebor-file.js';
 
 export const positions=Object.fromEntries([
   ...WATER_GROUPS.filter(g=>g.positions).flatMap(g=>Object.entries(g.positions).map(([s,p])=>[g.id+s,p])),
@@ -60,7 +62,7 @@ export function registerWaterQueue(app,campus,check=terrain){
   function materialize(row,f){
     const {job}=desc(f);
     if(row&&row.sha!==f.sha256)fail('Veröffentlichter Plan hat sich geändert.');
-    return {id:row?.id??null,part:f.part,job,adopted:!!(row&&(doc(row).watercity||doc(row).p02))};
+    return {id:row?.id??null,part:f.part,job,adopted:!!(row&&(doc(row).watercity||doc(row).p02||doc(row).adopted))};
   }
   function usage(){
     const used=new Map(records().map(r=>[r.name,r.status]));
@@ -93,6 +95,20 @@ export function registerWaterQueue(app,campus,check=terrain){
         return materialize(existing,f);
       }
       const used=usage(), options=[];
+      if(b.input){
+        const f=[...idx.byName.values()].find(f=>ereborUploadName(f.fileName,f.sha256)===b.input.file);
+        if(!f||!inRange(f.origin,f.size,positions[slot])||f.sha256!==b.input.sha||String(f.origin)!==String(b.input.anchor)||
+            used.has(f.id))fail('Eingelegter Plan ist unbekannt, bereits verbucht oder anderweitig vergeben.');
+        if(b.dryRun)return {...materialize(null,f),adopted:true};
+        if(b.expect!==f.id)fail('Eingelegter Plan geändert.');
+        return tx(db,()=>{
+          if(ownership(slot)||usage().has(f.id))fail('Eingelegter Plan inzwischen vergeben.');
+          const {job}=desc(f);
+          const id=Number(db.prepare("INSERT INTO erebor_selections(version,site,name,sha,job,status) VALUES(?,?,?,?,?,'loaded')").run(version,'WC-'+slot,f.id,f.sha256,JSON.stringify({...job,adopted:true})).lastInsertRowid);
+          db.prepare('INSERT INTO watercity_dispatch(id,slot) VALUES(?,?)').run(id,slot);
+          return {id,part:f.part,job,adopted:true};
+        });
+      }
       for(const tile of idx.tiles.values()){
         const f=candidate(tile,used);
         if(!f||!inRange(f.origin,f.size,positions[slot])||(skipped.get(f.id)??0)>Date.now())continue;
@@ -148,4 +164,18 @@ export function registerWaterQueue(app,campus,check=terrain){
   const report=()=>db.prepare(`SELECT w.slot,w.id,w.closed,w.at,w.state,w.detail,w.placed,w.total,s.name FROM watercity_dispatch w JOIN erebor_selections s ON s.id=w.id ORDER BY w.id DESC`).all();
   campus.waterQueueReport=report;
   app.get(base,async(req,reply)=>{requireActor(req,'read');return reply.header('Cache-Control','no-store').send({version,at:Date.now(),rows:report()});});
+  let saved;
+  app.get(base+'/weltstand',async(req,reply)=>{
+    requireActor(req,'read');
+    if(!saved||Date.now()-saved.at>15000){
+      const promise=new Promise((resolve,reject)=>{
+        const w=new Worker(new URL('./watercity-saved-worker.js',import.meta.url),{workerData:{world,positions}});
+        const timer=setTimeout(()=>{void w.terminate();reject(new HttpError(503,'Zeitlimit beim Lesen der Welt.'));},20000);
+        w.once('error',e=>{clearTimeout(timer);reject(e);});
+        w.once('message',rows=>{clearTimeout(timer);resolve({at:Date.now(),source:'saved-chunks',rows});});
+      });
+      saved={at:Date.now(),promise};
+    }
+    return reply.header('Cache-Control','no-store').send(await saved.promise);
+  });
 }

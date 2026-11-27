@@ -58,5 +58,5 @@ export function renderWatercity(data,{now=Date.now(),failed=false}={}) {
   const rows=data.slots.filter(s=>s.site===g.id);
   return `<section class="project-section wc-group"><div class="wc-group-head"><h2>${esc(g.id)} <span>Computer #${g.computerId}</span></h2><p>Truhe ${esc(g.chest.join(' / '))} · lokal ${esc(g.chestSide)} / Bridge ${esc(g.bridgeSide)}</p></div>
    <div class="project-cards wc-slots">${rows.map(row=>card(row,now,failed)).join('')}</div>${supply(g,now,failed)}</section>`;
- }).join('')+'<p class="wc-note">Keine automatische Folgeauftrag-Zuteilung. Reservierungen und Betrieb bleiben unverändert.</p>';
+ }).join('')+(Array.isArray(data.betrieb)?'<p class="wc-note">Der Dauerbetrieb wartet auf die erste Meldung von der Homebox. <a href="/assets/wasserstadt-dauerbetrieb.pyz">Installer für P01–P03 herunterladen</a></p>':'<p class="wc-note">Keine automatische Folgeauftrag-Zuteilung.</p>');
 }

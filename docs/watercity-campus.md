@@ -1,4 +1,20 @@
-# Wasserstadt: retained-assignment fleet view
+# Wasserstadt
+
+The continuous dispatcher for P01–P03 uses E25 and E26 tiles and runs on the
+Minecraft Homebox. As the Docker-enabled user who runs the existing controller:
+
+```sh
+curl -fSsL https://campus.logge.top/assets/wasserstadt-dauerbetrieb.pyz -o "$HOME/wasserstadt-dauerbetrieb.pyz" &&
+python3 "$HOME/wasserstadt-dauerbetrieb.pyz" --install
+```
+
+The installer prompts for the Campus write token if one has not been supplied.
+The service is `campus-wasserstadt.service` under `systemctl --user`.
+The Campus fleet page shows the latest receipt for each slot. Authenticated
+`GET /api/projects/erebor/wasserstadt/betrieb` includes assignment history.
+The separate `/weltstand` endpoint reads native counters with per-chunk save times.
+
+## Legacy fleet view
 
 The login-protected **Wasserstadt** main-menu item opens `/erebor/wasserstadt`.
 Its session-only, no-store GET is `/api/projects/erebor/wasserstadt`.

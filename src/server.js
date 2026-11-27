@@ -88,7 +88,8 @@ export async function buildServer(config = defaultConfig) {
     const version=db.prepare("SELECT current_version FROM build_projects WHERE id='erebor'").get()?.current_version;
     let report=null;
     if(version)try{report=(await campus.ereborLiveReport?.(version))?.watercity??null;}catch{/* Last native snapshot stays explicitly historical. */}
-    return {...watercityData(db,report),betrieb:campus.waterQueueReport()};
+    const betrieb=campus.waterQueueReport();
+    return {...watercityData(db,report),betrieb,automaticNextJob:betrieb.some(r=>r.at&&Date.now()-r.at<90000)};
   });
   workspacePage('/atm-star', 'atm-star.html', 'atm-star');
   app.get('/api/atm-star', async (req, reply) => {

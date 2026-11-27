@@ -146,13 +146,17 @@ def service_slot(token,slot,bridge,tickets,rec,rows):
     binding=dict(zip(("x","y","z"),pos),dimension="minecraft:overworld",owner="Erebor")
     o=bridge.inspect(binding)
     if slot not in rows:
-        preview=api(token,slot,"plan",dryRun=True)
+        native={}
+        if o["inputEmpty"] is False and o["fileHash"]:
+            comp=o["components"]
+            native={"input":{"file":comp.get("create:schematic_file"),"anchor":comp.get("create:schematic_anchor"),"sha":o["fileHash"]}}
+        preview=api(token,slot,"plan",dryRun=True,**native)
         if not preview.get("job"): return
         checked(preview,slot)
         if not o["inputEmpty"] and o["fileHash"]!=preview["job"]["desired"]["sha256"]:
             raise ValueError("Anderer Plan im Eingang von "+slot)
         name=preview["job"]["desired"]["blueprint"]
-        rows[slot]=checked(api(token,slot,"plan",dryRun=False,expect=name),slot)
+        rows[slot]=checked(api(token,slot,"plan",dryRun=False,expect=name,**native),slot)
     row=rows[slot];job=row["job"];d=dict(job["desired"]);opt=d.pop("options")
     x,y,z=d["anchor"]
     tickets.set(slot,[(a,y,b) for a in (x,x+31) for b in (z,z+31)])
