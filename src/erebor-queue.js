@@ -25,7 +25,7 @@ import {DESIGN_REVISION} from './erebor-design.js';
 import {requireActor,HttpError} from './auth.js';
 import {logActivity,tx} from './db.js';
 import {hallPackage,hallParents} from './erebor-hall-split.js';
-import {replacementFor,replacementParents,gateSnowEligible} from './erebor-dispatch-repair.js';
+import {replacementFor,replacementParents,gateTerrainEligible} from './erebor-dispatch-repair.js';
 
 const layout=JSON.parse(readFileSync(new URL('./erebor-fleet/stations.json',import.meta.url)));
 const sites=layout.sites.map(s=>s.site);
@@ -150,7 +150,7 @@ export function registerEreborQueue(app,campus){
    if(locked){explain('Massivspalte wartet auf Freigabe',e.name,locked);continue;}
    if(++worldChecks>3)break;
    const pkg=published(p,site,e);
-   const check=await generate(p,{interiorCheck:{bytes:pkg.bytes,anchor:e.origin,kind:e.stage,outdoor:outdoors,gateSnow:gateSnowEligible(v,e),details:true}});
+   const check=await generate(p,{interiorCheck:{bytes:pkg.bytes,anchor:e.origin,kind:e.stage,outdoor:outdoors,gateTerrain:gateTerrainEligible(v,e),details:true}});
    if(check!==true){
     const reason=typeof check==='string'?check:'NBT- oder Weltprüfung nicht bestanden';
     deferredInterior.set(e.name,{until:Date.now()+600000,reason});explain('Weltprüfung',e.name,reason);continue;

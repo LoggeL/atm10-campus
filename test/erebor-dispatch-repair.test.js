@@ -4,7 +4,7 @@ import {createHash} from 'node:crypto';
 import {tileNBT} from '../src/erebor-tiles.js';
 import {parseStructure} from '../src/nbt.js';
 import {storedZipEntry} from '../src/zip.js';
-import {dispatchRepair,gateSnowEligible,replacementParents} from '../src/erebor-dispatch-repair.js';
+import {dispatchRepair,gateTerrainEligible,replacementParents} from '../src/erebor-dispatch-repair.js';
 import {interiorWorldCheck} from '../src/erebor-interior.js';
 import {Region} from '../src/region.js';
 function source(id,cells){
@@ -35,16 +35,19 @@ test('K22 receives all six related E36 files with exactly the published payloads
 });
 test('snow exception is limited to the six published gate files, permits placement only',t=>{
   const entry={group:'E03',stage:'build',name:'EREBOR_E03_BAU_K37_X448_Y64_Z-10048_R5'};
-  assert.ok(gateSnowEligible(12,entry));assert.equal(gateSnowEligible(13,entry),false);
-  assert.equal(gateSnowEligible(12,{...entry,name:entry.name.replace('448','449')}),false);
+  assert.ok(gateTerrainEligible(12,entry));assert.equal(gateTerrainEligible(13,entry),false);
+  assert.equal(gateTerrainEligible(12,{...entry,name:entry.name.replace('448','449')}),false);
   const cells=new Int16Array(32768).fill(-1);cells[0]=1;
   const {bytes}=tileNBT([{name:'minecraft:air'},{name:'minecraft:stone_bricks'}],cells,'build');
   let block='minecraft:snow',entities=[];
   t.mock.method(Region,'open',()=>({chunk:(x,z)=>({xPos:x,zPos:z,Status:'minecraft:full',sections:[{Y:0,block_states:{palette:[{Name:block}]}}],block_entities:entities})}));
   const args={bytes,anchor:[0,0,0],kind:'build',outdoor:true};
   assert.equal(interiorWorldCheck('.',args),false);
-  assert.ok(interiorWorldCheck('.',{...args,gateSnow:true}));
-  block='minecraft:snow_block';assert.ok(interiorWorldCheck('.',{...args,gateSnow:true}));
-  assert.equal(interiorWorldCheck('.',{...args,gateSnow:true,completed:true}),false);
-  entities=[{x:1,y:1,z:1}];assert.equal(interiorWorldCheck('.',{...args,gateSnow:true}),false);
+  assert.ok(interiorWorldCheck('.',{...args,gateTerrain:true}));
+  block='minecraft:snow_block';assert.ok(interiorWorldCheck('.',{...args,gateTerrain:true}));
+  assert.equal(interiorWorldCheck('.',{...args,gateTerrain:true,completed:true}),false);
+  block='minecraft:coal_ore';assert.ok(interiorWorldCheck('.',{...args,gateTerrain:true}));
+  assert.equal(interiorWorldCheck('.',args),false);
+  block='minecraft:chest';assert.equal(interiorWorldCheck('.',{...args,gateTerrain:true}),false);
+  block='minecraft:coal_ore';entities=[{x:1,y:1,z:1}];assert.equal(interiorWorldCheck('.',{...args,gateTerrain:true}),false);
 });

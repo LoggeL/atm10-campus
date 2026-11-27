@@ -57,7 +57,7 @@ export function insideMassif(plan,origin,size){
  return true;
 }
 const air=name=>['minecraft:air','minecraft:cave_air','minecraft:void_air'].includes(name);
-export function interiorWorldCheck(world,{bytes,anchor,kind,completed=false,minimumSave=0,outdoor=false,details=false,resumeSurface=false,watercity=false,gateSnow=false}){
+export function interiorWorldCheck(world,{bytes,anchor,kind,completed=false,minimumSave=0,outdoor=false,details=false,resumeSurface=false,watercity=false,gateTerrain=false}){
  const rejected=reason=>details?reason:false;
  const plan=parseStructure(bytes,completed);
  if(plan.entities||plan.blockEntities||!['build','clear','surface'].includes(kind))return false;
@@ -100,7 +100,7 @@ export function interiorWorldCheck(world,{bytes,anchor,kind,completed=false,mini
    if(sapling&&!grown&&!saplingSoil(planned.get(index(pt)-sx*sz)??at(x,y-1,z).Name))return rejected('Pflanzboden fehlt bei '+[x,y,z].join(' / '));
    if(!pt.name.endsWith('_leaves')&&!planned.has(index(pt)-sx*sz)&&air(at(x,y-1,z).Name))return rejected('Untergrund fehlt bei '+[x,y,z].join(' / '));
   }else if(!matches&&!air(name)&&name!=='minecraft:stone'&&!(watercity&&isPublishedTerrain(name))&&
-    !(gateSnow&&kind==='build'&&outdoor&&['minecraft:snow','minecraft:snow_block'].includes(name))&&
+    !(gateTerrain&&kind==='build'&&outdoor&&['minecraft:snow','minecraft:snow_block','minecraft:coal_ore'].includes(name))&&
     !(outdoor&&/^minecraft:(?:dirt|grass_block|gravel|sand|andesite|diorite|granite|tuff|deepslate)$/.test(name)))return rejected([x,y,z].join(' / ')+' · '+name);
  }
  return true;
