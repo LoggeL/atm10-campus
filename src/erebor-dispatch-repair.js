@@ -12,7 +12,7 @@ const archive = {
 };
 export const replacementParents = id => archive[id] ?? [];
 export const replacementFor = name => Object.keys(archive).find(id=>archive[id].includes(name));
-export function gateSnowEligible(version, entry) {
+export function gateTerrainEligible(version, entry) {
   return version===12 && entry.group==='E03' && entry.stage==='build' &&
     /^EREBOR_E03_BAU_K37_X(?:448|480)_Y(?:64_Z-10048|96_Z-(?:10048|10016))_R5$/.test(entry.name);
 }
