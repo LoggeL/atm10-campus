@@ -12,7 +12,7 @@ export const P02 = [
   ['C',[769,191,-9279],'E25_008',[768,64,-9120]],
 ];
 const reject = message => {throw new HttpError(409,message);};
-function terrain(world,check) {
+export function terrain(world,check) {
   return new Promise((resolve,rejectPromise)=>{
     const w=new Worker(new URL('./erebor-queue-worker.js',import.meta.url),{workerData:{world}});
     const timer=setTimeout(()=>{void w.terminate();rejectPromise(new HttpError(503,'Zeitlimit bei der Geländeprüfung.'));},25000);

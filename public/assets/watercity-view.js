@@ -40,6 +40,18 @@ function supply(group,now,failed) {
   <p>Lieferbudget ist nicht die exakt unverbaute Weltmenge. Gemeinsame ME-Beobachtungen nicht addieren.</p></details>`;
 }
 export function renderWatercity(data,{now=Date.now(),failed=false}={}) {
+ if(data.betrieb?.length){
+  return ['P01','P02','P03'].map(site=>{
+   const cards=['A','B','C'].map(letter=>{
+    const slot=site+letter,history=data.betrieb.filter(r=>r.slot===slot);
+    const row=history.find(r=>!r.closed)??history[0];
+    if(!row)return `<article class="project-card"><h3>${slot}</h3><p>Wartet auf erste Meldung</p></article>`;
+    const fresh=!failed&&Number.isFinite(row.at)&&now>=row.at&&now-row.at<90000;
+    return `<article class="project-card" data-slot="${slot}"><h3>${slot}</h3><p>${fresh?'Stationsmeldung':'Letzte Meldung'} · ${esc(stamp(row.at))}</p><strong>${esc(row.state??'reserviert')} · ${num(row.placed)} gesetzt</strong><p>${esc(row.name)}</p><p>${esc(row.detail)}</p><p>${history.filter(r=>r.closed).length} Abschnitte abgeschlossen</p></article>`;
+   }).join('');
+   return `<section class="project-section"><h2>${site}</h2><div class="project-cards wc-slots">${cards}</div></section>`;
+  }).join('');
+ }
  return data.groups.map(g=>{
   if(g.id==='P02'&&data.p02?.length)return `<section class="project-section"><h2>P02 · Wasserstadt West</h2><p>Letzte Rückmeldung des Homebox-Installers</p><ul>${data.p02.map(p=>`<li><strong>${esc(p.slot)} · ${p.phase==='build'?'Bau':'Aushub'}</strong> · ${esc(({working:'Baufortschritt gemessen',loaded:'Plan eingelegt',finished:'Abschnitt abgeschlossen','world-complete':'im Weltstand bereits fertig'})[p.stage]??'reserviert')} · ${num(p.placed)} Blöcke · ${esc(stamp(p.at))}</li>`).join('')}</ul></section>`;
   if(!g.commissioned)return `<section class="project-note wc-inactive"><h2>${esc(g.id)} · Nicht in Betrieb</h2><p>Kein in Betrieb genommener Computer, keine Wasserstadt-Bauzuweisung. Aktueller Hardware-/Kopplungszustand hier nicht live gemessen; siehe Aufstellung.</p></section>`;

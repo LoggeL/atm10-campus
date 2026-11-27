@@ -29,6 +29,7 @@ import { registerProjectStoneRoutes } from './api-project-stone.js';
 import { registerEreborArchitectureRoutes } from './api-erebor-architecture.js';
 import {watercityData} from './watercity.js';
 import {registerP02} from './watercity-p02.js';
+import {registerWaterQueue} from './watercity-queue.js';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const page = name => readFileSync(join(root, 'public', name), 'utf8');
@@ -80,13 +81,14 @@ export async function buildServer(config = defaultConfig) {
   workspacePage('/erebor/aufstellung','erebor-placement.html','placement');
   workspacePage('/erebor/wasserstadt','projects.html','watercity');
   registerP02(app,campus);
+  registerWaterQueue(app,campus);
   app.get('/api/projects/erebor/wasserstadt', async (req, reply) => {
     requireActor(req,'session');
     reply.header('Cache-Control','private, no-store');
     const version=db.prepare("SELECT current_version FROM build_projects WHERE id='erebor'").get()?.current_version;
     let report=null;
     if(version)try{report=(await campus.ereborLiveReport?.(version))?.watercity??null;}catch{/* Last native snapshot stays explicitly historical. */}
-    return watercityData(db,report);
+    return {...watercityData(db,report),betrieb:campus.waterQueueReport()};
   });
   workspacePage('/atm-star', 'atm-star.html', 'atm-star');
   app.get('/api/atm-star', async (req, reply) => {
