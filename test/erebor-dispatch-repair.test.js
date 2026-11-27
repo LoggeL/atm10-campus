@@ -48,6 +48,9 @@ test('snow exception is limited to the six published gate files, permits placeme
   assert.equal(interiorWorldCheck('.',{...args,gateTerrain:true,completed:true}),false);
   block='minecraft:coal_ore';assert.ok(interiorWorldCheck('.',{...args,gateTerrain:true}));
   assert.equal(interiorWorldCheck('.',args),false);
-  block='minecraft:chest';assert.equal(interiorWorldCheck('.',{...args,gateTerrain:true}),false);
+  for(block of ['minecraft:copper_ore','minecraft:deepslate_iron_ore','minecraft:packed_ice'])
+    assert.equal(interiorWorldCheck('.',{...args,gateTerrain:true}),true);
+  for(block of ['minecraft:chest','minecraft:oak_log','minecraft:water','minecraft:stone_brick_stairs','some_mod:copper_ore'])
+    assert.equal(interiorWorldCheck('.',{...args,gateTerrain:true}),false);
   block='minecraft:coal_ore';entities=[{x:1,y:1,z:1}];assert.equal(interiorWorldCheck('.',{...args,gateTerrain:true}),false);
 });
