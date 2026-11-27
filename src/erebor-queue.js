@@ -25,6 +25,7 @@ import {DESIGN_REVISION} from './erebor-design.js';
 import {requireActor,HttpError} from './auth.js';
 import {logActivity,tx} from './db.js';
 import {hallPackage,hallParents} from './erebor-hall-split.js';
+import {replacementFor,replacementParents,gateSnowEligible} from './erebor-dispatch-repair.js';
 
 const layout=JSON.parse(readFileSync(new URL('./erebor-fleet/stations.json',import.meta.url)));
 const sites=layout.sites.map(s=>s.site);
@@ -105,6 +106,7 @@ export function registerEreborQueue(app,campus){
  const landscape=landscapeQueue(db);
  const helpers=parallelFleet(db,production,choices,request,recordedFinish,resumePaused,verifyStone,massif,{candidate:interiorCandidate,landscape,blockStone:blockedStone});
  const releases=interiorRelease(db),deferredInterior=new Map();
+ const dispatchChecks=new Map();
  const blockedColumnRows=db.prepare('SELECT ix,iz FROM erebor_interior_columns WHERE v=?');
  function blockedStone(p){
   const rows=blockedColumnRows.all(p.current_version);
@@ -116,17 +118,25 @@ export function registerEreborQueue(app,campus){
   if(!config.worldSources.live||!massif.enabled(p.current_version))return null;
   const v=p.current_version,plan=JSON.parse(p.plan_json),base=plan.mountainFill.bounds[0];
   const {open}=production.ordered(p,site),busy=releases.busy(v,base);
+  const diagnostic={at:new Date().toISOString(),slot,open:open.length,reasons:{}};
+  dispatchChecks.set(site+slot,diagnostic);
+  function explain(reason,file,example){
+   const row=diagnostic.reasons[reason]??={count:0,file,example};
+   row.count++;
+  }
   const checks=new Map();let worldChecks=0;
   for(const e of interiorFrontier(open,taken,projectWork||slot==='A',slot)){
-   if(e.finishing&&(!projectWork||open.some(other=>other.group===e.group&&(!other.finishing||e.stage==='build'&&other.stage==='clear'))))continue;
-   if(e.unknownCells!==0||e.clearOmitted!==0||
-      (deferredInterior.get(e.name)||0)>Date.now()||!inRange(e.origin,e.size,position))continue;
+   if(e.finishing&&(!projectWork||open.some(other=>other.group===e.group&&(!other.finishing||e.stage==='build'&&other.stage==='clear')))){explain('Ausbau wartet auf frühere Bauphase',e.name);continue;}
+   if(e.unknownCells!==0||e.clearOmitted!==0){explain('Weltstand unvollständig',e.name);continue;}
+   if(!inRange(e.origin,e.size,position)){explain('Außer Reichweite',e.name);continue;}
+   const defer=deferredInterior.get(e.name);
+   if(defer?.until>Date.now()){explain('Weltprüfung',e.name,defer.reason);continue;}
    const outdoors=!insideMassif(plan,e.origin,e.size);
    if(outdoors){
     if(slot!=='A'&&!projectWork&&!interiorGroup(e.group))continue;
     // Published architecture intentionally includes the bridge/Esgaroth in P-SEE.
     // Keep every other protection and the exact outdoor world check below.
-    if(plan.mountainFill.protectedBoxes.some(({id,bounds:[lo,hi]})=>id!=='P-SEE'&&lo.every((n,i)=>e.origin[i]+e.size[i]>n&&e.origin[i]<hi[i])))continue;
+    if(plan.mountainFill.protectedBoxes.some(({id,bounds:[lo,hi]})=>id!=='P-SEE'&&lo.every((n,i)=>e.origin[i]+e.size[i]>n&&e.origin[i]<hi[i]))){explain('Schutzgebiet',e.name);continue;}
    }
    const cols=interiorColumns(e.origin,e.size,base).filter(([ix,iz])=>{
     if(!outdoors)return true;
@@ -135,21 +145,26 @@ export function registerEreborQueue(app,campus){
      for(let z=z0;z<Math.min(e.origin[2]+e.size[2],base[2]+64*(iz+1));z++){const top=mountainTop(plan,x,z);if(top!=null&&top>=e.origin[1])return true;}
     return false;
    });
-   if(cols.some(k=>busy.has(k.join(','))))continue;
-   if(!cols.every(k=>{const id=k.join(',');if(!checks.has(id))checks.set(id,releases.allows(v,[k]));return checks.get(id);}))continue;
+   if(cols.some(k=>busy.has(k.join(',')))){explain('Steinauftrag in der Spalte',e.name);continue;}
+   const locked=cols.find(k=>{const id=k.join(',');if(!checks.has(id))checks.set(id,releases.allows(v,[k]));return !checks.get(id);});
+   if(locked){explain('Massivspalte wartet auf Freigabe',e.name,locked);continue;}
    if(++worldChecks>3)break;
    const pkg=published(p,site,e);
-   if(!await generate(p,{interiorCheck:{bytes:pkg.bytes,anchor:e.origin,kind:e.stage,outdoor:outdoors}})){
-    deferredInterior.set(e.name,Date.now()+600000);continue;
+   const check=await generate(p,{interiorCheck:{bytes:pkg.bytes,anchor:e.origin,kind:e.stage,outdoor:outdoors,gateSnow:gateSnowEligible(v,e),details:true}});
+   if(check!==true){
+    const reason=typeof check==='string'?check:'NBT- oder Weltprüfung nicht bestanden';
+    deferredInterior.set(e.name,{until:Date.now()+600000,reason});explain('Weltprüfung',e.name,reason);continue;
    }
    const after=releases.busy(v,base);
    if(!current(v)||!massif.enabled(v)||!releases.allows(v,cols)||cols.some(k=>after.has(k.join(','))))return null;
    return {...pkg,entry:e,job:{...pkg.job,interior:true,source:e},release:()=>{
     if(hallParents.includes(e.name)&&hasHallSplit(v))throw Error('Der ursprüngliche Aushub wurde aufgeteilt.');
+    if(isRetired(v,e.name))throw Error('Plan wurde zwischenzeitlich ersetzt.');
     releases.mark(v,cols);
    }};
   }
-  if(projectWork&&liveCache?.surfaceModeTracker===1)return landscape.candidate(p,site,slot,position,async pkg=>generate(p,{interiorCheck:{bytes:pkg.bytes,anchor:pkg.job.desired.anchor,kind:'surface'}}));
+  if(projectWork&&liveCache?.surfaceModeTracker===1)return landscape.candidate(p,site,slot,position,
+   pkg=>generate(p,{interiorCheck:{bytes:pkg.bytes,anchor:pkg.job.desired.anchor,kind:'surface',details:true}}),explain);
   return null;
  }
  campus.ereborHelpers=helpers;
@@ -167,6 +182,18 @@ export function registerEreborQueue(app,campus){
  const project=()=>db.prepare("SELECT current_version,plan_json FROM build_projects WHERE id='erebor'").get();
  const read=site=>JSON.parse(db.prepare('SELECT state FROM erebor_queue_sites WHERE site=?').get(site).state);
  const hasHallSplit=v=>!!db.prepare("SELECT 1 FROM project_architecture_packages WHERE project_id='erebor' AND base_version=? AND revision=? AND package_id=?").get(v,DESIGN_REVISION,hallPackage);
+ function isRetired(v,name){
+  const id=replacementFor(name);
+  return id&&!!db.prepare("SELECT 1 FROM project_architecture_packages WHERE project_id='erebor' AND base_version=? AND revision=? AND package_id=?").get(v,DESIGN_REVISION,id);
+ }
+ campus.checkDispatchRepair=(v,id)=>{
+  const p=project(),names=replacementParents(id),site=id==='E36_903'?'K15':'K10',target=site==='K15'?'K22':site;
+  if(!names.length||p?.current_version!==v||cfg()?.version!==v||cfg()?.phase!=='stone')throw new HttpError(409,'Bauphase oder Version hat sich geändert.');
+  const {open}=production.ordered(p,site),active=new Set([read(site).job?.desired.blueprint,...helpers.reserved(v,site),...choices.waiting(v).map(q=>q.name)]);
+  const entries=names.map(name=>open.find(e=>e.name===name&&!active.has(name)));
+  if(entries.some(e=>!e))throw new HttpError(409,'Ein Original ist vergeben, abgeschlossen oder fehlt.');
+  return {entries,position:parallelLayout.sites.find(s=>s.site===target).main};
+ };
  campus.checkHallSplit=v=>{
   const p=project(),c=cfg();
   if(!p||p.current_version!==v||!c?.enabled||c.version!==v||c.phase!=='stone'||!helpers.isEnabled(v)||!massif.enabled(v))
@@ -201,7 +228,7 @@ export function registerEreborQueue(app,campus){
   const result={clear:{},build:{}};
   const rows=db.prepare("SELECT package_id,report_json FROM project_architecture_packages WHERE project_id='erebor' AND base_version=? AND revision=? AND coalesce(json_extract(report_json,'$.finishing'),0)=0 ORDER BY package_id").all(v,DESIGN_REVISION);
   for(const row of rows)for(const f of JSON.parse(row.report_json).files){
-   if(sites.includes(f.cannon)&&result[f.kind]&&row.package_id!==hallPackage&&!(hallParents.includes(f.id)&&hasHallSplit(v)))(result[f.kind][f.cannon]??=[]).push({pack:row.package_id,fileName:f.fileName,origin:f.origin});
+   if(sites.includes(f.cannon)&&result[f.kind]&&row.package_id!==hallPackage&&!replacementParents(row.package_id).length&&!isRetired(v,f.id)&&!(hallParents.includes(f.id)&&hasHallSplit(v)))(result[f.kind][f.cannon]??=[]).push({pack:row.package_id,fileName:f.fileName,origin:f.origin});
   }
   for(const group of Object.values(result))for(const files of Object.values(group))files.sort((a,b)=>a.origin[1]-b.origin[1]||a.fileName.localeCompare(b.fileName));
   return result;
@@ -760,7 +787,8 @@ export function registerEreborQueue(app,campus){
  }
  function status(report=null,focus=null,ordersOnly=false){
   const c=cfg(),p=project(),v=p?.current_version;
-  const header={enabled:!!c?.enabled,version:c?.version??v,stale:!!c&&c.version!==v,phase:c?(stages[c.phase]||'Fertig'):'Steinfüllung'};
+  const header={enabled:!!c?.enabled,version:c?.version??v,stale:!!c&&c.version!==v,phase:c?(stages[c.phase]||'Fertig'):'Steinfüllung',
+   dispatchChecks:Object.fromEntries([...dispatchChecks].filter(([k])=>k.endsWith('A')||k.slice(0,3)===focus))};
   const waiting=c?choices.waiting(c.version):[];
   const hasSite=sites.includes(focus);
   if(ordersOnly&&!hasSite)throw new HttpError(400,'Unbekannte Station.');
@@ -1049,6 +1077,7 @@ export function registerEreborQueue(app,campus){
   if(req.headers.origin&&req.headers.origin!==config.publicUrl)throw new HttpError(403,'Fremder Origin.');
   if(!p||!sites.includes(b?.site)||b.version!==layout.version||b.version!==p.current_version)throw new HttpError(409,'Kanonenplatz oder Projektversion nicht aktuell.');
   const {job,bytes}=publishedPlan(db,p,b);
+  if(isRetired(b.version,job.desired.blueprint))throw new HttpError(409,'Dieser Originalplan wurde ersetzt.');
   if(b.part===hallPackage||(hallParents.includes(job.desired.blueprint)&&hasHallSplit(b.version)))throw new HttpError(409,'Dieser Aushub ist den fünf Zusatzkanonen zugeordnet.');
   if(job.phase==='stone'&&blockedStone(p)({stage:'stone',origin:job.desired.anchor}))throw new HttpError(409,'Diese Spalte ist bereits an den Innenausbau übergeben.');
   const reserved=helpers.reserved(b.version,b.site);
@@ -1061,6 +1090,7 @@ export function registerEreborQueue(app,campus){
    if(!verifyAlignment(old.desired,observed,old.desired)&&same(observed.components?.['create:schematic_bounds'],job.size))return {status:'loaded',site:b.site};
   }
   const receipt=tx(db,()=>{
+   if(isRetired(b.version,job.desired.blueprint))throw new HttpError(409,'Der Bauplan wurde während der Vorbereitung ersetzt.');
    if(helpers.reserved(b.version,b.site).has(job.desired.blueprint))throw new HttpError(409,'Dieser Abschnitt wurde inzwischen einer Zusatzkanone zugeteilt.');
    const r=choices.add(b.version,b.site,job,bytes,old?.desired.file??null);
    logActivity(db,actor,'erebor.plan.laden',b.site,{file:b.file,version:b.version,id:r.id});return r;
