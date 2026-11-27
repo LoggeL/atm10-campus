@@ -33,13 +33,14 @@ test('solid, cavity, protected and special positions are separate in real stone-
   const blocks=names.map((n,i)=>({x:17+i,y:9,z:20,name:'minecraft:'+n}));
   blocks.push({x:24,y:9,z:20,name:'ae2:fluix_glass_cable'});
   blocks.push({x:27,y:9,z:20,name:'supplementaries:urn'},{x:28,y:9,z:20,name:'supplementaries:urn'});
+  blocks.push({x:18,y:9,z:21,name:'cataclysm:dungeon_block'},{x:19,y:9,z:21,name:'allthemodium:allthemodium_slate_ore'});
   const chunks=[];
   for(let cz=0;cz<=2;cz++)for(let cx=0;cx<=2;cx++)chunks.push({cx,cz,blocks:cx===1&&cz===1?blocks:[],blockEntities:cx===1&&cz===1?[{id:'minecraft:sculk_sensor',x:23,y:9,z:20}]:[]});
   chunks.find(c=>c.cx===1&&c.cz===1).blockEntities.push({id:'supplementaries:urn',x:28,y:9,z:20});
   writeWorld(world,chunks);
   const plan={worldOrigin:[200,20,200],rotationDegrees:90,mountainFill:{algorithm:'erebor-massif-v1',bounds:[[12,8,12],[34,18,34]],peak:[22,17,22],protectedBoxes:[{bounds:[[25,8,20],[26,12,21]]}],roofReserves:[]}};
   const scan=()=>scanMassifColumn(world,plan,0,0,[]);
-  const result=scan();assert.deepEqual(result.missing,[]);assert.equal(result.unbreakable,1);
+  const result=scan();assert.deepEqual(result.missing,[]);assert.equal(result.unbreakable,3);
   const target=new Map();
   for(const row of result.rows){
    const n=parseStructure(row.bytes);assert.equal(n.materials['minecraft:stone'],row.blocks);assert.equal(n.clear.length,0);
@@ -49,6 +50,7 @@ test('solid, cavity, protected and special positions are separate in real stone-
   for(const x of [17,18,19])assert.equal(kind(x),'X00_Z00_H00');
   assert.match(kind(20),/_LUFT$/);assert.match(kind(26),/_LUFT$/);assert.match(kind(23),/_BE$/);
   for(const x of [21,22,24,25])assert.equal(kind(x),undefined);
+  for(const pos of ['18,9,21','19,9,21'])assert.equal(target.has(pos),false);
   for(const x of [27,28])assert.equal(kind(x),'X00_Z00_URN_'+x+'_9_20_BE');
   const resurvey=scanMassifColumn(world,plan,0,0,[],true);
   assert.deepEqual(resurvey.rows.map(r=>r.tile).sort(),[kind(27),kind(28)]);
