@@ -143,7 +143,7 @@ export function landscapeQueue(db){
   if(!changed.changes)throw Error('Landschaftsreservierung passt nicht zur Kanone.');
   const old=db.prepare('SELECT next_sha FROM erebor_surface_legacy WHERE v=? AND r=? AND file=? AND sha=?').get(v,s.r,s.fileName,s.sha256);
   if(old?.next_sha)db.prepare('UPDATE erebor_surface_dispatch SET done=1 WHERE v=? AND r=? AND site=? AND slot=? AND file=? AND sha=?').run(v,s.r,site,slot,s.fileName,old.next_sha);
- },async candidate(p,site,slot,pos,verify){
+ },async candidate(p,site,slot,pos,verify,explain=()=>{}){
   const v=p.current_version,r=revision(v);
   if(r==null)return null;
   const booked=book(db,v,r),columns=new Set();
@@ -154,12 +154,16 @@ export function landscapeQueue(db){
    if(existing?.done)continue;
    if(columns.has(col))continue;
    columns.add(col);
-   if(occupied.has(f.fileName)||!inRange(f.origin,[32,32,32],pos)||(deferred.get(f.fileName+f.sha256)??0)>Date.now())continue;
+   if(occupied.has(f.fileName)||!inRange(f.origin,[32,32,32],pos))continue;
+   const key=f.fileName+f.sha256,cached=deferred.get(key);
+   if(cached?.until>Date.now()){explain('Außenhaut: Weltprüfung',f.fileName,cached.reason);continue;}
    if(++checks>3)break;
    const source={r,part:f.part,fileName:f.fileName,sha256:f.sha256};
    const pkg=restore(v,source);
-   if(!await verify(pkg)){
-    deferred.set(f.fileName+f.sha256,Date.now()+300000);continue;
+   const check=await verify(pkg);
+   if(check!==true){
+    const reason=typeof check==='string'?check:'Ziel oder Untergrund nicht freigegeben';
+    deferred.set(key,{until:Date.now()+300000,reason});explain('Außenhaut: Weltprüfung',f.fileName,reason);continue;
    }
    return {...pkg,entry:source,release(){
     if(revision(v)!==r||!landscapeFiles(db,v,r).some(g=>g.fileName===f.fileName&&g.sha256===f.sha256))throw Error('Landschaftsrevision hat gewechselt.');

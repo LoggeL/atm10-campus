@@ -9,6 +9,7 @@ import {DESIGN_REVISION} from './erebor-design.js';
 import {ereborViewTarget} from './erebor-view-target.js';
 import {sendPackagePreview} from './preview/service.js';
 import {hallPackage,hallParents} from './erebor-hall-split.js';
+import {dispatchRepair,replacementParents} from './erebor-dispatch-repair.js';
 
 export function registerEreborArchitectureRoutes(app,campus,blueprintPreviews){const db=campus.db,previews=new Map(),manifests=new Map();let busy=false;
  db.exec(`CREATE TABLE IF NOT EXISTS project_architecture_packages(project_id TEXT NOT NULL REFERENCES build_projects(id),base_version INTEGER NOT NULL,revision INTEGER NOT NULL,package_id TEXT NOT NULL,sha256 TEXT NOT NULL,zip BLOB NOT NULL,report_json TEXT NOT NULL,saved_at TEXT NOT NULL,user_id INTEGER REFERENCES users(id),PRIMARY KEY(project_id,base_version,revision,package_id))`);
@@ -22,9 +23,19 @@ export function registerEreborArchitectureRoutes(app,campus,blueprintPreviews){c
  app.get('/api/projects/:id/architecture',async(req,reply)=>{const p=project(req),rows=db.prepare('SELECT report_json,saved_at,sha256 FROM project_architecture_packages WHERE project_id=? AND base_version=? AND revision=? ORDER BY package_id').all(p.id,p.version,DESIGN_REVISION);return reply.header('Cache-Control','no-store').send({project:p.id,baseVersion:p.version,revision:DESIGN_REVISION,packages:rows.map(summary)});});
  app.post('/api/projects/:id/architecture/prepare',async req=>{const actor=requireActor(req,'write'),p=project(req),b=req.body;if(!b||b.baseVersion!==p.version)throw new HttpError(409,'Aktuelle baseVersion verwenden.');if(typeof b.dryRun!=='boolean'||!/^([ES]\d{1,2}[AB]?)_\d{3}$/.test(b.package||''))throw new HttpError(400,'dryRun und gültige Paketkennung erforderlich.');const exists=row(p,b.package);
   const split=b.package===hallPackage;
-  const guard=()=>{if(split){requireActor(req,'admin');if(p.version!==12||DESIGN_REVISION!==5)throw new HttpError(409,'Standort oder Entwurf geändert.');}};
+  const parents=replacementParents(b.package);
+  const guard=()=>{if(split||parents.length){if(split||!b.dryRun)requireActor(req,'admin');if(p.version!==12||DESIGN_REVISION!==5)throw new HttpError(409,'Standort oder Entwurf geändert.');}};
   guard();
   const prepare=()=>{
+   if(parents.length){
+    const {entries,position}=campus.checkDispatchRepair(p.version,b.package);
+    const sources=entries.map(e=>{
+     const pkg=row(p,e.part), f=pkg&&JSON.parse(pkg.report_json).files.find(f=>f.id===e.name&&f.sha256===e.sha256);
+     if(!f)throw new HttpError(409,'Originaldatei geändert: '+e.name);
+     return {f,bytes:storedZipEntry(pkg.zip,f.fileName)};
+    });
+    return dispatchRepair(b.package,sources,position);
+   }
    if(!split)return run({project:p,package:b.package,worldDir:campus.config.worldSources.live});
    campus.checkHallSplit(p.version);
    const hallSources=hallParents.map(id=>{
@@ -54,11 +65,15 @@ export function registerEreborArchitectureRoutes(app,campus,blueprintPreviews){c
   }
   return tx(db,()=>{if(project(req).version!==p.version||row(p,b.package)?.sha256!==v.previousSha)throw new HttpError(409,'Projekt oder Paket inzwischen geändert');const at=new Date().toISOString();
    if(split)campus.checkHallSplit(p.version);
+   if(parents.length){
+    const current=campus.checkDispatchRepair(p.version,b.package);
+    if(current.entries.some((e,i)=>e.sha256!==v.report.sourceHashes[i]))throw new HttpError(409,'Originaldatei seit Vorschau geändert.');
+   }
    if(convert){
     if(v.previousSha!==b.previousSha||v.report.clearBlocks||v.report.unknownCells||v.report.protectedCells)throw new HttpError(409,'Stand oder Bauzellen der Hanggruppen prüfen.');
     db.prepare('UPDATE project_architecture_packages SET sha256=?,zip=?,report_json=?,saved_at=?,user_id=? WHERE project_id=? AND base_version=? AND revision=? AND package_id=? AND sha256=?').run(v.sha256,v.bytes,JSON.stringify(v.report),at,actor.user.id,p.id,p.version,DESIGN_REVISION,b.package,b.previousSha);
    }else db.prepare('INSERT INTO project_architecture_packages VALUES(?,?,?,?,?,?,?,?,?)').run(p.id,p.version,DESIGN_REVISION,b.package,v.sha256,v.bytes,JSON.stringify(v.report),at,actor.user.id);
-   logActivity(db,actor,'project.architecture.prepare',p.id,{baseVersion:p.version,revision:DESIGN_REVISION,package:b.package,files:v.report.files.length,blocks:v.report.blocks});previews.delete(b.preview);if(split)campus.hallSplitPublished();return{saved:true,package:summary(row(p,b.package)),worldPlacement:false};});
+   logActivity(db,actor,'project.architecture.prepare',p.id,{baseVersion:p.version,revision:DESIGN_REVISION,package:b.package,files:v.report.files.length,blocks:v.report.blocks});previews.delete(b.preview);if(split||parents.length)campus.hallSplitPublished();return{saved:true,package:summary(row(p,b.package)),worldPlacement:false};});
  });
  const downloadRow=req=>{const p=project(req),revision=Number(req.query.revision),version=Number(req.query.version);if(!Number.isSafeInteger(revision)||!Number.isSafeInteger(version))throw new HttpError(400,'version und revision fehlen');const r=row(p,req.params.package,revision,version);if(!r)throw new HttpError(404,'Architekturpaket nicht veröffentlicht');return r;};
  app.get('/api/projects/:id/architecture/:package/:file/preview.png',async(req,reply)=>{
