@@ -46,7 +46,7 @@ test('a delayed poll accepts only the witnessed finish of the very same input an
  assert.equal(recordedFinish(o,job,r,now,{...witness,signal:{...witness.signal,upload:'other'}}),false);
  assert.equal(recordedFinish({...o,outputCount:2},job,r,now,witness),false);
 });
-test('the Campus action arms the persisted fleet and advances an observed finish exactly once',async()=>{
+test('the Campus action advances the registered fleet despite independently managed selections',async()=>{
  const dir=mkdtempSync(join(tmpdir(),'erebor-queue-')),calls=[];
  const app=await buildServer({dataDir:dir,worldSources:{},snapshotIntervalMin:0,publicUrl:'http://test',bootstrapInvite:'queue-test',cookieSecure:false,
   cannonBridgeRequest:async(action,data)=>{calls.push(action);return {observed:data.site==='K01'?{...stopped,at:Date.now()/1000}:{...stopped,inputEmpty:false}};}});
@@ -61,12 +61,16 @@ test('the Campus action arms the persisted fleet and advances an observed finish
   const post=(action,h=headers)=>app.inject({method:'POST',url,headers:h,payload:{action,version:12}});
   assert.equal((await post('prepare',{...headers,origin:'https://foreign.invalid'})).statusCode,403);
   assert.equal((await post('pause')).statusCode,200);
+  const other=db.prepare("INSERT INTO erebor_selections(version,site,name,sha,job,status) VALUES (12,?,'independent-plan','hash','{}',?)");
+  other.run('WC-P01A','waiting');
+  other.run('WC-P02B','loaded');
   const state={cursor:0,completed:0,exhausted:false,job:{loaded:true,phase:'stone',next:1,seen:Date.now()/1000,baseline:0,size:[1,1,1],desired:{file:'test',sha256:'hash',options}}};
   db.prepare('UPDATE erebor_queue_sites SET state=? WHERE site=?').run(JSON.stringify(state),'K01');
   assert.equal((await post('prepare')).statusCode,200);
   for(let i=0;i<50&&calls.length<37;i++)await new Promise(r=>setTimeout(r,10));
   const status=(await app.inject({url,headers})).json();assert.equal(status.enabled,true);assert.equal(status.stations.length,37);
   assert.equal(status.stations[0].completed,1);assert.equal(status.stations[0].file,null);assert.equal(status.stations[1].status,'Kanone belegt');
+  assert.deepEqual(db.prepare("SELECT status FROM erebor_selections WHERE site LIKE 'WC-%' ORDER BY id").all().map(r=>r.status),['waiting','loaded']);
   assert.equal((await post('pause')).json().enabled,false);assert.ok(calls.every(a=>['erebor-inspect','erebor-live'].includes(a)));
  }finally{await app.close();db.close();rmSync(dir,{recursive:true,force:true});}
 });

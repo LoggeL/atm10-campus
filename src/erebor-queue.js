@@ -666,7 +666,9 @@ export function registerEreborQueue(app,campus){
   const c=cfg(),p=project();
   if(!c||!p||c.version!==p.current_version||closed)return;
   const tracking=db.prepare("SELECT site FROM erebor_queue_sites WHERE json_extract(state,'$.job.loaded')=1").all().map(r=>r.site);
-  const active=[...production.enabled(c.version),...choices.active(c.version),...tracking];
+  // Subprojects such as Watercity persist their selections in the same store,
+  // but have their own slot bindings and scheduler. Leave those rows untouched.
+  const active=[...production.enabled(c.version),...choices.active(c.version),...tracking].filter(site=>sites.includes(site));
   const pendingHelpers=helpers.list(c.version).some(r=>r.name);
   if((!c.enabled||c.phase==='finished')&&!active.length&&!pendingHelpers&&!(c.phase==='stone'&&helpers.isEnabled(c.version)))return;
   const acquired=db.prepare('UPDATE erebor_queue_config SET lease=?,expires=? WHERE id=1 AND (lease IS NULL OR expires<? OR lease=?)').run(owner,Date.now()+120000,Date.now(),owner);

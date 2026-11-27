@@ -4,6 +4,7 @@ import {readFileSync} from 'node:fs';
 import {interiorFrontier,interiorColumns,inRange,interiorGroup,interiorWorldCheck} from '../src/erebor-interior.js';
 import {Region} from '../src/region.js';
 import {tileNBT} from '../src/erebor-tiles.js';
+import {hallParents} from '../src/erebor-hall-split.js';
 
 // Exercise the actual closed-over scheduler body without booting timers, a live
 // controller or a world worker. Only its persistence/worker boundaries are fakes.
@@ -19,7 +20,8 @@ function fixture(change={}){
   releases:{busy:()=>new Set(change.busy??[]),allows:()=>change.allowed!==false,mark:()=>marked++},deferredInterior:new Map(),
   interiorFrontier,interiorColumns,inRange,interiorGroup,insideMassif:()=>false,mountainTop:()=>change.columns?200:null,
   published:()=>{published++;if(change.untrusted)throw Error('Untrusted published file');return {bytes:Buffer.from('exact-published-bytes'),job:{desired:{anchor:entry.origin}}};},
-  generate:async(_p,input)=>{calls.push(input);return change.worldOK!==false;},current:()=>change.current!==false,liveCache:null,landscape:{}};
+  generate:async(_p,input)=>{calls.push(input);return change.worldOK!==false;},current:()=>change.current!==false,liveCache:null,landscape:{},
+  hallParents,hasHallSplit:()=>false};
  const run=Function(...Object.keys(deps),body+';return interiorCandidate;')(...Object.values(deps));
  return {entry,calls,get published(){return published;},get marked(){return marked;},run:()=>run(p,'K35',change.position??[324,144,-9314],new Set(change.taken??[]),true)};
 }
