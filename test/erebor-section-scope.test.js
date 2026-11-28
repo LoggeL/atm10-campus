@@ -1,0 +1,20 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+import {DatabaseSync} from 'node:sqlite';
+import {sectionScope} from '../src/erebor-section-scope.js';
+import {DESIGN_REVISION} from '../src/erebor-design.js';
+test('section view invalidates on publication and exact completion without writes',()=>{
+ const db=new DatabaseSync(':memory:');
+ db.exec(`CREATE TABLE project_architecture_packages(project_id,base_version,revision,package_id,sha256,report_json);
+ CREATE TABLE erebor_finished_plans(version,site,name); CREATE TABLE erebor_selections(version,site,name,status);`);
+ const p={current_version:12,plan_json:readFileSync(new URL('./fixtures/erebor-plan.json',import.meta.url),'utf8')};
+ const surface={origin:[1000000,0,1000000]},file={fileName:'first.nbt',kind:'clear',cannon:'K01',origin:surface.origin,size:[32,32,32]};
+ const put=db.prepare('INSERT INTO project_architecture_packages VALUES(?,?,?,?,?,?)');
+ put.run('erebor',12,DESIGN_REVISION,'TEST_001','a',JSON.stringify({files:[file]}));
+ const scope=sectionScope(db);assert.deepEqual(scope(p,surface),['first']);
+ db.prepare('INSERT INTO erebor_finished_plans VALUES(?,?,?)').run(12,'K01','first');assert.deepEqual(scope(p,surface),[]);
+ put.run('erebor',12,DESIGN_REVISION,'TEST_002','b',JSON.stringify({files:[{...file,fileName:'second.nbt',kind:'build'}]}));
+ assert.deepEqual(scope(p,surface),['second']);
+ assert.equal(db.prepare('SELECT COUNT(*) n FROM erebor_finished_plans').get().n,1);
+});

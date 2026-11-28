@@ -1,3 +1,4 @@
+import {sectionScope} from './erebor-section-scope.js';
 import {interiorColumns,interiorFrontier,interiorGroup,interiorRelease,inRange,insideMassif} from './erebor-interior.js';
 import {landscapeQueue,readySurface,releasedSurface,oldTreeInput} from './erebor-landscape-work.js';
 import {mountainTop} from './project-stone.js';
@@ -114,6 +115,7 @@ export function registerEreborQueue(app,campus){
   const base=JSON.parse(p.plan_json).mountainFill.bounds[0],released=new Set(rows.map(r=>r.ix+','+r.iz));
   return e=>e.stage==='stone'&&e.origin&&interiorColumns(e.origin,[64,16,64],base).some(k=>released.has(k.join(',')));
  }
+ const sectionBlockers=sectionScope(db);
  async function interiorCandidate(p,site,position,taken,projectWork=false,slot='A'){
   if(!config.worldSources.live||!massif.enabled(p.current_version))return null;
   const v=p.current_version,plan=JSON.parse(p.plan_json),base=plan.mountainFill.bounds[0];
@@ -126,7 +128,10 @@ export function registerEreborQueue(app,campus){
   }
   const checks=new Map();let worldChecks=0;
   for(const e of interiorFrontier(open,taken,projectWork||slot==='A',slot)){
-   if(e.finishing&&(!projectWork||open.some(other=>other.group===e.group&&(!other.finishing||e.stage==='build'&&other.stage==='clear')))){explain('Ausbau wartet auf frühere Bauphase',e.name);continue;}
+   if(e.finishing&&(!projectWork||open.some(other=>other.group===e.group&&other.origin&&other.size&&
+    e.origin[0]<other.origin[0]+other.size[0]&&e.origin[0]+e.size[0]>other.origin[0]&&
+    e.origin[2]<other.origin[2]+other.size[2]&&e.origin[2]+e.size[2]>other.origin[2]&&
+    (!other.finishing||e.stage==='build'&&other.stage==='clear')))){explain('Ausbau wartet auf frühere Bauphase',e.name);continue;}
    if(e.unknownCells!==0||e.clearOmitted!==0){explain('Weltstand unvollständig',e.name);continue;}
    if(!inRange(e.origin,e.size,position)){explain('Außer Reichweite',e.name);continue;}
    const defer=deferredInterior.get(e.name);
@@ -164,7 +169,9 @@ export function registerEreborQueue(app,campus){
    }};
   }
   if(projectWork&&liveCache?.surfaceModeTracker===1)return landscape.candidate(p,site,slot,position,
-   pkg=>generate(p,{interiorCheck:{bytes:pkg.bytes,anchor:pkg.job.desired.anchor,kind:'surface',details:true}}),explain);
+   pkg=>sectionBlockers(p,{origin:pkg.job.desired.anchor}).length?
+    Promise.resolve('Außenhaut wartet auf Aushub/Innenausbau dieses Abschnitts'):
+    generate(p,{interiorCheck:{bytes:pkg.bytes,anchor:pkg.job.desired.anchor,kind:'surface',details:true}}),explain);
   return null;
  }
  campus.ereborHelpers=helpers;

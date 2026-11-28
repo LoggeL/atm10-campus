@@ -21,11 +21,31 @@ function fixture(change={}){
   releases:{busy:()=>new Set(change.busy??[]),allows:()=>change.allowed!==false,mark:()=>marked++},deferredInterior:new Map(),
   interiorFrontier,interiorColumns,inRange,interiorGroup,insideMassif:()=>false,mountainTop:()=>change.columns?200:null,
   published:()=>{published++;if(change.untrusted)throw Error('Untrusted published file');return {bytes:Buffer.from('exact-published-bytes'),job:{desired:{anchor:entry.origin}}};},
-  generate:async(_p,input)=>{calls.push(input);return change.worldOK!==false;},current:()=>change.current!==false,liveCache:null,landscape:{},
+  generate:async(_p,input)=>{calls.push(input);return change.worldOK!==false;},current:()=>change.current!==false,
+  liveCache:change.surface?{surfaceModeTracker:1}:null,
+  sectionBlockers:()=>change.predecessors??[],
+  landscape:{candidate:async(_p,_site,_slot,_position,verify)=>{
+   const pkg={bytes:Buffer.from('published surface'),job:{desired:{anchor:[544,256,-9312]}}};
+   return await verify(pkg)===true?pkg:null;
+  }},
   hallParents,hasHallSplit:()=>false,dispatchChecks:new Map(),isRetired:()=>false,gateTerrainEligible};
  const run=Function(...Object.keys(deps),body+';return interiorCandidate;')(...Object.values(deps));
  return {entry,calls,get published(){return published;},get marked(){return marked;},run:()=>run(p,'K35',change.position??[324,144,-9314],new Set(change.taken??[]),true)};
 }
+test('surface waits for local published or unpublished predecessors',async()=>{
+ for(const predecessor of ['open-clear','unpublished-E08_001']){
+  const f=fixture({surface:true,open:[],predecessors:[predecessor]});
+  assert.equal(await f.run(),null);assert.equal(f.calls.length,0);
+ }
+ const ready=fixture({surface:true,open:[],predecessors:[]});assert.ok(await ready.run());
+ assert.equal(ready.calls[0].interiorCheck.kind,'surface');
+});
+test('finishing advances independently of unfinished work in another section',async()=>{
+ const entry={name:'bridge',group:'E26',stage:'build',finishing:true,origin:[544,128,-9312],size:[32,32,32],unknownCells:0,clearOmitted:0};
+ const other={...entry,name:'elsewhere',finishing:false,origin:[1024,128,-9312]};
+ const f=fixture({entry,open:[entry,other]});
+ assert.ok(await f.run(),'another section must not hold this cannon behind a global finishing barrier');
+});
 test('published bridge clear and Esgaroth build reach exact world validation through P-SEE',async()=>{
  for(const entry of [{group:'E26',stage:'clear'},{group:'E25',stage:'build'}]){
   const f=fixture({entry});const result=await f.run();assert.ok(result,'P-SEE must not blanket-reject published exterior architecture');
