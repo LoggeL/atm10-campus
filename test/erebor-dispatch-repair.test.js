@@ -54,3 +54,15 @@ test('snow exception is limited to the six published gate files, permits placeme
     assert.equal(interiorWorldCheck('.',{...args,gateTerrain:true}),false);
   block='minecraft:coal_ore';entities=[{x:1,y:1,z:1}];assert.equal(interiorWorldCheck('.',{...args,gateTerrain:true}),false);
 });
+test('water at the surveyed gate footing only admits its published solid masonry',t=>{
+  let entities=[];
+  t.mock.method(Region,'open',()=>({chunk:(x,z)=>({xPos:x,zPos:z,Status:'minecraft:full',sections:[{Y:6,block_states:{palette:[{Name:'minecraft:water'}]}}],block_entities:entities})}));
+  const cells=new Int16Array(32768).fill(-1);cells[0]=1;
+  const bytesFor=name=>tileNBT([{name:'minecraft:air'},{name}],cells,'build').bytes;
+  const args={bytes:bytesFor('create:polished_cut_tuff'),anchor:[480,96,-10016],kind:'build',outdoor:true,gateTerrain:true};
+  assert.equal(interiorWorldCheck('.',args),true);
+  assert.equal(interiorWorldCheck('.',{...args,anchor:[448,96,-10016]}),false);
+  assert.equal(interiorWorldCheck('.',{...args,bytes:bytesFor('minecraft:stone_brick_stairs')}),false);
+  assert.equal(interiorWorldCheck('.',{...args,completed:true}),false);
+  entities=[{x:480,y:96,z:-10016}];assert.equal(interiorWorldCheck('.',args),false);
+});
