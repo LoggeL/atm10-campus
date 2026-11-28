@@ -57,10 +57,13 @@ export function insideMassif(plan,origin,size){
  return true;
 }
 const air=name=>['minecraft:air','minecraft:cave_air','minecraft:void_air'].includes(name);
-// Gate foundations are cut into rock. Use the exporter's allowlist for ores,
-// and keep liquids, timber, constructed masonry and all protected targets intact.
+// The gate foundation can replace naturally occurring mountain rock and snow.
 const gateGeology=name=>isPublishedTerrain(name)&&(name.endsWith('_ore')||
  /^minecraft:(?:snow|snow_block|ice|packed_ice|blue_ice|calcite|clay|dripstone_block|pointed_dripstone)$/.test(name));
+// The published east gate footing crosses water. These are its full masonry blocks.
+// Do not open waterlogged stairs, slabs or adjoining water cells to the printer.
+const gateMasonry=new Set(['minecraft:stone_bricks','create:polished_cut_tuff','chipped:smooth_stone_bricks',
+ 'rechiseled:gold_block_polished_connecting','rechiseled:blackstone_tiles_connecting','chipped:inlayed_glowstone']);
 export function interiorWorldCheck(world,{bytes,anchor,kind,completed=false,minimumSave=0,outdoor=false,details=false,resumeSurface=false,watercity=false,gateTerrain=false}){
  const rejected=reason=>details?reason:false;
  const plan=parseStructure(bytes,completed);
@@ -73,6 +76,7 @@ export function interiorWorldCheck(world,{bytes,anchor,kind,completed=false,mini
  if(!points.length)return false;
  const regions=new Map(),readers=new Map(),stamps=new Map(),tech=[];
  const [ox,oy,oz]=anchor,[sx,sy,sz]=plan.size;
+ const gateFooting=gateTerrain&&outdoor&&kind==='build'&&ox===480&&oy===96&&oz===-10016;
  for(let cx=(ox-4)>>4;cx<=(ox+sx+3)>>4;cx++)for(let cz=(oz-4)>>4;cz<=(oz+sz+3)>>4;cz++){
   const rk=(cx>>5)+','+(cz>>5);
   if(!regions.has(rk))regions.set(rk,Region.open(world,cx>>5,cz>>5));
@@ -104,6 +108,7 @@ export function interiorWorldCheck(world,{bytes,anchor,kind,completed=false,mini
    if(sapling&&!grown&&!saplingSoil(planned.get(index(pt)-sx*sz)??at(x,y-1,z).Name))return rejected('Pflanzboden fehlt bei '+[x,y,z].join(' / '));
    if(!pt.name.endsWith('_leaves')&&!planned.has(index(pt)-sx*sz)&&air(at(x,y-1,z).Name))return rejected('Untergrund fehlt bei '+[x,y,z].join(' / '));
   }else if(!matches&&!air(name)&&name!=='minecraft:stone'&&!(watercity&&isPublishedTerrain(name))&&
+    !(gateFooting&&name==='minecraft:water'&&gateMasonry.has(pt.name))&&
     !(gateTerrain&&kind==='build'&&outdoor&&gateGeology(name))&&
     !(outdoor&&/^minecraft:(?:dirt|grass_block|gravel|sand|andesite|diorite|granite|tuff|deepslate)$/.test(name)))return rejected([x,y,z].join(' / ')+' · '+name);
  }
