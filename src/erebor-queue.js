@@ -105,7 +105,7 @@ export function registerEreborQueue(app,campus){
  db.exec('CREATE TABLE IF NOT EXISTS erebor_resume(version INTEGER,site TEXT,slot TEXT,upload TEXT,expires INTEGER,result TEXT,PRIMARY KEY(version,site,slot))');
  const verifyStone=config.worldSources.live?(p,verifyStone)=>generate(p,{verifyStone}):null;
  const landscape=landscapeQueue(db);
- const helpers=parallelFleet(db,production,choices,request,recordedFinish,resumePaused,verifyStone,massif,{candidate:interiorCandidate,landscape,blockStone:blockedStone});
+ const helpers=parallelFleet(db,production,choices,request,recordedFinish,resumePaused,verifyStone,massif,{candidate:interiorCandidate,validateReady,landscape,blockStone:blockedStone});
  const releases=interiorRelease(db),deferredInterior=new Map();
  const dispatchChecks=new Map();
  const blockedColumnRows=db.prepare('SELECT ix,iz FROM erebor_interior_columns WHERE v=?');
@@ -116,7 +116,7 @@ export function registerEreborQueue(app,campus){
   return e=>e.stage==='stone'&&e.origin&&interiorColumns(e.origin,[64,16,64],base).some(k=>released.has(k.join(',')));
  }
  const sectionBlockers=sectionScope(db);
- async function interiorCandidate(p,site,position,taken,projectWork=false,slot='A'){
+ async function interiorCandidate(p,site,position,taken,projectWork=false,slot='A',retained=null){
   if(!config.worldSources.live||!massif.enabled(p.current_version))return null;
   const v=p.current_version,plan=JSON.parse(p.plan_json),base=plan.mountainFill.bounds[0];
   const {open}=production.ordered(p,site),busy=releases.busy(v,base);
@@ -128,6 +128,7 @@ export function registerEreborQueue(app,campus){
   }
   const checks=new Map();let worldChecks=0;
   for(const e of interiorFrontier(open,taken,projectWork||slot==='A',slot)){
+   if(retained&&(e.name!==retained.desired.blueprint||isRetired(v,e.name)||hallParents.includes(e.name)&&hasHallSplit(v)))continue;
    if(e.finishing&&(!projectWork||open.some(other=>other.group===e.group&&other.origin&&other.size&&
     e.origin[0]<other.origin[0]+other.size[0]&&e.origin[0]+e.size[0]>other.origin[0]&&
     e.origin[2]<other.origin[2]+other.size[2]&&e.origin[2]+e.size[2]>other.origin[2]&&
@@ -155,6 +156,8 @@ export function registerEreborQueue(app,campus){
    if(locked){explain('Massivspalte wartet auf Freigabe',e.name,locked);continue;}
    if(++worldChecks>3)break;
    const pkg=published(p,site,e);
+   if(retained&&(!same(pkg.job.desired,retained.desired)||!same(pkg.job.size,retained.size)||pkg.job.phase!==retained.phase||
+      pkg.job.blocks!==retained.blocks||!same(pkg.job.materials,retained.materials)))return null;
    const check=await generate(p,{interiorCheck:{bytes:pkg.bytes,anchor:e.origin,kind:e.stage,outdoor:outdoors,gateTerrain:gateTerrainEligible(v,e),details:true}});
    if(check!==true){
     const reason=typeof check==='string'?check:'NBT- oder Weltprüfung nicht bestanden';
@@ -162,17 +165,47 @@ export function registerEreborQueue(app,campus){
    }
    const after=releases.busy(v,base);
    if(!current(v)||!massif.enabled(v)||!releases.allows(v,cols)||cols.some(k=>after.has(k.join(','))))return null;
+   if(retained){
+    // The worker awaited a saved-world read. Publication/frontier drift during
+    // that wait cannot turn yesterday's reservation into a new dispatch.
+    const fresh=interiorFrontier(production.ordered(p,site).open,taken,true,slot).find(f=>f.name===e.name);
+    if(!fresh||!same(fresh,e)||isRetired(v,e.name)||hallParents.includes(e.name)&&hasHallSplit(v)||
+       !same(published(p,site,fresh).job,pkg.job))return null;
+    return pkg; // Validation only; keep the existing reservation/column locks.
+   }
    return {...pkg,entry:e,job:{...pkg.job,interior:true,source:e},release:()=>{
     if(hallParents.includes(e.name)&&hasHallSplit(v))throw Error('Der ursprüngliche Aushub wurde aufgeteilt.');
     if(isRetired(v,e.name))throw Error('Plan wurde zwischenzeitlich ersetzt.');
     releases.mark(v,cols);
    }};
   }
+  if(retained)return null;
   if(projectWork&&liveCache?.surfaceModeTracker===1)return landscape.candidate(p,site,slot,position,
    pkg=>sectionBlockers(p,{origin:pkg.job.desired.anchor}).length?
     Promise.resolve('Außenhaut wartet auf Aushub/Innenausbau dieses Abschnitts'):
     generate(p,{interiorCheck:{bytes:pkg.bytes,anchor:pkg.job.desired.anchor,kind:'surface',details:true}}),explain);
   return null;
+ }
+ async function validateReady(p,site,slot,job){
+  const v=p.current_version,position=parallelLayout.sites.find(s=>s.site===site)?.[slot];
+  if(!position||!current(v)||project()?.plan_json!==p.plan_json)return false;
+  const taken=helpers.reserved(v,site);taken.delete(job.desired.blueprint);
+  const main=read(site).job;
+  if(main)taken.add(main.desired.blueprint);
+  for(const entry of choices.waiting(v))if(entry.site===site)taken.add(entry.name);
+  if(taken.has(job.desired.blueprint))return false;
+  if(job.surface){
+   if(!config.worldSources.live||!massif.enabled(v)||sectionBlockers(p,{origin:job.desired.anchor}).length)return false;
+   const pkg=await landscape.candidate(p,site,slot,position,pkg=>{
+    if(!same(pkg.job.desired,job.desired)||!same(pkg.job.size,job.size)||pkg.job.blocks!==job.blocks||
+       !same(pkg.job.materials,job.materials))return false;
+    return generate(p,{interiorCheck:{bytes:pkg.bytes,anchor:job.desired.anchor,kind:'surface',details:true}});
+   },()=>{},job);
+   return !!pkg&&current(v)&&massif.enabled(v)&&project()?.plan_json===p.plan_json&&
+    !sectionBlockers(p,{origin:job.desired.anchor}).length;
+  }
+  const pkg=await interiorCandidate(p,site,position,taken,true,slot,job);
+  return !!pkg&&current(v)&&project()?.plan_json===p.plan_json;
  }
  campus.ereborHelpers=helpers;
  function available(p,site){
