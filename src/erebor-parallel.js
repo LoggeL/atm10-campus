@@ -3,12 +3,14 @@ import {readFileSync} from 'node:fs';
 import {isDeepStrictEqual as same} from 'node:util';
 import {cannonReset,emptyStopped} from './alignment.js';
 import {isStationStone,needsSolidReplacement,observedEreborOptions,completedStoneOptions,verifyEreborAlignment as verifyAlignment} from './erebor-feeder.js';
-import {publishedPlan} from './erebor-selection.js';
+import {publishedPlan,unstarted} from './erebor-selection.js';
+import {ereborUploadName} from './erebor-file.js';
 import {tx} from './db.js';
 import {witnessedUrn} from './erebor-manual-urn.js';
-import {readySurface} from './erebor-landscape-work.js';
+import {readySurface,oldTreeInput} from './erebor-landscape-work.js';
 
 export const parallelLayout=JSON.parse(readFileSync(new URL('./erebor-fleet/parallel.json',import.meta.url)));
+const ambiguousInspect='Minecraft hat keine eindeutige Antwort für diese Kanonenposition geliefert. Bitte erneut prüfen.';
 for(const station of parallelLayout.sites){
   for(const group of groupSites.get(station.site)??[])Object.assign(station,group.slots);
 }
@@ -38,7 +40,7 @@ export function parallelFleet(db,production,choices,request,recordedFinish,resum
     if(job.surface)interior.landscape.finish(v,site,slot,job);
     db.prepare("UPDATE erebor_helpers SET name=NULL,job=NULL,completed=completed+1,message='Abschnitt fertig' WHERE version=? AND site=? AND slot=?").run(v,site,slot);
   }
-  async function service(p,pair,slot,signal,at,enabled,main,current,allowInterior=false,projectWork=false){
+  async function service(p,pair,slot,signal,at,enabled,main,current,allowInterior=false,projectWork=false,recovery=null){
     const site=pair.site,key=site+slot,v=p.current_version;
     const row=lookup.get(v,site,slot);
     let job=row?.job&&JSON.parse(row.job);
@@ -117,12 +119,18 @@ export function parallelFleet(db,production,choices,request,recordedFinish,resum
       tx(db,()=>{inside?.release();db.prepare(`INSERT INTO erebor_helpers(version,site,slot,name,job,message) VALUES(?,?,?,?,?,'Reserviert')
         ON CONFLICT(version,site,slot) DO UPDATE SET name=excluded.name,job=excluded.job,message=excluded.message`).run(v,site,slot,job.desired.blueprint,JSON.stringify(job));});
     }
-    const set=message=>save.run(JSON.stringify(job),message,v,site,slot);
+    let expected=row?.job;
+    const retained=()=>{
+      const held=lookup.get(v,site,slot);
+      return current()&&enabled()&&Date.now()-at<15000&&held?.name===job.desired.blueprint&&held.job===expected;
+    };
+    const set=message=>{expected=JSON.stringify(job);save.run(expected,message,v,site,slot);};
     const args={site:key,version:v};
     const {options,...desired}=job.desired;
     const operation={...args,desired,kind:job.surface?'surface':job.interior?job.phase:'stone',size:job.size};
     const matches=o=>!verifyAlignment(job.desired,o,job.desired)&&same(o.components?.['create:schematic_bounds'],job.size);
     try{
+      if(recovery&&(row.job!==recovery||!retained()||await interior?.validateReady?.(p,site,slot,job)!==true||!retained()))return;
       let filled=false,original;
       const published={...job.source,version:v,site,file:desired.blueprint+'.nbt'};
       const originalPlan=()=>job.massif?massif.restore(v,site,slot,job.massif):job.surface?interior.landscape.restore(v,job.source):publishedPlan(db,p,published);
@@ -134,8 +142,21 @@ export function parallelFleet(db,production,choices,request,recordedFinish,resum
         if(!same(expected,job.desired)||!same(original.job.size,job.size))throw Error('Auftrag stimmt nicht mit dem veröffentlichten Steinplan überein.');
         filled=await verifyStone(p,{bytes:original.bytes,anchor:desired.anchor,size:job.size,blocks:original.job.blocks,collectUrns:!!job.massif&&!urn});
       }
-      let {observed}=await request('erebor-inspect',args);
+      let inspected;
+      try{inspected=await request('erebor-inspect',args);}
+      catch(e){
+        // Only the read may be repeated. A prepare/start reply is never replayed.
+        if(!recovery||e.message!==ambiguousInspect||!retained())throw e;
+        inspected=await request('erebor-inspect',args);
+      }
+      let {observed}=inspected;
       if(!current())return;
+      // A retained first-ready input is inspection/adoption only. Never load a
+      // replacement or resume a printer that moved while this report was fresh.
+      if(recovery&&(!retained()||!matches(observed)||observed.state!=='PAUSED'||observed.status!=='ready'||
+         !unstarted(job,observed)||!Number.isSafeInteger(observed.outputCount)||observed.outputCount<0||
+         observed.outputCount>0&&observed.outputItem!=='create:empty_schematic'||
+         job.loaded&&job.baseline!==observed.outputCount))return;
       if(missingReceipt&&(!enabled()||!emptyStopped(observed)||observed.status!=='finished'||!same(observed.options,completedStoneOptions(job.desired,observed.options))))return;
       if(job.loaded && (filled||(!urn&&recordedFinish(observed,job,signal.finish,Date.now(),{signal,at})))){
         tx(db,()=>complete(v,site,slot,job,filled?.urns));
@@ -179,16 +200,27 @@ export function parallelFleet(db,production,choices,request,recordedFinish,resum
       job.seen=observed.at;job.placed=observed.amountPlaced;
       if(observed.state==='RUNNING')job.started=true;
       set(observed.status||'Eingelegt');
-      if(!enabled()||!signal.ready||job.started||job.tainted||!Number.isInteger(job.baseline)||observed.flyingBlocks!==0 ||
+      if(!enabled()||!signal.ready||job.started||job.startPending||job.tainted||!Number.isInteger(job.baseline)||observed.flyingBlocks!==0 ||
          !['PAUSED','STOPPED'].includes(observed.state)||['missingItem','missingBlock','noGunpowder','targetNotLoaded'].includes(observed.status))return;
-      const result=await request('erebor-start',operation);
-      if(current()&&result.started&&matches(result.observed)){
+      // Persist before the mutation: an ambiguous reply authorizes reads, not
+      // another start, even after an app restart or a normal serial revisit.
+      job.startPending=true;set('Erster Start angefragt');
+      let result;
+      try{result=await request('erebor-start',operation);}
+      catch(e){
+        // This installed-controller refusal precedes start(), so no state write
+        // occurred. Unknown/ambiguous failures keep the durable pending intent.
+        if(e.message==='Die Kanone wartet noch auf Treibstoff, Material oder den Zielchunk.')delete job.startPending;
+        throw e;
+      }
+      if((recovery?retained():current())&&result.started&&matches(result.observed)){
         // The bridge also acknowledges initialization into PAUSED/noGunpowder.
         // This is still the first start until Create reports actual running.
         job.started=result.observed.state==='RUNNING';
+        delete job.startPending;
         set(job.started?'Gestartet':result.observed.status||'Wartet auf den ersten Start');
       }
-    }catch(e){if(current())set(e.message);}
+    }catch(e){if(recovery?retained():current())set(e.message);}
   }
   const jobAt=(version,site,slot)=>JSON.parse(lookup.get(version,site,slot)?.job||'null');
   const lastFirstStart=new Map();
@@ -212,18 +244,29 @@ export function parallelFleet(db,production,choices,request,recordedFinish,resum
         if(signal?.state!=='PAUSED'||signal.status!=='ready'||!signal.ready||!signal.aligned||signal.placed!==0)continue;
         const job=jobAt(p.current_version,station.site,slot);
         const surface=readySurface(job,report,key);
-        if((!surface&&!isStationStone(job,station.site))||job.started||job.tainted||job.placed>0||
+        const specialSurface=surface&&(job.replayedAfterRelease||oldTreeInput(key,job));
+        const d=job?.desired,row=lookup.get(p.current_version,station.site,slot);
+        const recovery=report.ereborProjectWork===1&&report.interiorHelpers===1&&report.surfaceModeTracker===1&&
+          (job?.interior===true&&!job.surface||job?.surface===true&&!job.interior)&&!job.massif&&!job.selection&&typeof job.loaded==='boolean'&&
+          (row?.message===ambiguousInspect||surface&&!specialSurface)&&row.name===d?.blueprint&&d?.version===p.current_version&&d.owner==='Erebor'&&
+          d.rotation==='none'&&d.mirror==='none'&&/^[a-f0-9]{64}$/.test(d.sha256)&&
+          d.file===ereborUploadName(d.blueprint+'.nbt',d.sha256)&&(job.placed==null||job.placed===0)&&signal.ready===true&&signal.aligned===true&&
+          signal.empty===false&&Number.isFinite(signal.fuel)&&signal.fuel>0&&
+          ['clear','build'].includes(job.phase)&&(!job.surface||job.phase==='build')&&d.options?.replace_mode===(job.surface?0:{clear:3,build:2}[job.phase])&&
+          d.options.skip_missing===false&&d.options.replace_block_entities===false&&same(signal.options,[d.options.replace_mode,false,false]);
+        if(surface&&!specialSurface&&!recovery)continue;
+        if((!surface&&!recovery&&!isStationStone(job,station.site))||job.started||job.startPending||job.tainted||job.placed>0||
            signal.upload!==job.desired.file||signal.owner!==job.desired.owner||
            !same(signal.anchor,job.desired.anchor)||!same(signal.size,job.size))continue;
         // A prepare response may time out after a one-block plan was inserted.
         // Service re-inspects the file/hash, printer, fuel and output before start.
         const urn=report.urnPreparation===2&&job.massif?.includes('_URN_')&&
           (same(job.size,[1,1,1])||report.urnPacks===3&&job.massif.includes('_URN_PACK_'))&&same(signal.options,[0,false,false]);
-        if(!surface&&!urn&&(slot<'D'||!job.loaded||!Number.isInteger(job.baseline)))continue;
+        if(!surface&&!recovery&&!urn&&(slot<'D'||!job.loaded||!Number.isInteger(job.baseline)))continue;
         const previous=lastFirstStart.get(key);
         const last=previous?.file===signal.upload?previous.at:0;
         // A new file on a quick printer must not overtake a slower printer each round.
-        if(Date.now()-last>=30000)ready.push({key,station,slot,signal,last:previous?.at??0});
+        if(Date.now()-last>=30000)ready.push({key,station,slot,signal,last:previous?.at??0,recovery:recovery?row.job:null});
       }
     }
     // Interleave newly fueled machines with initial assignments on large fleets.
@@ -235,7 +278,7 @@ export function parallelFleet(db,production,choices,request,recordedFinish,resum
       const active=()=>enabled(r.station.site);
       if(!active())continue;
       lastFirstStart.set(r.key,{file:r.file??r.signal.upload,at:Date.now()});
-      await service(p,r.station,r.slot,r.signal,report.at,active,read(r.station.site),current);
+      await service(p,r.station,r.slot,r.signal,report.at,active,read(r.station.site),current,false,false,r.recovery);
     }
   }
   return {reserved,list,jobs,complete,isEnabled,switchAll,jobAt,startFueledExtras,
